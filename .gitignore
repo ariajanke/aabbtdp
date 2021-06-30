@@ -1,0 +1,10 @@
+.*
+!/.gitignore
+*.user
+*.VC.db
+*.filters
+*.opendb
+*.pro.user*
+!.travis.yml
+*.autosave
+*libaabbtdp.a
