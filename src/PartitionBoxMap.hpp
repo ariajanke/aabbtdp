@@ -379,6 +379,7 @@ void PartitionBoxMapPartition<ValueTypeT, kt_orientation>::set_elements
     // All I need is a "partial" sort
     m_division = get_division(beg, end);
     auto counts = get_counts(m_division, beg, end);
+#   if 0 // should not be in published commit
     auto num = end - beg;
     std::array<Rectangle, 8> rect_copy;
     if (end - beg < int(rect_copy.size())) {
@@ -387,6 +388,7 @@ void PartitionBoxMapPartition<ValueTypeT, kt_orientation>::set_elements
             *witr++ = get_rectangle(*itr);
         }
     }
+#   endif
     assert(beg + counts.low_only + counts.shared + counts.high_only == end);
     auto max_share = ((end - beg)*k_pbm_overlap_thershold_num)
                      / k_pbm_overlap_thershold_den;
