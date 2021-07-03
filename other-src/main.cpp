@@ -38,10 +38,14 @@
 namespace {
 
 void run_td_physics_tests();
+using EntityA = ecs::Entity<Velocity, Rectangle, MapLimits, Name, ColInfo, Growth, Layer>;
+using EntityManagerA = EntityA::ManagerType;
 
 } // end of <anonymous> namespace
 
 int main() {
+    std::cout << "Test Entity size " << EntityA::k_component_table_size / sizeof(void *)
+              << " pointers with " << EntityA::k_number_of_components_inlined << " components inlined." << std::endl;
     run_td_physics_tests();
 #   ifdef MACRO_BUILD_DEMO
     run_demo();
@@ -51,15 +55,13 @@ int main() {
 
 namespace {
 
-using EntityA = ecs::Entity<Velocity, Rectangle, MapLimits, Name, ColInfo>;
-using EntityManagerA = EntityA::ManagerType;
 
 class ColSystem final : public EntityA::SystemType {
 public:
     static constexpr const Real k_et_value = 1. / 60.;
 
     ColSystem() {
-        m_handle->set_collision_matrix(make_default_col_matrix());
+        m_handle->set_collision_matrix(make_collision_matrix());
     }
 
 private:
@@ -154,6 +156,15 @@ auto make_tdp_handler() { return tdp::TopDownPhysicsHandler::make_instance(); }
 
 void do_collision_matrix_tests(cul::ts::TestSuite &);
 void do_sweep_and_prune_tests(cul::ts::TestSuite &);
+
+bool are_very_close(const Rectangle & a, const Rectangle & b) {
+    using cul::magnitude;
+    static constexpr const Real k_error = 0.005;
+    return    magnitude(a.left   - b.left  ) < k_error
+           && magnitude(a.top    - b.top   ) < k_error
+           && magnitude(a.width  - b.width ) < k_error
+           && magnitude(a.height - b.height) < k_error;
+}
 
 void run_td_physics_tests() {
     using cul::ts::TestSuite;
@@ -260,6 +271,47 @@ void run_td_physics_tests() {
     });
     }
     do_collision_matrix_tests(suite);
+    suite.start_series("entry validity");
+    suite.test([] {
+        auto uptr = tdp::TopDownPhysicsHandler::make_instance();
+        uptr->set_collision_matrix(make_collision_matrix());
+        tdp::Entry entry;
+        entry.bounds = Rectangle(0, 0, 10, -10);
+        try {
+            uptr->update_entry(entry);
+        } catch (std::invalid_argument &) {
+            return test(true);
+        }
+        return test(false);
+    });
+    suite.test([] {
+        auto uptr = tdp::TopDownPhysicsHandler::make_instance();
+        uptr->set_collision_matrix(make_collision_matrix());
+        tdp::Entry entry;
+        entry.bounds = Rectangle(0, 0, 10, 10);
+        entry.displacement = Vector(0, std::numeric_limits<Real>::infinity());
+        entry.collision_layer = layers::k_block;
+        try {
+            uptr->update_entry(entry);
+        } catch (std::invalid_argument &) {
+            return test(true);
+        }
+        return test(false);
+    });
+    suite.test([] {
+        auto uptr = tdp::TopDownPhysicsHandler::make_instance();
+        uptr->set_collision_matrix(make_collision_matrix());
+        tdp::Entry entry;
+        entry.bounds = Rectangle(0, 0, 10, 10);
+        entry.growth = Size2(10, std::numeric_limits<Real>::infinity());
+        entry.collision_layer = layers::k_floor_mat;
+        try {
+            uptr->update_entry(entry);
+        } catch (std::invalid_argument &) {
+            return test(true);
+        }
+        return test(false);
+    });
     suite.start_series("td physics - one on one entity");
 
     // unit tests
@@ -275,8 +327,6 @@ void run_td_physics_tests() {
         eman.run_system(colsys);
         return test(e.get<ColInfo>().hit_wall);
     });
-
-
 
     // - one entity, trepasses onto another by displacement
     suite.test([] {
@@ -295,6 +345,70 @@ void run_td_physics_tests() {
     // more test ideas:
     // multi frame tests
     // multi entity tests
+
+    suite.start_series("growth/shrink tests");
+    // test growth
+    suite.test([] {
+        EntityManagerA eman;
+        auto e = eman.create_new_entity();
+        e.add<Growth>() = Size2(10, 10);
+        e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
+        e.add<Layer>() = layers::k_floor_mat;
+        ColSystem colsys;
+        for (int i = 0; i != int(std::ceil(1. / ColSystem::k_et_value)); ++i) {
+            eman.process_deletion_requests();
+            eman.run_system(colsys);
+        }
+        return test(are_very_close(e.get<Rectangle>(), Rectangle(5, 5, 20, 20)));
+    });
+    // test shrink
+    suite.test([] {
+        EntityManagerA eman;
+        auto e = eman.create_new_entity();
+        e.add<Growth>() = Size2(-5, -5);
+        e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
+        e.add<Layer>() = layers::k_floor_mat;
+        ColSystem colsys;
+        for (int i = 0; i != int(std::ceil(1. / ColSystem::k_et_value)); ++i) {
+            eman.process_deletion_requests();
+            eman.run_system(colsys);
+        }
+        return test(are_very_close(e.get<Rectangle>(), Rectangle(7.5, 7.5, 5, 5)));
+    });
+    // test shrink to zero
+    suite.test([] {
+        EntityManagerA eman;
+        auto e = eman.create_new_entity();
+        e.add<Growth>() = Size2(-15, -15);
+        e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
+        e.add<Layer>() = layers::k_floor_mat;
+        ColSystem colsys;
+        for (int i = 0; i != int(std::ceil(1. / ColSystem::k_et_value)); ++i) {
+            eman.process_deletion_requests();
+            eman.run_system(colsys);
+        }
+        return test(are_very_close(e.get<Rectangle>(), Rectangle(15, 15, 0, 0)));
+    });
+    // test growth must not be solid on any layer
+    suite.test([] {
+        EntityManagerA eman;
+        auto e = eman.create_new_entity();
+        e.add<Growth>() = Size2(10, 10);
+        e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
+        e.add<Layer>() = layers::k_block;
+        auto uptr = tdp::TopDownPhysicsHandler::make_instance();
+        uptr->set_collision_matrix(make_collision_matrix());
+        try {
+            uptr->update_entry(to_tdp_entry(e, 1. / 60.));
+        } catch (std::invalid_argument &) {
+            return test(true);
+        }
+        return test(false);
+    });
+    // make sure a growing entity hits another
+    suite.test([] {
+        return test(false);
+    });
     do_sweep_and_prune_tests(suite);
 }
 
@@ -406,6 +520,27 @@ void do_collision_matrix_tests(cul::ts::TestSuite & suite) {
         }
         return test(false);
     });
+    // - matrix must be set before updating an entry
+    suite.test([] {
+        EntityManagerA eman;
+        auto e = eman.create_new_entity();
+        e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
+        e.add<Layer>() = layers::k_block;
+        auto uptr = tdp::TopDownPhysicsHandler::make_instance();
+        bool ok = false;
+        try {
+            uptr->update_entry(to_tdp_entry(e, 1. / 60.));
+        } catch (std::invalid_argument &) {
+            ok = true;
+        }
+        uptr->set_collision_matrix(make_collision_matrix());
+        try {
+            uptr->update_entry(to_tdp_entry(e, 1. / 60.));
+        } catch (std::invalid_argument &) {
+            ok = false;
+        }
+        return test(ok);
+    });
     // unit test, first time appearance trespass
     // and not more than once after the first frame
 }
@@ -414,6 +549,7 @@ void do_sweep_and_prune_tests(cul::ts::TestSuite & suite) {
     using cul::ts::test;
     suite.start_series("sweep prune map tests");
     static constexpr const int k_fork_thershold = tdp::detail::k_pbm_partition_thershold;
+#   if 0 // idk what to do with this test case anymore
     suite.test([] {
         auto w = int(std::round(std::sqrt(k_fork_thershold)));
         auto h = k_fork_thershold / w + 1;
@@ -483,6 +619,7 @@ void do_sweep_and_prune_tests(cul::ts::TestSuite & suite) {
 
         return test(true);
     });
+#   endif
     // this case replicates an assertion failure
     suite.test([] {
         auto rect_list = {
@@ -498,6 +635,25 @@ void do_sweep_and_prune_tests(cul::ts::TestSuite & suite) {
         tdp::detail::PartitionBoxMap<void *> spmap;
         spmap.set_elements(cont.begin(), cont.end());
         return test(true);
+    });
+    // the map must not accept rectangles with non-real numbers for any
+    // attribute
+    suite.test([] {
+        auto rect_list = {
+            Rectangle(213, 104, 37, 26), Rectangle(276, 109, 35, 37),
+            Rectangle(211, 111, std::numeric_limits<Real>::infinity(), 29)
+        };
+        std::vector<std::tuple<Rectangle, void *>> cont;
+        for (const auto & rect : rect_list) {
+            cont.emplace_back(rect, nullptr);
+        }
+        tdp::detail::PartitionBoxMap<void *> spmap;
+        try {
+            spmap.set_elements(cont.begin(), cont.end());
+        } catch (std::invalid_argument &) {
+            return test(true);
+        }
+        return test(false);
     });
 }
 

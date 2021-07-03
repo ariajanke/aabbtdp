@@ -205,6 +205,10 @@ std::tuple<Vector, Hit> find_min_push_displacement
 bool trespass_occuring
     (const Rectangle & rect, const Rectangle & other, const Vector & displc);
 
+// much more intense written for growing or shrinking rectangles
+bool trespass_occuring
+    (const Rectangle & rect, const Rectangle & old_other, const Rectangle & new_other);
+
 Hit trim_displacement_for_barriers
     (const Rectangle &, Vector barriers, Vector & displacement);
 

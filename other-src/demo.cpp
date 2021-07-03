@@ -62,27 +62,6 @@ constexpr const auto k_pc_up                = sf::Keyboard::Up;
 constexpr const int k_window_height = 700;
 constexpr const int k_window_width  = (k_window_height * 11) / 6;
 
-namespace layers {
-
-constexpr const int k_block       = 0;
-constexpr const int k_floor_mat   = 1;
-constexpr const int k_passive     = 2;
-constexpr const int k_layer_count = 3;
-
-} // end of layers namespace -> into <anonymous>
-
-auto make_collision_matrix() {
-    using namespace tdp::interaction_classes;
-    auto rv = Grid {
-        //             block     , floor mat    , passive
-        /* block */ {  k_as_solid, k_as_trespass, k_as_passive },
-        /* floor */ {  k_reflect , k_as_passive , k_as_passive },
-        /* passv */ {  k_reflect , k_reflect    , k_as_passive }
-    };
-    assert(rv.width() == layers::k_layer_count && rv.height() == layers::k_layer_count);
-    return rv;
-}
-
 struct Fade {
     Real remaining = 0.;
     Real original  = 0.;
@@ -105,27 +84,26 @@ struct ShadowImage {
     Real   time_between_spawns = k_inf;
 };
 
-struct Layer {
-    int value = tdp::Entry::k_no_layer;
-    int & operator = (int i) {
-        value = i;
-        return value;
-    }
-    /* implicit */ operator int & () { return value; }
-    /* implicit */ operator const int & () const { return value; }
-};
-
 struct Occupant {
     ecs::EntityRef entity;
+};
+
+struct Lifetime {
+    double value;
+    operator double () const { return value; }
+    double & operator = (double d) { return (value = d); }
 };
 
 using cul::DrawRectangle;
 using cul::DrawText;
 using RdEntity = ecs::Entity<
     DrawRectangle, Verticies, Velocity, Rectangle, MapLimits, Name, Fade,
-    Pushable, HudDrawn, Layer, ShadowImage, Occupant>;
+    Pushable, HudDrawn, Layer, ShadowImage, Occupant, Lifetime, Growth>;
 using RdSystem = RdEntity::SystemType;
 constexpr const Real k_demo_et_value = 1. / 60.;
+
+using RealDistri = std::uniform_real_distribution<Real>;
+using IntDistri  = std::uniform_int_distribution<int>;
 
 Rectangle get_view_bounds(const sf::RenderTarget & target) {
     auto view = target.getView();
@@ -165,6 +143,17 @@ void draw_grid_line(sf::RenderTarget & target, Real thickness, Real spacing) {
     }
     }
 }
+
+class LifetimeSystem final : public RdSystem {
+    void update(const ContainerView & view) final {
+        for (auto & e : view) {
+            if (!e.has<Lifetime>()) continue;
+            auto & lifetime = e.get<Lifetime>().value;
+            lifetime -= k_demo_et_value;
+            if (lifetime <= 0) e.request_deletion();
+        }
+    }
+};
 
 class SweepPruneDisplaySystem final : public RdSystem {
 public:
@@ -592,8 +581,7 @@ private:
     void update(const ContainerView & view) final {
         for (auto & e : view) {
             if (!e.has<Rectangle>()) continue;
-            auto * layer = e.ptr<Layer>();
-            m_handle->update_entry(to_tdp_entry(e, k_demo_et_value, layer ? *layer : layers::k_block));
+            m_handle->update_entry(to_tdp_entry(e, k_demo_et_value));
         }
         DefaultEventHandler def_handler;
         m_handle->run(def_handler);
@@ -626,50 +614,94 @@ void run_systems(RdEntity::ManagerType & ent_mana, std::tuple<Types ...> && tupl
     run_systems_<0>(ent_mana, tuple);
 }
 
+class EntityMaker;
+// name is too general
+struct FrameTimeEntityMaker {
+    virtual ~FrameTimeEntityMaker() {}
+    virtual void on_update(EntityMaker &&) = 0;
+};
+
+class EntityMakerBase {
+public:
+    RdEntity make_entity() {
+        auto rv = ent_mana.create_new_entity();
+        m_entities.push_back(rv);
+        return rv;
+    }
+
+protected:
+    EntityMakerBase(RdEntity::ManagerType & mana_, std::vector<RdEntity> & ents):
+        ent_mana(mana_), m_entities(ents) {}
+
+private:
+    RdEntity::ManagerType & ent_mana;
+    std::vector<RdEntity> & m_entities;
+};
+
+class EntityMaker final : public EntityMakerBase {
+public:
+    EntityMaker(RdEntity::ManagerType & mana_, std::vector<RdEntity> & ents):
+        EntityMakerBase(mana_, ents) {}
+};
+
 class Scene {
 public:
-    void load_scene(RdEntity::ManagerType & ent_mana) {
-        load_scene_(EntityMaker(ent_mana, m_entities));
-    }
+    void load_scene(RdEntity::ManagerType & ent_mana)
+        { load_scene_(Loader(ent_mana, m_entities, m_updatable)); }
 
     void close_scene() {
         for (auto & e : m_entities) e.request_deletion();
         m_entities.clear();
     }
 
-    class EntityMaker {
+    void on_update(RdEntity::ManagerType & ent_mana) {
+        if (m_updatable) m_updatable->on_update(EntityMaker(ent_mana, m_entities));
+    }
+
+    class Loader final : public EntityMakerBase {
     public:
-        EntityMaker(RdEntity::ManagerType & mana_, std::vector<RdEntity> & ents):
-            ent_mana(mana_), m_entities(ents) {}
-        RdEntity make_entity() {
-            auto rv = ent_mana.create_new_entity();
-            m_entities.push_back(rv);
-            return rv;
+        Loader(RdEntity::ManagerType & mana_, std::vector<RdEntity> & ents,
+               std::unique_ptr<FrameTimeEntityMaker> & upda_):
+            EntityMakerBase(mana_, ents), m_updatable(upda_) {}
+
+        template <typename Func>
+        void on_update(Func && f) {
+            class Impl final : public FrameTimeEntityMaker {
+            public:
+                Impl(Func && f): m_f(std::move(f)) {}
+                void on_update(EntityMaker && maker) final { m_f(maker); }
+            private:
+                Func m_f;
+            };
+            m_updatable = std::make_unique<Impl>(std::move(f));
         }
+
     private:
-        RdEntity::ManagerType & ent_mana;
-        std::vector<RdEntity> & m_entities;
+        std::unique_ptr<FrameTimeEntityMaker> & m_updatable;
     };
 
 protected:
-    virtual void load_scene_(EntityMaker && maker) = 0;
+    virtual void load_scene_(Loader && maker) = 0;
 
 private:
     std::vector<RdEntity> m_entities;
+    std::unique_ptr<FrameTimeEntityMaker> m_updatable;
 };
+
+using SceneLoader = Scene::Loader;
 
 template <typename Func>
 std::unique_ptr<Scene> make_unique_scene(Func && f) {
     class SceneComplete final : public Scene {
     public:
         SceneComplete(Func && f): m_func(std::move(f)) {}
-        void load_scene_(EntityMaker && maker) final { m_func(maker); }
+        void load_scene_(Loader && maker) final { m_func(maker); }
         Func m_func;
     };
     return std::make_unique<SceneComplete>(std::move(f));
 }
 
-class SceneFlipper {
+class SceneFlipper final {
 public:
     void push_scene(std::unique_ptr<Scene> ptr) {
         m_scenes.emplace_back(std::move(ptr));
@@ -701,6 +733,11 @@ public:
         (**m_pos).load_scene(mana_);
     }
 
+    void on_update(RdEntity::ManagerType & ent_mana) {
+        if (m_scenes.empty()) return;
+        (**m_pos).on_update(ent_mana);
+    }
+
 private:
     std::vector<std::unique_ptr<Scene>> m_scenes;
     std::vector<std::unique_ptr<Scene>>::iterator m_pos;
@@ -719,26 +756,33 @@ Rectangle make_rect_from_center(Vector r, Size2 size) {
     return Rectangle(find_field_center() + r, size);
 }
 
-void spawn_random_rectanles
-    (const RdEntity & parent, Scene::EntityMaker & maker, const Rectangle & rect, int amount,
+RdEntity spawn_random_rectanle
+    (const RdEntity & parent, EntityMakerBase & maker, const Rectangle & rect,
      Size2 min_size, Size2 max_size, std::default_random_engine & rng)
 {
-    using RealDistri = std::uniform_real_distribution<Real>;
+    auto e = maker.make_entity();
+    auto w = std::round(RealDistri(min_size.width , max_size.width )(rng));
+    auto h = std::round(RealDistri(min_size.height, max_size.height)(rng));
+    auto x = std::round(RealDistri(rect.left      , rect.width  - w)(rng));
+    auto y = std::round(RealDistri(rect.top       , rect.height - h)(rng));
+    e.add<Rectangle>() = Rectangle(x, y, w, h);
+    sf::Color color = sf::Color::Green;
+    if (auto * drect = parent.ptr<DrawRectangle>())
+        { color = drect->color(); }
+    e.add<DrawRectangle>() = DrawRectangle(x, y, w, h, color);
+    if (auto * vel = parent.ptr<Velocity>()) {
+        e.add<Velocity>() = *vel;
+    }
+    if (parent.has<Pushable>()) e.add<Pushable>();
+    return e;
+}
+
+void spawn_random_rectanles
+    (const RdEntity & parent, EntityMakerBase & maker, const Rectangle & rect, int amount,
+     Size2 min_size, Size2 max_size, std::default_random_engine & rng)
+{
     for (int i = 0; i != amount; ++i) {
-        auto e = maker.make_entity();
-        auto w = std::round(RealDistri(min_size.width , max_size.width )(rng));
-        auto h = std::round(RealDistri(min_size.height, max_size.height)(rng));
-        auto x = std::round(RealDistri(rect.left      , rect.width  - w)(rng));
-        auto y = std::round(RealDistri(rect.top       , rect.height - h)(rng));
-        e.add<Rectangle>() = Rectangle(x, y, w, h);
-        sf::Color color = sf::Color::Green;
-        if (auto * drect = parent.ptr<DrawRectangle>())
-            { color = drect->color(); }
-        e.add<DrawRectangle>() = DrawRectangle(x, y, w, h, color);
-        if (auto * vel = parent.ptr<Velocity>()) {
-            e.add<Velocity>() = *vel;
-        }
-        if (parent.has<Pushable>()) e.add<Pushable>();
+        (void)spawn_random_rectanle(parent, maker, rect, min_size, max_size, rng);
     }
 }
 
@@ -764,10 +808,10 @@ void run_demo() {
         return player;
     } (ent_mana);
 
-    scenes.push_scene(make_unique_scene([](Scene::EntityMaker &){}));
+    scenes.push_scene(make_unique_scene([](SceneLoader &){}));
 
     scenes.push_scene(make_unique_scene(
-    [](Scene::EntityMaker & maker) {
+    [](SceneLoader & maker) {
         std::default_random_engine rng { 0x01239ABC };
         auto e = maker.make_entity();
         e.add<DrawRectangle>().set_color(sf::Color::Red);
@@ -781,7 +825,7 @@ void run_demo() {
     ))
     ;
 
-    scenes.push_scene(make_unique_scene([](Scene::EntityMaker & maker) {
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), Size2 (80, 20));
         e.add<DrawRectangle>().set_color(sf::Color(200, 100, 100));
@@ -803,7 +847,7 @@ void run_demo() {
         e.add<Name>().value = "BLOCK D";
     }));
 
-    scenes.push_scene(make_unique_scene([](Scene::EntityMaker & maker) {
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(100, 100), Size2(80, 4));
         e.add<DrawRectangle>().set_color(sf::Color(180, 100, 180));
@@ -817,7 +861,7 @@ void run_demo() {
         e.add<Velocity>() = Vector(0, 1000);
     }));
 
-    scenes.push_scene(make_unique_scene([](Scene::EntityMaker & maker) {
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(500, 400), Size2(30, 30));
         e.add<DrawRectangle>().set_color(sf::Color(180, 100, 180));
@@ -831,7 +875,7 @@ void run_demo() {
         e.add<Velocity>() = Vector(100, -100);
     }));
 
-    scenes.push_scene(make_unique_scene([](Scene::EntityMaker & maker) {
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(-200, -200), Size2(30, 30));
         e.add<DrawRectangle>().set_color(sf::Color(100, 180, 180));
@@ -848,7 +892,7 @@ void run_demo() {
 #   if 1
     // this is a stupidly complex scene
     // but an important test case still
-    scenes.push_scene(make_unique_scene([](Scene::EntityMaker & maker) {
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         static const Size2 k_size(30, 30);
         static const Vector k_center(-200, -200);
         auto e = maker.make_entity();
@@ -886,7 +930,7 @@ void run_demo() {
         }
     }));
 #   endif
-    scenes.push_scene(make_unique_scene([](Scene::EntityMaker & maker) {
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         static const Size2 k_size(30, 30);
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), k_size);
@@ -906,7 +950,7 @@ void run_demo() {
         e.add<DrawRectangle>().set_color(sf::Color(200, 180, 180));
         e.add<Name>().value = "BLOCK";
     }));
-    scenes.push_scene(make_unique_scene([](Scene::EntityMaker & maker) {
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         auto e = maker.make_entity();
         e.add<DrawRectangle>().set_color(sf::Color(100, 100, 200));
         e.add<Rectangle    >() = make_rect_from_center(Vector(-100, -100), Size2(180, 80));
@@ -914,6 +958,26 @@ void run_demo() {
         //auto & shad_image = e.add<ShadowImage  >();
         //shad_image.time_between_spawns = shad_image.time_to_next_spawn = 0.16;
         e.add<Name         >().value = "FLOOR MAT";
+    }));
+
+    scenes.push_scene(make_unique_scene([](SceneLoader & loader) {
+        auto rng_ptr = std::make_shared<std::default_random_engine>();
+        loader.on_update([rng_ptr](EntityMaker & maker) {
+            auto & rng = *rng_ptr;
+            if (RealDistri(0, 1)(rng) > (1. / 100.)) return;
+            auto e = maker.make_entity();
+            e.add<DrawRectangle>().set_color(sf::Color::Green);
+            e.request_deletion();
+            int to_spawn = IntDistri(2, 5)(rng);
+            for (int i = 0; i != to_spawn; ++i) {
+                auto ej = spawn_random_rectanle(e, maker,
+                    Rectangle(100, 100, 450, 450), Size2(5, 5), Size2(20, 20), rng);
+                ej.add<Growth>() = Size2(RealDistri(-100, 100)(rng),
+                                         RealDistri(-100, 100)(rng));
+                ej.add<Lifetime>() = RealDistri(1, 2.5)(rng);
+                ej.add<Layer>() = layers::k_floor_mat;
+            }
+        });
     }));
     RdColSystem col_sys;
     sf::RenderWindow window(sf::VideoMode(k_window_width, k_window_height), " ");
@@ -993,10 +1057,12 @@ void run_demo() {
         if (!in_frame_advance_mode || frame_advance_step) {
             window.clear(sf::Color(80, 80, 80));
             frame_advance_step = false;
+            scenes.on_update(ent_mana);
             run_systems(ent_mana, std::tuple_cat(
                 std::make_tuple(RdMapLimits(), DrawSystem(window),
                                 VerticiesMovementSystem(), RdFadeSystem(),
-                                ShadowImageSystem(), MatFlashSystem()),
+                                ShadowImageSystem(), MatFlashSystem(),
+                                LifetimeSystem()),
                 std::tie(col_sys, spdisplay)));
             ent_mana.process_deletion_requests();
         }

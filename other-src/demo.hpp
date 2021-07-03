@@ -30,6 +30,8 @@
 
 #include <aabbtdp/physics.hpp>
 
+#include <cassert>
+
 using Real      = tdp::Real;
 using Vector    = tdp::Vector;
 using Rectangle = tdp::Rectangle;
@@ -48,6 +50,14 @@ struct Velocity : public Vector {
 struct MapLimits : public Vector {
     MapLimits(): Vector(k_inf, k_inf) {}
     MapLimits(Real x_, Real y_): Vector(x_, y_) {}
+};
+
+struct Growth : public Size2 {
+    Growth() = default;
+    Growth(Real w_, Real h_): Size2(w_, h_) {}
+
+    Size2 & operator = (const Size2 & sz)
+        { return (static_cast<Size2 &>(*this) = sz); }
 };
 
 struct Name : ecs::InlinedComponent {
@@ -77,13 +87,46 @@ const std::string & force_name(const ecs::Entity<Types...> & e) {
     return a_name ? *a_name : k_anon;
 }
 
-template <typename ... Types>
-tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time, int layer = 0) {
-    tdp::Entry entry;
-    entry.entity          = entity;
-    entry.bounds          = entity.template get<Rectangle>();
-    entry.collision_layer = layer;
 
+#if 0
+inline tdp::CollisionMatrix make_default_col_matrix() {
+    tdp::CollisionMatrix col_matrix;
+    col_matrix.set_size(1, 1, tdp::InteractionClass::k_as_solid);
+    return col_matrix;
+}
+#endif
+namespace layers {
+
+constexpr const int k_block       = 0;
+constexpr const int k_floor_mat   = 1;
+constexpr const int k_passive     = 2;
+constexpr const int k_layer_count = 3;
+
+} // end of layers namespace -> into <anonymous>
+
+inline auto make_collision_matrix() {
+    using namespace tdp::interaction_classes;
+    auto rv = cul::Grid {
+        //             block     , floor mat    , passive
+        /* block */ {  k_as_solid, k_as_trespass, k_as_passive },
+        /* floor */ {  k_reflect , k_as_passive , k_as_passive },
+        /* passv */ {  k_reflect , k_reflect    , k_as_passive }
+    };
+    assert(rv.width() == layers::k_layer_count && rv.height() == layers::k_layer_count);
+    return rv;
+}
+
+struct Layer {
+    int value = tdp::Entry::k_no_layer;
+    int & operator = (int i) { return (value = i); }
+    operator int () const { return value; }
+};
+
+template <typename ... Types>
+tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time) {
+    tdp::Entry entry;
+    entry.entity = entity;
+    entry.bounds = entity.template get<Rectangle>();
     if (auto * lims = entity.template ptr<MapLimits>()) {
         entry.barrier = *lims;
     }
@@ -91,15 +134,23 @@ tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time, in
         const auto & vel = static_cast<const Vector &>(* velcomp);
         entry.displacement = vel*elapsed_time;
     }
-    if constexpr (cul::TypeList<Types...>::template HasType<Pushable>::k_value)
+    using ListOfTypes = cul::TypeList<Types...>;
+    if constexpr (ListOfTypes::template HasType<Pushable>::k_value)
         entry.pushable = entity.template has<Pushable>();
+    if constexpr (ListOfTypes::template HasType<Growth>::k_value) {
+        if (auto * growth = entity.template ptr<Growth>()) {
+            entry.growth.width  = growth->width *elapsed_time;
+            entry.growth.height = growth->height*elapsed_time;
+        }
+    }
+    if constexpr (ListOfTypes::template HasType<Layer>::k_value) {
+        if (entity.template has<Layer>()) {
+            entry.collision_layer = entity.template get<Layer>();
+        }
+    }
+    if (entry.collision_layer == tdp::Entry::k_no_layer)
+        entry.collision_layer = layers::k_block;
     return entry;
-}
-
-inline tdp::CollisionMatrix make_default_col_matrix() {
-    tdp::CollisionMatrix col_matrix;
-    col_matrix.set_size(1, 1, tdp::InteractionClass::k_as_solid);
-    return col_matrix;
 }
 
 #ifdef MACRO_BUILD_DEMO

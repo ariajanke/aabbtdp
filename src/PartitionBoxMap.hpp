@@ -49,6 +49,10 @@ template <typename ValueTypeT>
 using PbmElement = std::tuple<Rectangle, ValueTypeT>;
 
 template <typename ValueTypeT>
+const Rectangle & get_rectangle(const PbmElement<ValueTypeT> & el)
+    { return std::get<0>(el); }
+
+template <typename ValueTypeT>
 using PbmContainer = std::vector<PbmElement<ValueTypeT>>;
 
 template <typename ValueTypeT>
@@ -236,7 +240,7 @@ private:
 };
 
 // maximum number of elements for a flat map
-static constexpr const int k_pbm_partition_thershold = 3;
+static constexpr const int k_pbm_partition_thershold = 3;//16;
 
 // fraction describing how many overlapping elements causes the sp map
 // to just use flat, rather than trying to fork
@@ -315,7 +319,7 @@ Rectangle PartitionedBoxMapFlat<ValueTypeT>::get_extreme_bounds() const {
 
     Real low_x = k_inf, low_y = k_inf, high_x = -k_inf, high_y = -k_inf;
     for (const auto & el : m_elements) {
-        const auto & rect = std::get<0>(el);
+        const auto & rect = get_rectangle(el);
         low_x  = min(low_x , rect.left           );
         low_y  = min(low_y , rect.top            );
         high_x = max(high_x, cul::right_of (rect));
@@ -375,6 +379,14 @@ void PartitionBoxMapPartition<ValueTypeT, kt_orientation>::set_elements
     // All I need is a "partial" sort
     m_division = get_division(beg, end);
     auto counts = get_counts(m_division, beg, end);
+    auto num = end - beg;
+    std::array<Rectangle, 8> rect_copy;
+    if (end - beg < int(rect_copy.size())) {
+        auto witr = rect_copy.begin();
+        for (auto itr = beg; itr != end; ++itr) {
+            *witr++ = get_rectangle(*itr);
+        }
+    }
     assert(beg + counts.low_only + counts.shared + counts.high_only == end);
     auto max_share = ((end - beg)*k_pbm_overlap_thershold_num)
                      / k_pbm_overlap_thershold_den;
@@ -449,9 +461,34 @@ template <typename ValueTypeT, Orientation kt_orientation>
     get_division
     (UContIter beg, UContIter end)
 {
+    using std::get;
     // beg to end need not be sorted here
     if (end == beg) return 0;
-    Real sum_len     = 0;
+    // let's try a weight based on how far it is from the average point
+    // so that farther objects more strongly drag the division toward it
+    Real x_avg = 0;
+    static auto get_x = [](const Rectangle & rect)
+        { return get_position(rect) + get_length(rect)*0.5; };
+    for (auto itr = beg; itr != end; ++itr) {
+        x_avg += get_x(get_rectangle(*itr));
+    }
+    x_avg /= (end - beg);
+    Real sum_diff = 0, sum_weights = 0;
+    for (auto itr = beg; itr != end; ++itr) {
+        const auto & rect = get_rectangle(*itr);
+        auto pos  = get_position(rect);
+        auto diff = cul::magnitude(x_avg - pos);
+
+        sum_diff    += diff;
+        sum_weights += diff*get_x(get_rectangle(*itr));
+    }
+    return sum_weights / sum_diff;
+#   if 0
+    Real sum_len = 0;
+    for (auto itr = beg; itr != end; ++itr) {
+        sum_len += get_length(std::get<0>(*itr));
+    }
+
     Real sum_weights = 0;
     for (auto itr = beg; itr != end; ++itr) {
         const auto & rect = std::get<0>(*itr);
@@ -460,6 +497,7 @@ template <typename ValueTypeT, Orientation kt_orientation>
         sum_weights += len*(get_position(rect) + len*0.5);
     }
     return sum_weights / sum_len;
+#   endif
 }
 
 template <typename ValueTypeT, Orientation kt_orientation>
@@ -475,7 +513,7 @@ template <typename ValueTypeT, Orientation kt_orientation>
     // beg to end need not be sorted here either! c:
     int low = 0, shared = 0, high = 0;
     for (auto itr = beg; itr != end; ++itr) {
-        const auto & rect = std::get<0>(*itr);
+        const auto & rect = get_rectangle(*itr);
         if ( on_low(rect, div) && !on_high(rect, div)) ++low ;
         if (!on_low(rect, div) &&  on_high(rect, div)) ++high;
         if ( on_low(rect, div) &&  on_high(rect, div)) ++shared;
@@ -489,7 +527,7 @@ template <typename ValueTypeT, Orientation kt_orientation>
     (Real div, UContIter beg, UContIter end)
 {
     for (auto itr = beg; itr != end; ++itr) {
-        if (!on_low(std::get<0>(*itr), div)) continue;
+        if (!on_low(get_rectangle(*itr), div)) continue;
         std::swap(*itr, *beg++);
     }
 }
@@ -502,7 +540,7 @@ template <typename ValueTypeT, Orientation kt_orientation>
     auto rbeg = std::make_reverse_iterator(end);
     auto rend = std::make_reverse_iterator(beg);
     for (auto itr = rbeg; itr != rend; ++itr) {
-        if (!on_high(std::get<0>(*itr), div)) continue;
+        if (!on_high(get_rectangle(*itr), div)) continue;
         std::swap(*itr, *rbeg++);
     }
 }
@@ -517,13 +555,16 @@ template <typename ValueTypeT, Orientation kt_orientation>
     auto counts = get_counts(div, beg, end);
     for (; itr != beg + counts.low_only; ++itr) {
         // I need a test that makes this assertion fail
-        assert(on_low(get<0>(*itr), div) && !on_high(get<0>(*itr), div));
+        assert(    on_low (get_rectangle(*itr), div)
+               && !on_high(get_rectangle(*itr), div));
     }
     for (; itr != beg + counts.low_only + counts.shared; ++itr) {
-        assert(on_low(get<0>(*itr), div) && on_high(get<0>(*itr), div));
+        assert(   on_low (get_rectangle(*itr), div)
+               && on_high(get_rectangle(*itr), div));
     }
     for (; itr != beg + counts.low_only + counts.shared + counts.high_only; ++itr) {
-        assert(!on_low(get<0>(*itr), div) && on_high(get<0>(*itr), div));
+        assert(   !on_low (get_rectangle(*itr), div)
+               &&  on_high(get_rectangle(*itr), div));
     }
 }
 
@@ -602,6 +643,23 @@ void PartitionBoxMap<ValueTypeT, kt_algo_choice>::set_elements
     } else if constexpr (kt_algo_choice == k_pbm_use_partitioning) {
         FactoryImpl inst(m_vert_partition, m_horz_partition, m_flat);
         m_root = PbMapFactory<ValueTypeT>::choose(inst, beg, end);
+    }
+    static constexpr const auto k_all_rectangles_must_be_real =
+        "PartitionBoxMap::set_elements: All rectangles must have fields which "
+        "are all real numbers.";
+    static constexpr const auto k_size_must_be_non_negative =
+        "PartitionBoxMap::set_elements: All rectangles must have non-negative "
+        "sizes.";
+    for (auto itr = beg; itr != end; ++itr) {
+        using cul::is_real;
+        const Rectangle & rect = get_rectangle(*itr);
+        if (   !is_real(rect.left) || !is_real(rect.top) || !is_real(rect.width)
+            || !is_real(rect.height))
+        {
+            throw std::runtime_error(k_all_rectangles_must_be_real);
+        } else if (rect.width < 0 || rect.height < 0) {
+            throw std::runtime_error(k_size_must_be_non_negative);
+        }
     }
     m_root->set_elements(beg, end);
 }
