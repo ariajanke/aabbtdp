@@ -537,6 +537,7 @@ private:
             if (!a.has_all<Velocity, Bouncy>()) return;
             bool horz_closer = false;
             if (other) {
+                if (RdEntity{other}.has<Pushable>()) return;
                 horz_closer = horizontal_is_closer(a.get<Rectangle>(), RdEntity{other}.get<Rectangle>());
             } else {
                 using cul::top_left_of, cul::right_of, cul::bottom_of;
@@ -948,13 +949,21 @@ void run_demo() {
         std::default_random_engine rng {std::random_device{}()};
         auto e = maker.make_entity();
         e.add<Bouncy>();
-        e.add<Rectangle>() = make_rect_from_center(Vector(0, 250), Size2(30, 30));
+        e.add<Rectangle>() = make_rect_from_center(Vector(0, 250), Size2(32, 32));
         e.add<Name>().value = "BOUNCY";
         e.add<Velocity>() = cul::rotate_vector(Vector(1, 0)*RealDistri{30, 150}(rng), RealDistri{0, 3.14159265*2}(rng));
         e.add<DrawRectangle>().set_color(sf::Color(180, 180, 100));
         e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
+
+        e = maker.make_entity();
+        e.add<Pushable>();
+        e.add<Rectangle>() = make_rect_from_center(Vector(200, 0), Size2(32, 32));
+        e.add<Name>().value = "BLOCK P";
+        e.add<DrawRectangle>().set_color(sf::Color(180, 100, 180));
+        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
     }
-    ));
+    ))
+    ;
 #   if 1
     // this is a stupidly complex scene
     // but an important test case still
