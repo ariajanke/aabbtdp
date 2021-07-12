@@ -80,17 +80,30 @@ struct Entry {
 
     /// Real vector which specifies how much the entry's position has changed
     /// this frame.
+    ///
+    /// @note This is not necessarily the actual displacement applied to the
+    ///       entry, especially if the entry is pushable.
     Vector displacement;
 
     /// This represents a barrier specific to this entry/entity that may not be
-    /// passed.
+    /// passed if computed displacement is in the negative direction.
     ///
     /// The client is free to change this value in relation to any other value.
     /// For example, changes according to position and displacement's
     /// direction.
     ///
     /// Setting it to non-real numbers will effectively remove the barrier.
-    Vector barrier = Vector(k_inf, k_inf);
+    Vector negative_barrier = Vector(k_inf, k_inf);
+
+    /// This represents a barrier specific to this entry/entity that may not be
+    /// passed if computed displacement is in the positive direction.
+    ///
+    /// The client is free to change this value in relation to any other value.
+    /// For example, changes according to position and displacement's
+    /// direction.
+    ///
+    /// Setting it to non-real numbers will effectively remove the barrier.
+    Vector positive_barrier = Vector(k_inf, k_inf);
 
     /// This integer specifies which collision layer this entry is identified
     /// with. It must be a number between 0 and the width/height of the

@@ -463,7 +463,6 @@ template <typename ValueTypeT, Orientation kt_orientation>
     get_division
     (UContIter beg, UContIter end)
 {
-    using std::get;
     // beg to end need not be sorted here
     if (end == beg) return 0;
     // let's try a weight based on how far it is from the average point
@@ -485,21 +484,6 @@ template <typename ValueTypeT, Orientation kt_orientation>
         sum_weights += diff*get_x(get_rectangle(*itr));
     }
     return sum_weights / sum_diff;
-#   if 0
-    Real sum_len = 0;
-    for (auto itr = beg; itr != end; ++itr) {
-        sum_len += get_length(std::get<0>(*itr));
-    }
-
-    Real sum_weights = 0;
-    for (auto itr = beg; itr != end; ++itr) {
-        const auto & rect = std::get<0>(*itr);
-        auto len = get_length(rect);
-        sum_len     += len;
-        sum_weights += len*(get_position(rect) + len*0.5);
-    }
-    return sum_weights / sum_len;
-#   endif
 }
 
 template <typename ValueTypeT, Orientation kt_orientation>
@@ -552,7 +536,6 @@ template <typename ValueTypeT, Orientation kt_orientation>
     check_order
     (Real div, UContIter beg, UContIter end)
 {
-    using std::get;
     auto itr = beg;
     auto counts = get_counts(div, beg, end);
     for (; itr != beg + counts.low_only; ++itr) {

@@ -49,13 +49,8 @@ using namespace cul::exceptions_abbr;
 using cul::is_real, cul::bottom_of, cul::right_of, cul::normalize,
       cul::magnitude;
 
-struct EntityRefHasher {
-    std::size_t operator () (const EntityRef & eref) const
-        { return eref.hash(); }
-};
-#if 1
 enum Direction : uint8_t { k_left, k_right, k_down, k_up, k_direction_count };
-#endif
+
 // ----------------------------------------------------------------------------
 
 struct FullEntry : tdp::Entry {
@@ -113,7 +108,7 @@ private:
     bool m_is_push = false;
 };
 
-using EntryEntityRefMap = std::unordered_map<EntityRef, FullEntry, EntityRefHasher>;
+using EntryEntityRefMap = std::unordered_map<EntityRef, FullEntry, ecs::EntityHasher>;
 
 // ----------------------------------------------------------------------------
 
@@ -123,15 +118,7 @@ class TdpHandlerComplete final : public TopDownPhysicsHandler {
     void run(EventHandler &) final;
 
     void set_collision_matrix_(CollisionMatrix && matrix) final;
-#   if 0
-    template <typename Func>
-    [[deprecated]] void for_each_other(EntityRef eref, Func && f) {
-        for (auto & pair : m_entries) {
-            if (eref == pair.first) continue;
-            f(pair.second);
-        }
-    }
-#   endif
+
     template <typename Func>
     void for_each(const Rectangle & bounds, Func && f) {
         m_pbinfo.map.for_each(bounds, [&f](FullEntry * feptr) { f(*feptr); });
@@ -196,18 +183,17 @@ inline bool operator == (const Hit & lhs, const Hit & rhs) { return  are_same(lh
 
 inline bool operator != (const Hit & lhs, const Hit & rhs) { return !are_same(lhs, rhs); }
 
+#if 0 // code disabled to check... BFS structure of code
+
+// ----------------------------- level 0 helpers ------------------------------
+
 // !I need tests!
 /** @returns zero vector if there is no need for push */
 std::tuple<Vector, Hit> find_min_push_displacement
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc);
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
 
-// the difference here is, we're accounting for large displacements
-bool trespass_occuring
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc);
-
-// much more intense written for growing or shrinking rectangles
-bool trespass_occuring
-    (const Rectangle & rect, const Rectangle & old_other, const Rectangle & new_other);
+std::vector<FullEntry *> prioritized_entries
+    (EntryEntityRefMap &, std::vector<FullEntry *> &&);
 
 Hit trim_displacement_for_barriers
     (const Rectangle &, Vector barriers, Vector & displacement);
@@ -215,16 +201,30 @@ Hit trim_displacement_for_barriers
 Hit trim_displacement
     (const Rectangle &, const Rectangle & other, Vector & displc);
 
-std::vector<FullEntry *> prioritized_entries(EntryEntityRefMap & map, std::vector<FullEntry *> && = std::vector<FullEntry *>());
-
-inline FullEntry & iter_to_entryref(EntryEntityRefMap::iterator itr) { return itr->second; }
-
-inline FullEntry & iter_to_entryref(std::vector<PushPair>::iterator itr) { return *itr->pushee; }
+// much more intense written for growing or shrinking rectangles
+bool trespass_occuring
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
 
 Rectangle grow(Rectangle, const Size &);
 
-Rectangle grow_by_displacement(Rectangle, const Vector &);
+Rectangle grow_by_displacement(Rectangle, const Vector & displc);
 
+// ----------------------------- level 1 helpers ------------------------------
+
+int large_displacement_step_count
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+std::tuple<Vector, Hit> find_min_push_displacement_small
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+Hit trim_small_displacement
+    (const Rectangle &, const Rectangle & other, Vector & displc);
+
+// ----------------------------- level 2 helpers ------------------------------
+
+Hit values_from_displacement(const Vector &);
+
+#endif
 } // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

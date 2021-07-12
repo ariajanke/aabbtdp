@@ -47,9 +47,14 @@ struct Velocity : public Vector {
         { return (static_cast<Vector &>(*this) = r); }
 };
 
-struct MapLimits : public Vector {
-    MapLimits(): Vector(k_inf, k_inf) {}
-    MapLimits(Real x_, Real y_): Vector(x_, y_) {}
+struct MapLimits {
+    MapLimits() {}
+    MapLimits(Real x_, Real y_, Real w_, Real h_): value(x_, y_, w_, h_) {}
+
+    Rectangle & operator = (const Rectangle & r) { return (value = r); }
+    operator const Rectangle & () const { return value; }
+
+    Rectangle value;
 };
 
 struct Growth : public Size2 {
@@ -65,6 +70,7 @@ struct Name : ecs::InlinedComponent {
 };
 
 struct Pushable {};
+struct Bouncy {};
 
 struct ColInfo {
     bool hit_wall = false;
@@ -128,7 +134,11 @@ tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time) {
     entry.entity = entity;
     entry.bounds = entity.template get<Rectangle>();
     if (auto * lims = entity.template ptr<MapLimits>()) {
-        entry.barrier = *lims;
+        const Rectangle & bounds = *lims;
+        entry.negative_barrier.x = bounds.left;
+        entry.negative_barrier.y = bounds.top;
+        entry.positive_barrier.x = bounds.left + bounds.width ;
+        entry.positive_barrier.y = bounds.top  + bounds.height;
     }
     if (auto * velcomp = entity.template ptr<Velocity>()) {
         const auto & vel = static_cast<const Vector &>(* velcomp);

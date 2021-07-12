@@ -62,6 +62,9 @@ constexpr const auto k_pc_up                = sf::Keyboard::Up;
 constexpr const int k_window_height = 700;
 constexpr const int k_window_width  = (k_window_height * 11) / 6;
 
+static constexpr const Real k_field_width  = 600;
+static constexpr const Real k_field_height = 600;
+
 struct Fade {
     Real remaining = 0.;
     Real original  = 0.;
@@ -98,7 +101,8 @@ using cul::DrawRectangle;
 using cul::DrawText;
 using RdEntity = ecs::Entity<
     DrawRectangle, Verticies, Velocity, Rectangle, MapLimits, Name, Fade,
-    Pushable, HudDrawn, Layer, ShadowImage, Occupant, Lifetime, Growth>;
+    Pushable, HudDrawn, Layer, ShadowImage, Occupant, Lifetime, Growth,
+    Bouncy>;
 using RdSystem = RdEntity::SystemType;
 constexpr const Real k_demo_et_value = 1. / 60.;
 
@@ -220,10 +224,11 @@ private:
                 }
             }
         }
+#       if 0
         m_max_intr_info.set_text_top_left(sf::Vector2f(0, 0),
             "SP Max interactions: " + std::to_string(get_max_interactions())
             + " / " + std::to_string(m_entities.size()));
-
+#       endif
         {
         auto old_view = target.getView();
         auto new_view = old_view;
@@ -302,7 +307,7 @@ class ShadowImageSystem final : public RdSystem {
     class EntityMaker {
     public:
         explicit EntityMaker(RdEntity source): m_source(source) {}
-        RdEntity make_entity() { return m_source.create_new_entity(); }
+        RdEntity make_entity() { return m_source.make_entity(); }
 
     private:
         RdEntity m_source;
@@ -373,7 +378,7 @@ class VerticiesMovementSystem final : public RdSystem {
         }
     }
 };
-
+#if 0
 class RdMapLimits final : public RdSystem {
 public:
     static constexpr const Real k_low_x_limit  =   0;
@@ -396,7 +401,7 @@ private:
         else if (vel.y < 0) { limits.y = k_low_y_limit ; }
     }
 };
-
+#endif
 class DrawSystem final : public RdSystem {
 public:
     static constexpr const auto k_chosen_font = cul::BitmapFont::k_8x8_highlighted_font;
@@ -405,9 +410,7 @@ public:
 private:
     void update(const ContainerView & view) final {
         {
-        DrawRectangle drect(RdMapLimits::k_low_x_limit, RdMapLimits::k_low_y_limit,
-                            RdMapLimits::k_high_x_limit - RdMapLimits::k_low_x_limit,
-                            RdMapLimits::k_high_y_limit - RdMapLimits::k_low_y_limit,
+        DrawRectangle drect(0, 0, k_field_width, k_field_height,
                             sf::Color(0, 70, 0));
         target.draw(drect);
         }
@@ -496,6 +499,18 @@ private:
     }
 };
 
+template <typename T>
+T & alt(T * ptr, T & obj)
+    { return ptr ? *ptr : obj; }
+
+template <typename T>
+const T & alt(const T * ptr, const T & obj)
+    { return ptr ? *ptr : obj; }
+
+template <typename T>
+const T & c_alt(const T * ptr, const T & obj)
+    { return ptr ? *ptr : obj; }
+
 class RdColSystem final : public RdSystem {
 public:
     RdColSystem() {
@@ -518,21 +533,60 @@ private:
         bool check_accept_collision(EntityRef, EntityRef) const final
             { return true; }
 
+        static void check_bounce(RdEntity a, EntityRef other) {
+            if (!a.has_all<Velocity, Bouncy>()) return;
+            bool horz_closer = false;
+            if (other) {
+                horz_closer = horizontal_is_closer(a.get<Rectangle>(), RdEntity{other}.get<Rectangle>());
+            } else {
+                using cul::top_left_of, cul::right_of, cul::bottom_of;
+                const auto & map_lims = a.get<MapLimits>().value;
+                horz_closer = horizontal_is_closer(
+                    a.get<Rectangle>(), top_left_of(map_lims),
+                    Vector{right_of(map_lims), bottom_of(map_lims)});
+            }
+            auto & vel = a.get<Velocity>();
+            (horz_closer ? vel.x : vel.y) *= -1;
+        }
+
+        // seems to be useful for bouncing... maybe a "useful" utility to
+        // share between projects?
+        static bool horizontal_is_closer(const Rectangle & a, const Rectangle & b) {
+            using std::min, cul::magnitude;
+            auto hdist = min(magnitude(a.left       - right_of (b)),
+                             magnitude(right_of(a)  - b.left     ));
+            auto vdist = min(magnitude(a.top        - bottom_of(b)),
+                             magnitude(bottom_of(a) - b.top      ));
+            return hdist < vdist;
+        }
+
+        static bool horizontal_is_closer
+            (const Rectangle & a, const Vector & bar_a, const Vector & bar_b)
+        {
+            using std::min, std::max, cul::magnitude;
+            Vector low_bar {min(bar_a.x, bar_b.x), min(bar_a.y, bar_b.y)};
+            Vector high_bar{max(bar_a.x, bar_b.x), max(bar_a.y, bar_b.y)};
+            auto hdist = min(magnitude(a.left - low_bar.x), magnitude(right_of (a) - high_bar.x));
+            auto vdist = min(magnitude(a.top  - low_bar.y), magnitude(bottom_of(a) - high_bar.y));
+            return hdist < vdist;
+        }
+
         void on_collision(EntityRef a, EntityRef b, bool) final {
-            if (m_rest_frames) return;
+            //if (m_rest_frames) return;
             using cul::center_of;
             auto ae = RdEntity{a};
+            check_bounce(ae, b);
             Vector spawn_point;
             std::string notice_living_place;
             const std::string * notice = nullptr;
-            auto flash_text = ae.create_new_entity();
+            auto flash_text = ae.make_entity();
+            flash_text.add<HudDrawn>();
             if (b) {
                 RdEntity be{b};
+                check_bounce(be, a);
                 static const std::string k_anon = "<ANON>";
-                notice_living_place = (get_name_ptr(be) ? *get_name_ptr(be) : k_anon)
-                                      + " & "
-                                      + (get_name_ptr(ae) ? *get_name_ptr(ae) : k_anon)
-                                      + " HIT!";
+                notice_living_place = c_alt(get_name_ptr(be), k_anon) + " & "
+                                      + c_alt(get_name_ptr(ae), k_anon) + " HIT!";
                 notice = &notice_living_place;
 
                 if (flash_text.has<HudDrawn>()) {
@@ -624,7 +678,7 @@ struct FrameTimeEntityMaker {
 class EntityMakerBase {
 public:
     RdEntity make_entity() {
-        auto rv = ent_mana.create_new_entity();
+        auto rv = ent_mana.make_entity();
         m_entities.push_back(rv);
         return rv;
     }
@@ -744,10 +798,10 @@ private:
 };
 
 Vector find_field_center() {
-    static constexpr const auto k_low_x  = RdMapLimits::k_low_x_limit;
-    static constexpr const auto k_low_y  = RdMapLimits::k_low_y_limit;
-    static constexpr const auto k_high_x = RdMapLimits::k_high_x_limit;
-    static constexpr const auto k_high_y = RdMapLimits::k_high_y_limit;
+    static constexpr const auto k_low_x  = 0;
+    static constexpr const auto k_low_y  = 0;
+    static constexpr const auto k_high_x = k_field_width;
+    static constexpr const auto k_high_y = k_field_height;
     return Vector(k_low_x + (k_high_x - k_low_x)*0.5,
                   k_low_y + (k_high_y - k_low_y)*0.5);
 }
@@ -797,12 +851,12 @@ void run_demo() {
 
     RdEntity player = [] (RdEntity::ManagerType & ent_mana) {
         // initialize demo world objects here
-        auto player = ent_mana.create_new_entity();
+        auto player = ent_mana.make_entity();
         player.add<Velocity>();
 
         player.add<Rectangle>() = Rectangle(find_field_center(), Size2(50, 50));
         player.add<DrawRectangle>().set_color(sf::Color(200, 200, 255));
-        player.add<MapLimits>();
+        player.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
         player.add<Name>().value = "PLAYER";
 
         return player;
@@ -889,6 +943,18 @@ void run_demo() {
         e.add<Velocity>() = Vector(-100, -0.1);
     }));
 
+    scenes.push_scene(make_unique_scene(
+    [](SceneLoader & maker) {
+        std::default_random_engine rng {std::random_device{}()};
+        auto e = maker.make_entity();
+        e.add<Bouncy>();
+        e.add<Rectangle>() = make_rect_from_center(Vector(0, 250), Size2(30, 30));
+        e.add<Name>().value = "BOUNCY";
+        e.add<Velocity>() = cul::rotate_vector(Vector(1, 0)*RealDistri{30, 150}(rng), RealDistri{0, 3.14159265*2}(rng));
+        e.add<DrawRectangle>().set_color(sf::Color(180, 180, 100));
+        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
+    }
+    ));
 #   if 1
     // this is a stupidly complex scene
     // but an important test case still
@@ -936,14 +1002,15 @@ void run_demo() {
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), k_size);
         e.add<DrawRectangle>().set_color(sf::Color(180, 200, 180));
         e.add<Pushable>();
+        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
         e.add<Name>().value = "PUSH A";
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 150), k_size);
         e.add<DrawRectangle>().set_color(sf::Color(180, 200, 180));
         e.add<Pushable>();
+        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
         e.add<Name>().value = "PUSH B";
-        e.add<MapLimits>().x = 100;
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 200), k_size);
@@ -1059,7 +1126,7 @@ void run_demo() {
             frame_advance_step = false;
             scenes.on_update(ent_mana);
             run_systems(ent_mana, std::tuple_cat(
-                std::make_tuple(RdMapLimits(), DrawSystem(window),
+                std::make_tuple(/*RdMapLimits(), */DrawSystem(window),
                                 VerticiesMovementSystem(), RdFadeSystem(),
                                 ShadowImageSystem(), MatFlashSystem(),
                                 LifetimeSystem()),

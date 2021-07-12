@@ -33,12 +33,51 @@
 namespace {
 
 using namespace cul::exceptions_abbr;
+using tdp::Vector;
+using tdp::detail::Hit;
+using tdp::Rectangle;
+using tdp::detail::FullEntry;
+using tdp::detail::EntryEntityRefMap;
+using tdp::detail::PushPair;
+
+Vector find_barrier_for_displacement(
+    const Vector & displacement,
+    const Vector & positive_barrier, const Vector & negative_barrier);
+
+Rectangle displace(Rectangle rv, Vector r);
+
+inline FullEntry & iter_to_entryref(EntryEntityRefMap::iterator itr)
+    { return itr->second; }
+
+inline FullEntry & iter_to_entryref(std::vector<PushPair>::iterator itr)
+    { return *itr->pushee; }
 
 } // end of <anonymous> namespace
 
 namespace tdp {
 
 namespace detail {
+
+// --------------------------- Helpers (level 0) ------------------------------
+
+std::tuple<Vector, Hit> find_min_push_displacement
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+std::vector<FullEntry *> prioritized_entries
+    (EntryEntityRefMap &, std::vector<FullEntry *> &&);
+
+Hit trim_displacement_for_barriers
+    (const Rectangle &, Vector barriers, Vector & displacement);
+
+Hit trim_displacement
+    (const Rectangle &, const Rectangle & other, Vector & displc);
+
+bool trespass_occuring
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+Rectangle grow(Rectangle, const Size &);
+
+Rectangle grow_by_displacement(Rectangle, const Vector & displc);
 
 // ------------------------------ CollisionEvent ------------------------------
 
@@ -178,8 +217,6 @@ template <typename Iter>
     rv.clear();
     for (auto itr = beg; itr != end; ++itr) {
         FullEntry & entry = iter_to_entryref(itr);
-        // do a "for_each_other"
-#       if 1
         for_each(get_grown_rectangle(entry), [this, &entry, &rv](FullEntry & other_entry) {
             auto col_class = m_col_matrix(entry.collision_layer, other_entry.collision_layer);
             if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) return;
@@ -189,17 +226,6 @@ template <typename Iter>
             // updates hit flags
             m_col_events.emplace_back(other_entry.entity, entry.entity, true);
         });
-#       else
-        for_each_other(entry.entity, [this, &entry, &rv](FullEntry & other_entry) {
-            auto col_class = m_col_matrix(entry.collision_layer, other_entry.collision_layer);
-            if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) return;
-            auto gv = find_min_push_displacement(entry.bounds, other_entry.bounds, entry.displacement);
-            if (get<Vector>(gv) == Vector()) return;
-            rv.emplace_back(&other_entry, &entry, get<Vector>(gv));
-            // updates hit flags
-            m_col_events.emplace_back(other_entry.entity, entry.entity, true);
-        });
-#       endif
     }
     return std::move(rv);
 }
@@ -278,10 +304,11 @@ template <typename Iter>
     m_recycled_order.clear();
     for (auto * entry_ptr : ordered_entries) {
         auto & entry = *entry_ptr;
-        if (trim_displacement_for_barriers(entry.bounds, entry.barrier, entry.displacement) != Hit()) {
+        Vector barrier = find_barrier_for_displacement
+            (entry.displacement, entry.positive_barrier, entry.negative_barrier);
+        if (trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement) != Hit()) {
             m_col_events.emplace_back(entry.entity, EntityRef(), false);
         }
-#       if 1
         for_each(get_grown_rectangle(entry), [&entry, this, &handler] (FullEntry & other_entry) {
             using namespace interaction_classes;
             switch (m_col_matrix(entry.collision_layer, other_entry.collision_layer)) {
@@ -299,23 +326,6 @@ template <typename Iter>
             default: break;
             }
         });
-#       else
-        for_each_other(entry.entity, [&entry, this] (FullEntry & other_entry) {
-            auto col_class = m_col_matrix(entry.collision_layer, other_entry.collision_layer);
-            if (col_class != InteractionClass::k_as_solid) return;
-            if (trim_displacement(entry.bounds, other_entry.bounds, entry.displacement) == Hit()) return;
-            m_col_events.emplace_back(entry.entity, other_entry.entity, false);
-        });
-
-        for_each_other(entry.entity, [&entry, this, &handler](FullEntry & other_entry) {
-            auto col_class = m_col_matrix(entry.collision_layer, other_entry.collision_layer);
-            if (col_class != InteractionClass::k_as_trespass) return;
-            bool first_appearance_overlap = entry.first_appearance && overlaps(entry.bounds, other_entry.bounds);
-            bool regular_trespass         = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
-            if (!first_appearance_overlap && !regular_trespass) return;
-            handler.on_trespass(entry.entity, other_entry.entity);
-        });
-#       endif
         // fine with other bounds being finalized for trespass events
         cul::set_top_left_of(entry.bounds, cul::top_left_of(entry.bounds) + entry.displacement);
         if (entry.growth != Size()) {
@@ -343,20 +353,21 @@ template <typename Iter>
     (const FullEntry & entry)
 {
     static constexpr const Real k_boost_size = 0.5;
-    return grow(grow_by_displacement(entry.bounds, entry.displacement), Size(1, 1)*k_boost_size);
+    return grow(grow_by_displacement(entry.bounds, entry.displacement),
+                Size(1, 1)*k_boost_size);
 }
 
 // -------------------------- Helper Implementations --------------------------
 
-Hit trim_small_displacement
-    (const Rectangle &, const Rectangle & other, Vector & displc);
-
-std::tuple<Vector, Hit> find_min_push_displacement_small
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc);
-
 // 0 means it is not a high displacement
 int large_displacement_step_count
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc);
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+std::tuple<Vector, Hit> find_min_push_displacement_small
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+Hit trim_small_displacement
+    (const Rectangle &, const Rectangle & other, Vector & displc);
 
 std::tuple<Vector, Hit> find_min_push_displacement
     (const Rectangle & rect, const Rectangle & other, const Vector & displc)
@@ -380,7 +391,81 @@ std::tuple<Vector, Hit> find_min_push_displacement
     return find_min_push_displacement_small(rect, other, displc);
 }
 
-Rectangle displace(Rectangle rv, Vector r);
+std::vector<FullEntry *> prioritized_entries
+    (EntryEntityRefMap & map, std::vector<FullEntry *> && rv)
+{
+    rv.clear();
+    rv.reserve(map.size());
+    for (auto & pair : map) { rv.emplace_back(&pair.second); }
+    static auto order_entries = [](const FullEntry * lhs, const FullEntry * rhs) {
+        assert(lhs && rhs);
+        return lhs->priority < rhs->priority;
+    };
+    std::sort(rv.begin(), rv.end(), order_entries);
+    std::reverse(rv.begin(), rv.end());
+    return std::move(rv);
+}
+
+Hit trim_displacement_for_barriers
+    (const Rectangle & rect, Vector barriers, Vector & displacement)
+{
+    static const constexpr Real k_bump_fix = 0.00005;
+    Hit rv;
+    if (is_real(barriers.y)) {
+        if (   bottom_of(rect)                  < barriers.y
+            && bottom_of(rect) + displacement.y > barriers.y)
+        {
+            // heading down
+            displacement.y   = barriers.y - bottom_of(rect) - k_bump_fix;
+            rv.vertical = k_down;
+            assert(bottom_of(rect) + displacement.y < barriers.y);
+        } else if (   rect.top                  > barriers.y
+                   && rect.top + displacement.y < barriers.y)
+        {
+            // heading up
+            displacement.y   = barriers.y - rect.top + k_bump_fix;
+            rv.vertical = k_up;
+            assert(rect.top + displacement.y > barriers.y);
+        }
+    }
+    if (is_real(barriers.x)) {
+        if (   right_of(rect)                  < barriers.x
+            && right_of(rect) + displacement.x > barriers.x)
+        {
+            // heading right
+            displacement.x   = barriers.x - right_of(rect) - k_bump_fix;
+            rv.horizontal = k_right;
+            assert(right_of(rect) + displacement.x < barriers.x);
+        } else if (   rect.left                  > barriers.x
+                   && rect.left + displacement.x < barriers.x)
+        {
+            // heading left
+            displacement.x   = barriers.x - rect.left + k_bump_fix;
+            rv.horizontal = k_left;
+            assert(rect.left + displacement.x > barriers.x);
+        }
+    }
+    return rv;
+}
+
+Hit trim_displacement
+    (const Rectangle & rect, const Rectangle & other, Vector & displc)
+{
+    int steps_for_large = large_displacement_step_count(rect, other, displc);
+    if (steps_for_large) {
+        for (int i = 1; i != steps_for_large; ++i) {
+            auto t           = Real(i) / Real(steps_for_large);
+            auto displc_part = displc*t;
+            Hit rv = trim_small_displacement(rect, other, displc_part);
+            if (rv != Hit()) {
+                displc = displc_part;
+                return rv;
+            }
+        }
+        return Hit();
+    }
+    return trim_small_displacement(rect, other, displc);
+}
 
 bool trespass_occuring
     (const Rectangle & rect, const Rectangle & other, const Vector & displc)
@@ -402,60 +487,137 @@ bool trespass_occuring
     return trespass_occuring_small(rect, other, displc);
 }
 
-static const auto k_inf_vec = Vector(tdp::Entry::k_inf, tdp::Entry::k_inf);
+Rectangle grow(Rectangle rect, const Size & size_) {
+    if (-size_.width > rect.width) {
+        rect.left  = rect.left + rect.width*0.5;
+        rect.width = 0;
+    } else {
+        rect.width += size_.width;
+        rect.left  -= size_.width*0.5;
+    }
+    if (-size_.height > rect.height) {
+        rect.top    = rect.top + rect.height*0.5;
+        rect.height = 0;
+    } else {
+        rect.height += size_.height;
+        rect.top    -= size_.height*0.5;
+    }
+    return rect;
+}
+
+Rectangle grow_by_displacement(Rectangle rect, const Vector & displc) {
+    if (displc.x < 0) {
+        rect.left  +=  displc.x;
+        rect.width += -displc.x;
+    } else if (displc.x > 0) {
+        rect.width += displc.x;
+    }
+    if (displc.y < 0) {
+        rect.top    +=  displc.y;
+        rect.height += -displc.y;
+    } else if (displc.y > 0) {
+        rect.height += displc.y;
+    }
+    return rect;
+}
+
+// ----------------------------- Helpers level 1 ------------------------------
+
+Hit values_from_displacement(const Vector &);
+
+int large_displacement_step_count
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{
+    using std::max, std::ceil, std::make_tuple, std::get;
+    auto displc_mag = Vector(magnitude(displc.x), magnitude(displc.y));
+    if (   displc_mag.x > other.width  || displc_mag.x > rect.width
+        || displc_mag.y > other.height || displc_mag.y > rect.height)
+    {
+        // this could be further optimized by checking if the rectangle
+        // expanded by the displacement overlaps the other rectangle and fast
+        // fail out of this function
+        //
+        // cost: complexity in implementation
+        // maybe something I can test later
+        return 1 + max(
+            ceil( displc_mag.x / max(other.width , rect.width ) ),
+            ceil( displc_mag.y / max(other.height, rect.height) ));
+    }
+    return 0;
+}
+
+std::tuple<Vector, Hit> find_min_push_displacement_small
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{
+    using std::max, std::min, std::make_tuple;
+    static const auto k_no_hit = make_tuple(Vector(), Hit());
+    auto frect = displace(rect, displc);
+    if (overlaps(rect, other) || !overlaps(frect, other)) return k_no_hit;
+
+    auto inner_left   = max(frect.left      , other.left      );
+    auto inner_right  = min(right_of(frect) , right_of(other) );
+    auto inner_top    = max(frect.top       , other.top       );
+    auto inner_bottom = min(bottom_of(frect), bottom_of(other));
+    if (inner_left >= inner_right || inner_top >= inner_bottom) return k_no_hit;
+
+    Size overlap_area(inner_right - inner_left, inner_bottom - inner_top);
+    Hit hit_parts = values_from_displacement(displc);
+    if ((overlap_area.width > overlap_area.height || displc.x == 0) && displc.y != 0) {
+        return make_tuple(Vector(0, normalize(displc.y)*overlap_area.height),
+                          Hit   (k_direction_count, hit_parts.vertical));
+    }
+    return make_tuple(Vector(normalize(displc.x)*overlap_area.width, 0),
+                      Hit   (hit_parts.horizontal, k_direction_count));
+}
+
+Hit trim_small_displacement
+    (const Rectangle & rect, const Rectangle & other, Vector & displc)
+{
+    using cul::find_highest_false;
+    if (overlaps(rect, other) || !overlaps(displace(rect, displc), other))
+    { return Hit(); }
+
+    Hit hit_parts = values_from_displacement(displc);
+
+    if (!overlaps(displace(rect, Vector(displc.x, 0)), other)) {
+        auto mk_displc = [displc](double t) { return Vector(displc.x, displc.y*t); };
+        displc = mk_displc(find_highest_false<double>([&](double t) {
+            return overlaps(displace(rect, mk_displc(t)), other);
+        }));
+        return Hit(k_direction_count, hit_parts.vertical);
+    }
+
+    if (!overlaps(displace(rect, Vector(0, displc.y)), other)) {
+        auto mk_displc = [displc](double t) { return Vector(displc.x*t, displc.y); };
+        displc = mk_displc(find_highest_false<double>([&](double t) {
+            return overlaps(displace(rect, mk_displc(t)), other);
+        }));
+        return Hit(hit_parts.horizontal, k_direction_count);
+    }
+
+    // assume the value only changes once
+    auto t = find_highest_false<double>([&](double t) {
+        return overlaps(displace(rect, t*displc), other);
+    });
+    // goes both ways
+    displc = displc*t;
+    return hit_parts;
+}
+
+// ----------------------------- Helpers level 2 ------------------------------
+
+Hit values_from_displacement(const Vector & r)
+    { return Hit(r.x > 0 ? k_right : k_left, r.y > 0 ? k_down : k_up); }
+
+// there are plans for a more accurate "trespass" detection
+// which would involve ideas expressed here
 #if 0
-static constexpr const int k_top_left_pt     = 0;
-static constexpr const int k_top_right_pt    = 1;
-static constexpr const int k_bottom_left_pt  = 2;
-static constexpr const int k_bottom_right_pt = 3;
-static constexpr const int k_rect_pt_count   = 4;
-using QuadVectorArray = std::array<Vector, k_rect_pt_count>;
-
-QuadVectorArray get_rectangle_points(const Rectangle &);
-#endif
-
-std::array<Vector, 4> get_rectangle_points(const Rectangle &);
 
 std::array<Vector, 4> get_rectangle_points(const Rectangle & rect) {
     auto tl = cul::top_left_of(rect);
     return std::array { tl, tl + Vector(rect.width, 0),
         tl + Vector(0, rect.height), tl + Vector(rect.width, rect.height)
     };
-}
-#if 0
-void eliminate_furthest(QuadVectorArray & lhs, QuadVectorArray & rhs);
-
-// eliminates at most two points, or at most one point if eliminate furthest
-// was called before
-void eliminate_near_equals(const Rectangle & source_rect, QuadVectorArray &);
-#endif
-
-// needs to be added to cul
-// (this also means unit tests)
-template <typename T>
-bool is_inside_triangle
-    (const cul::Vector2<T> & a, const cul::Vector2<T> & b,
-     const cul::Vector2<T> & c, const cul::Vector2<T> & test_point)
-{
-    // derived from mathematics presented here:
-    // https://blackpawn.com/texts/pointinpoly/default.html
-    const auto & p = test_point;
-    // convert to Barycentric cordinates
-    auto ca = c - a;
-    auto ba = b - a;
-    auto pa = p - a;
-
-    auto dot_caca = dot(ca, ca);
-    auto dot_caba = dot(ca, ba);
-    auto dot_capa = dot(ca, pa);
-    auto dot_baba = dot(ba, ba);
-    auto dot_bapa = dot(ba, pa);
-
-    auto denom = dot_caca*dot_baba - dot_caba*dot_caba;
-    auto u = dot_baba*dot_capa - dot_caba*dot_bapa;
-    auto v = dot_caca*dot_bapa - dot_caba*dot_capa;
-
-    return u >= 0 && v >= 0 && (u + v < denom);
 }
 
 // this needs unit tests
@@ -531,7 +693,7 @@ std::array<Vector, 8> convex_hull_of(const Rectangle & lhs, const Rectangle & rh
         { write_out(right_of(rect), bottom_of(rect)); }
     }
 
-    std::fill(witr, rv.end(), k_inf_vec);
+    std::fill(witr, rv.end(), Vector(k_inf, k_inf));
     return rv;
 }
 
@@ -570,202 +732,20 @@ bool trespass_occuring
     return false;
 }
 
-Hit trim_displacement_for_barriers
-    (const Rectangle & rect, Vector barriers, Vector & displacement)
+#endif
+
+} // end of detail namespace -> into ::tdp
+
+} // end of tdp namespace
+
+namespace {
+
+Vector find_barrier_for_displacement
+    (const Vector & displc, const Vector & pos_bar, const Vector & neg_bar)
 {
-    static const constexpr Real k_bump_fix = 0.00005;
-    Hit rv;
-    if (is_real(barriers.y)) {
-        if (   bottom_of(rect)                  < barriers.y
-            && bottom_of(rect) + displacement.y > barriers.y)
-        {
-            // heading down
-            displacement.y   = barriers.y - bottom_of(rect) - k_bump_fix;
-            rv.vertical = k_down;
-            assert(bottom_of(rect) + displacement.y < barriers.y);
-        } else if (   rect.top                  > barriers.y
-                   && rect.top + displacement.y < barriers.y)
-        {
-            // heading up
-            displacement.y   = barriers.y - rect.top + k_bump_fix;
-            rv.vertical = k_up;
-            assert(rect.top + displacement.y > barriers.y);
-        }
-    }
-    if (is_real(barriers.x)) {
-        if (   right_of(rect)                  < barriers.x
-            && right_of(rect) + displacement.x > barriers.x)
-        {
-            // heading right
-            displacement.x   = barriers.x - right_of(rect) - k_bump_fix;
-            rv.horizontal = k_right;
-            assert(right_of(rect) + displacement.x < barriers.x);
-        } else if (   rect.left                  > barriers.x
-                   && rect.left + displacement.x < barriers.x)
-        {
-            // heading left
-            displacement.x   = barriers.x - rect.left + k_bump_fix;
-            rv.horizontal = k_left;
-            assert(rect.left + displacement.x > barriers.x);
-        }
-    }
-    return rv;
+    return Vector(displc.x > 0 ? pos_bar.x : neg_bar.x,
+                  displc.y > 0 ? pos_bar.y : neg_bar.y);
 }
-
-Hit trim_displacement
-    (const Rectangle & rect, const Rectangle & other, Vector & displc)
-{
-    int steps_for_large = large_displacement_step_count(rect, other, displc);
-    if (steps_for_large) {
-        for (int i = 1; i != steps_for_large; ++i) {
-            auto t           = Real(i) / Real(steps_for_large);
-            auto displc_part = displc*t;
-            Hit rv = trim_small_displacement(rect, other, displc_part);
-            if (rv != Hit()) {
-                displc = displc_part;
-                return rv;
-            }
-        }
-        return Hit();
-    }
-    return trim_small_displacement(rect, other, displc);
-}
-
-std::vector<FullEntry *> prioritized_entries
-    (EntryEntityRefMap & map, std::vector<FullEntry *> && rv)
-{
-    rv.clear();
-    rv.reserve(map.size());
-    for (auto & pair : map) { rv.emplace_back(&pair.second); }
-    static auto order_entries = [](const FullEntry * lhs, const FullEntry * rhs) {
-        assert(lhs && rhs);
-        return lhs->priority < rhs->priority;
-    };
-    std::sort(rv.begin(), rv.end(), order_entries);
-    std::reverse(rv.begin(), rv.end());
-    return std::move(rv);
-}
-
-Rectangle grow(Rectangle rect, const Size & size_) {
-    if (-size_.width > rect.width) {
-        rect.left  = rect.left + rect.width*0.5;
-        rect.width = 0;
-    } else {
-        rect.width += size_.width;
-        rect.left  -= size_.width*0.5;
-    }
-    if (-size_.height > rect.height) {
-        rect.top    = rect.top + rect.height*0.5;
-        rect.height = 0;
-    } else {
-        rect.height += size_.height;
-        rect.top    -= size_.height*0.5;
-    }
-    return rect;
-}
-
-Rectangle grow_by_displacement(Rectangle rect, const Vector & displc) {
-    if (displc.x < 0) {
-        rect.left  +=  displc.x;
-        rect.width += -displc.x;
-    } else if (displc.x > 0) {
-        rect.width += displc.x;
-    }
-    if (displc.y < 0) {
-        rect.top    +=  displc.y;
-        rect.height += -displc.y;
-    } else if (displc.y > 0) {
-        rect.height += displc.y;
-    }
-    return rect;
-}
-
-// ----------------------------------------------------------------------------
-
-Rectangle displace(Rectangle, Vector);
-
-Hit values_from_displacement(const Vector &);
-
-Hit trim_small_displacement
-    (const Rectangle & rect, const Rectangle & other, Vector & displc)
-{
-    using cul::find_highest_false;
-    if (overlaps(rect, other) || !overlaps(displace(rect, displc), other))
-    { return Hit(); }
-
-    Hit hit_parts = values_from_displacement(displc);
-
-    if (!overlaps(displace(rect, Vector(displc.x, 0)), other)) {
-        auto mk_displc = [displc](double t) { return Vector(displc.x, displc.y*t); };
-        displc = mk_displc(find_highest_false<double>([&](double t) {
-            return overlaps(displace(rect, mk_displc(t)), other);
-        }));
-        return Hit(k_direction_count, hit_parts.vertical);
-    }
-
-    if (!overlaps(displace(rect, Vector(0, displc.y)), other)) {
-        auto mk_displc = [displc](double t) { return Vector(displc.x*t, displc.y); };
-        displc = mk_displc(find_highest_false<double>([&](double t) {
-            return overlaps(displace(rect, mk_displc(t)), other);
-        }));
-        return Hit(hit_parts.horizontal, k_direction_count);
-    }
-
-    // assume the value only changes once
-    auto t = find_highest_false<double>([&](double t) {
-        return overlaps(displace(rect, t*displc), other);
-    });
-    // goes both ways
-    displc = displc*t;
-    return hit_parts;
-}
-
-std::tuple<Vector, Hit> find_min_push_displacement_small
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
-{
-    using std::max, std::min, std::make_tuple;
-    static const auto k_no_hit = make_tuple(Vector(), Hit());
-    auto frect = displace(rect, displc);
-    if (overlaps(rect, other) || !overlaps(frect, other)) return k_no_hit;
-
-    auto inner_left   = max(frect.left      , other.left      );
-    auto inner_right  = min(right_of(frect) , right_of(other) );
-    auto inner_top    = max(frect.top       , other.top       );
-    auto inner_bottom = min(bottom_of(frect), bottom_of(other));
-    if (inner_left >= inner_right || inner_top >= inner_bottom) return k_no_hit;
-
-    Size overlap_area(inner_right - inner_left, inner_bottom - inner_top);
-    Hit hit_parts = values_from_displacement(displc);
-    if ((overlap_area.width > overlap_area.height || displc.x == 0) && displc.y != 0) {
-        return make_tuple(Vector(0, normalize(displc.y)*overlap_area.height),
-                          Hit   (k_direction_count, hit_parts.vertical));
-    }
-    return make_tuple(Vector(normalize(displc.x)*overlap_area.width, 0),
-                      Hit   (hit_parts.horizontal, k_direction_count));
-}
-
-int large_displacement_step_count
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
-{
-    using std::max, std::ceil, std::make_tuple, std::get;
-    auto displc_mag = Vector(magnitude(displc.x), magnitude(displc.y));
-    if (   displc_mag.x > other.width  || displc_mag.x > rect.width
-        || displc_mag.y > other.height || displc_mag.y > rect.height)
-    {
-        // this could be further optimized by checking if the rectangle
-        // expanded by the displacement overlaps the other rectangle and fast
-        // fail out of this function
-        //
-        // cost: complexity in implementation
-        // maybe something I can test later
-        return 1 + max(
-            ceil( displc_mag.x / max(other.width , rect.width ) ),
-            ceil( displc_mag.y / max(other.height, rect.height) ));
-    }
-    return 0;
-}
-
-// ----------------------------------------------------------------------------
 
 Rectangle displace(Rectangle rv, Vector r) {
     rv.left += r.x;
@@ -773,9 +753,4 @@ Rectangle displace(Rectangle rv, Vector r) {
     return rv;
 }
 
-Hit values_from_displacement(const Vector & r)
-    { return Hit(r.x > 0 ? k_right : k_left, r.y > 0 ? k_down : k_up); }
-
-} // end of detail namespace -> into ::tdp
-
-} // end of tdp namespace
+} // end of <anonymous> namespace

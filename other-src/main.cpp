@@ -180,9 +180,9 @@ void run_td_physics_tests() {
     });
     suite.test([] {
         EntityManagerA eman;
-        auto a = eman.create_new_entity();
-        auto b = eman.create_new_entity();
-        auto c = eman.create_new_entity();
+        auto a = eman.make_entity();
+        auto b = eman.make_entity();
+        auto c = eman.make_entity();
         bool c_ahead_b = c.hash() > b.hash();
         CollisionEvent a_b(a, b, true);
         CollisionEvent a_c(a, c, true);
@@ -194,17 +194,17 @@ void run_td_physics_tests() {
     });
     suite.test([] {
         EntityManagerA eman;
-        auto a = eman.create_new_entity();
-        auto b = eman.create_new_entity();
+        auto a = eman.make_entity();
+        auto b = eman.make_entity();
         CollisionEvent a_b(a, b, true);
         return test(a_b.first().hash() < a_b.second().hash());
     });
     suite.test([] {
         EntityManagerA eman;
         std::array entities = {
-            eman.create_new_entity(),
-            eman.create_new_entity(),
-            eman.create_new_entity()
+            eman.make_entity(),
+            eman.make_entity(),
+            eman.make_entity()
         };
         std::sort(entities.begin(), entities.end(),
             [](const EntityA & a, const EntityA & b) { return a.hash() < b.hash(); });
@@ -226,7 +226,7 @@ void run_td_physics_tests() {
     suite.test([] {
         EntityManagerA eman;
         std::array entities = {
-            eman.create_new_entity(), eman.create_new_entity(), eman.create_new_entity()
+            eman.make_entity(), eman.make_entity(), eman.make_entity()
         };
         std::sort(entities.begin(), entities.end(),
             [](const EntityA & a, const EntityA & b) { return a.hash() < b.hash(); });
@@ -249,8 +249,7 @@ void run_td_physics_tests() {
         std::default_random_engine rng { 0x912EA01 };
         EntityManagerA eman;
         std::array entities = {
-            eman.create_new_entity(), eman.create_new_entity(), eman.create_new_entity(),
-            //eman.create_new_entity(), eman.create_new_entity(), eman.create_new_entity()
+            eman.make_entity(), eman.make_entity(), eman.make_entity()
         };
         std::vector<CollisionEvent> col;
         for (int i = 0; i != 1024; ++i) {
@@ -318,9 +317,9 @@ void run_td_physics_tests() {
     // - one entity, hits a map wall
     suite.test([] {
         EntityManagerA eman;
-        auto e = eman.create_new_entity();
+        auto e = eman.make_entity();
         e.add<Velocity >() = Velocity(2.5 / ColSystem::k_et_value, 0);
-        e.add<MapLimits>() = MapLimits(10., 0);
+        e.add<MapLimits>() = MapLimits(0, 0, 10., 0);
         e.add<Rectangle>() = Rectangle(0., 0., 8., 8.);
         ColSystem colsys;
         eman.process_deletion_requests();
@@ -350,7 +349,7 @@ void run_td_physics_tests() {
     // test growth
     suite.test([] {
         EntityManagerA eman;
-        auto e = eman.create_new_entity();
+        auto e = eman.make_entity();
         e.add<Growth>() = Size2(10, 10);
         e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
         e.add<Layer>() = layers::k_floor_mat;
@@ -364,7 +363,7 @@ void run_td_physics_tests() {
     // test shrink
     suite.test([] {
         EntityManagerA eman;
-        auto e = eman.create_new_entity();
+        auto e = eman.make_entity();
         e.add<Growth>() = Size2(-5, -5);
         e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
         e.add<Layer>() = layers::k_floor_mat;
@@ -378,7 +377,7 @@ void run_td_physics_tests() {
     // test shrink to zero
     suite.test([] {
         EntityManagerA eman;
-        auto e = eman.create_new_entity();
+        auto e = eman.make_entity();
         e.add<Growth>() = Size2(-15, -15);
         e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
         e.add<Layer>() = layers::k_floor_mat;
@@ -392,7 +391,7 @@ void run_td_physics_tests() {
     // test growth must not be solid on any layer
     suite.test([] {
         EntityManagerA eman;
-        auto e = eman.create_new_entity();
+        auto e = eman.make_entity();
         e.add<Growth>() = Size2(10, 10);
         e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
         e.add<Layer>() = layers::k_block;
@@ -523,7 +522,7 @@ void do_collision_matrix_tests(cul::ts::TestSuite & suite) {
     // - matrix must be set before updating an entry
     suite.test([] {
         EntityManagerA eman;
-        auto e = eman.create_new_entity();
+        auto e = eman.make_entity();
         e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
         e.add<Layer>() = layers::k_block;
         auto uptr = tdp::TopDownPhysicsHandler::make_instance();
@@ -548,8 +547,9 @@ void do_collision_matrix_tests(cul::ts::TestSuite & suite) {
 void do_sweep_and_prune_tests(cul::ts::TestSuite & suite) {
     using cul::ts::test;
     suite.start_series("sweep prune map tests");
-    static constexpr const int k_fork_thershold = tdp::detail::k_pbm_partition_thershold;
+
 #   if 0 // idk what to do with this test case anymore
+    static constexpr const int k_fork_thershold = tdp::detail::k_pbm_partition_thershold;
     suite.test([] {
         auto w = int(std::round(std::sqrt(k_fork_thershold)));
         auto h = k_fork_thershold / w + 1;
