@@ -33,6 +33,8 @@
 
 #include "PartitionBoxMap.hpp"
 
+#include <unordered_map> // incidentally included when compiled with g++
+
 // Everything in this file is meant to contain implementation details that a
 // client coder need not see
 //
@@ -117,11 +119,18 @@ class TdpHandlerComplete final : public TopDownPhysicsHandler {
 
     void run(EventHandler &) final;
 
-    void set_collision_matrix_(CollisionMatrix && matrix) final;
+    void set_collision_matrix_(CollisionMatrix &&) final;
+
+    void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
     template <typename Func>
     void for_each(const Rectangle & bounds, Func && f) {
         m_pbinfo.map.for_each(bounds, [&f](FullEntry * feptr) { f(*feptr); });
+    }
+
+    template <typename Func>
+    void for_each(const Rectangle & bounds, Func && f) const {
+        m_pbinfo.map.for_each(bounds, [&f](const FullEntry * feptr) { f(*feptr); });
     }
 
     template <typename Iter>
@@ -183,7 +192,8 @@ inline bool operator == (const Hit & lhs, const Hit & rhs) { return  are_same(lh
 
 inline bool operator != (const Hit & lhs, const Hit & rhs) { return !are_same(lhs, rhs); }
 
-#if 0 // code disabled to check... BFS structure of code
+// code disabled to check... BFS structure of code
+#ifdef MACRO_AABBTDP_SHOW_DETAILS_HELPERS
 
 // ----------------------------- level 0 helpers ------------------------------
 

@@ -25,12 +25,13 @@
 *****************************************************************************/
 
 #include "demo.hpp"
-#include "../src/PartitionBoxMap.hpp"
+//#include "../src/PartitionBoxMap.hpp"
 
 #include <common/sf/DrawText.hpp>
 #include <common/sf/DrawRectangle.hpp>
 #include <common/sf/DrawLine.hpp>
 #include <common/MultiType.hpp>
+#include <common/Vector2Util.hpp>
 
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Graphics/RenderWindow.hpp>
@@ -179,13 +180,15 @@ private:
         for (auto & e : m_entities) {
             m_inter_cont.emplace_back(e.get<Rectangle>(), e);
         }
+#       if 0
         m_sp_map.set_elements(m_inter_cont.begin(), m_inter_cont.end());
-
+#       endif
 
         m_drawables.clear();
 
         static constexpr const uint8_t k_highlight_alpha = 30;
         static constexpr const Real    k_thickness = 2.;
+#       if 0
         m_sp_map.explore_divisions_f([this](const Rectangle & rect, int depth, bool is_deepest) {
             auto color = get_color_for_depth(depth);
             auto srect = adjust_for_depth(rect, depth);
@@ -214,6 +217,7 @@ private:
                 last_pt = &r;
             }
         });
+#       endif
         std::sort(m_drawables.begin(), m_drawables.end(), compare_records);
         for (const auto & record : m_drawables) {
             if (auto * drect = record.drawable.as_pointer<DrawRectangle>()) {
@@ -240,6 +244,7 @@ private:
     }
 
     int get_max_interactions() const {
+#       if 0
         int rv = 0;
         for (const auto & e : m_entities) {
             int count = 0;
@@ -249,6 +254,8 @@ private:
             rv = std::max(rv, count);
         }
         return rv;
+#       endif
+        return 0;
     }
 
     static sf::Vector2f to_sfvec(Vector r)
@@ -296,7 +303,9 @@ private:
 
     std::vector<RdEntity> m_entities;
     std::vector<std::tuple<Rectangle, RdEntity>> m_inter_cont;
+#   if 0
     tdp::detail::PartitionBoxMap<RdEntity> m_sp_map;
+#   endif
     sf::RenderTarget & target;
     std::vector<sf::Vertex> m_verticies;
     std::vector<DrawRecord> m_drawables;
@@ -865,6 +874,16 @@ void run_demo() {
 
     scenes.push_scene(make_unique_scene([](SceneLoader &){}));
 
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
+        static constexpr const int k_pushers = 100;
+        for (int i = 0; i != k_pushers; ++i) {
+            auto e = maker.make_entity();
+            e.add<DrawRectangle>().set_color(sf::Color(128, 18, 128));
+            e.add<Rectangle>() = Rectangle{Real(i), 0, 10, 10};
+            e.add<Pushable>();
+            e.add<Name>() = "P" + std::to_string(i);
+        }
+    }));
     scenes.push_scene(make_unique_scene(
     [](SceneLoader & maker) {
         std::default_random_engine rng { 0x01239ABC };

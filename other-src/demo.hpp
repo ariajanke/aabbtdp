@@ -66,6 +66,9 @@ struct Growth : public Size2 {
 };
 
 struct Name : ecs::InlinedComponent {
+    Name() {}
+    std::string & operator = (const char * cstr) { return (value = cstr); }
+    std::string & operator = (const std::string & sstr) { return (value = sstr); }
     std::string value;
 };
 

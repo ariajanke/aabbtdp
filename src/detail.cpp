@@ -52,6 +52,8 @@ inline FullEntry & iter_to_entryref(EntryEntityRefMap::iterator itr)
 inline FullEntry & iter_to_entryref(std::vector<PushPair>::iterator itr)
     { return *itr->pushee; }
 
+bool is_real(const Rectangle &);
+
 } // end of <anonymous> namespace
 
 namespace tdp {
@@ -126,10 +128,8 @@ CollisionEvent::CollisionEvent(EntityRef a, EntityRef b, bool is_push):
         throw InvArg("TdpHandlerComplete::update_entry: this entry needs to "
                      "have its entity reference set (member named \"entity\").");
     }
-    if (   !is_real(entry.bounds.left  ) || !is_real(entry.bounds.top   )
-        || !is_real(entry.bounds.width ) || !is_real(entry.bounds.height)
-        || !is_real(entry.displacement ) || !is_real(entry.growth.width )
-        || !is_real(entry.bounds.height))
+    if (   !::is_real(entry.bounds      ) || !is_real(entry.displacement )
+        || !  is_real(entry.growth.width) || !is_real(entry.bounds.height))
     {
         throw InvArg("TdpHandlerComplete::update_entry: bounds, growth, and "
                      "displacement must all be in every field real numbers.");
@@ -207,6 +207,20 @@ CollisionEvent::CollisionEvent(EntityRef a, EntityRef b, bool is_push):
         }
     }
     m_col_matrix = std::move(matrix);
+}
+
+/* private */ void TdpHandlerComplete::find_overlaps_
+    (const Rectangle & rect, const OverlapInquiry & inquiry) const
+{
+    if (::is_real(rect)) {
+        throw InvArg("TdpHandlerComplete::find_overlaps_: rectangle must have "
+                     "all real numbers in every field.");
+    }
+    if (rect.width < 0 || rect.height < 0) {
+        throw InvArg("TdpHandlerComplete::find_overlaps_: rectangle's width "
+                     "and height must be non-negative numbers.");
+    }
+    for_each(rect, [&inquiry](const FullEntry & fentry) { inquiry(fentry); });
 }
 
 template <typename Iter>
@@ -369,6 +383,9 @@ std::tuple<Vector, Hit> find_min_push_displacement_small
 Hit trim_small_displacement
     (const Rectangle &, const Rectangle & other, Vector & displc);
 
+template <Direction kt_high_dir, Direction kt_low_dir>
+Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier);
+
 std::tuple<Vector, Hit> find_min_push_displacement
     (const Rectangle & rect, const Rectangle & other, const Vector & displc)
 {
@@ -409,43 +426,20 @@ std::vector<FullEntry *> prioritized_entries
 Hit trim_displacement_for_barriers
     (const Rectangle & rect, Vector barriers, Vector & displacement)
 {
-    static const constexpr Real k_bump_fix = 0.00005;
-    Hit rv;
-    if (is_real(barriers.y)) {
-        if (   bottom_of(rect)                  < barriers.y
-            && bottom_of(rect) + displacement.y > barriers.y)
-        {
-            // heading down
-            displacement.y   = barriers.y - bottom_of(rect) - k_bump_fix;
-            rv.vertical = k_down;
-            assert(bottom_of(rect) + displacement.y < barriers.y);
-        } else if (   rect.top                  > barriers.y
-                   && rect.top + displacement.y < barriers.y)
-        {
-            // heading up
-            displacement.y   = barriers.y - rect.top + k_bump_fix;
-            rv.vertical = k_up;
-            assert(rect.top + displacement.y > barriers.y);
-        }
-    }
-    if (is_real(barriers.x)) {
-        if (   right_of(rect)                  < barriers.x
-            && right_of(rect) + displacement.x > barriers.x)
-        {
-            // heading right
-            displacement.x   = barriers.x - right_of(rect) - k_bump_fix;
-            rv.horizontal = k_right;
-            assert(right_of(rect) + displacement.x < barriers.x);
-        } else if (   rect.left                  > barriers.x
-                   && rect.left + displacement.x < barriers.x)
-        {
-            // heading left
-            displacement.x   = barriers.x - rect.left + k_bump_fix;
-            rv.horizontal = k_left;
-            assert(rect.left + displacement.x > barriers.x);
-        }
-    }
-    return rv;
+    // parameter assumptions
+    assert(is_real(rect.left) && is_real(rect.top));
+    assert(is_real(rect.width) && rect.width >= 0);
+    assert(is_real(rect.height) && rect.height >= 0);
+    assert(!cul::is_nan(barriers.x) && !cul::is_nan(barriers.y));
+    assert(is_real(displacement));
+
+    // implementing it in this fashion: it's no longer possible for me to screw
+    // up in one dimension, but not the other
+    auto h_dir = trim_dimension<k_right, k_left>
+        (right_of(rect), rect.left, displacement.x, barriers.x);
+    auto v_dir = trim_dimension<k_down, k_up>
+        (bottom_of(rect), rect.top, displacement.y, barriers.y);
+    return Hit(h_dir, v_dir);
 }
 
 Hit trim_displacement
@@ -604,6 +598,26 @@ Hit trim_small_displacement
     return hit_parts;
 }
 
+
+template <Direction kt_high_dir, Direction kt_low_dir>
+Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier) {
+    if (!is_real(barrier)) return k_direction_count;
+
+    static const constexpr Real k_bump_fix = 0.00005;
+    // what should I use to bump with?
+    auto bump = (magnitude(barrier) + (high - low)) / 2;
+    /*  */ if (high < barrier && high + displc_i > barrier) {
+        displc_i = barrier - high - bump*k_bump_fix;
+        assert(high + displc_i < barrier);
+        return kt_high_dir;
+    } else if (low > barrier && low + displc_i < barrier) {
+        displc_i = barrier - low + bump*k_bump_fix;
+        assert(low + displc_i > barrier);
+        return kt_low_dir;
+    }
+    return k_direction_count;
+}
+
 // ----------------------------- Helpers level 2 ------------------------------
 
 Hit values_from_displacement(const Vector & r)
@@ -751,6 +765,12 @@ Rectangle displace(Rectangle rv, Vector r) {
     rv.left += r.x;
     rv.top  += r.y;
     return rv;
+}
+
+bool is_real(const Rectangle & rect) {
+    using cul::is_real;
+    return    is_real(rect.left ) && is_real(rect.top   )
+           && is_real(rect.width) && is_real(rect.height);
 }
 
 } // end of <anonymous> namespace

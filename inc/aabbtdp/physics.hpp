@@ -30,6 +30,7 @@
 
 #include <common/Vector2.hpp>
 #include <common/Grid.hpp>
+#include <common/Util.hpp>
 
 #include <memory>
 
@@ -243,8 +244,36 @@ public:
     ///       easily be quite possible.
     virtual void run(EventHandler &) = 0;
 
+    /// Uses backend container to find all entries that overlap the given
+    /// rectangle.
+    /// @param f a function which must have the following signature:
+    ///          void(const Entry &)
+    /// @note This function uses double dispatch to acheive it's magic. :)
+    /// @throws if rectangle's width or height is negative or if any field is
+    ///         a non-real number
+    template <typename Func>
+    void find_overlaps(const Rectangle &, Func && f);
+
 protected:
+    struct OverlapInquiry {
+        virtual ~OverlapInquiry() {}
+        virtual void operator () (const Entry &) const = 0;
+    };
+
     virtual void set_collision_matrix_(CollisionMatrix &&) = 0;
+
+    virtual void find_overlaps_(const Rectangle &, const OverlapInquiry &) const = 0;
 };
+
+template <typename Func>
+void TopDownPhysicsHandler::find_overlaps(const Rectangle & rect, Func && f) {
+    struct Inst final : public OverlapInquiry {
+        explicit Inst(Func && f): m_func(std::move(f)) {}
+        void operator () (const Entry & entry) const final { m_func(entry); }
+        Func m_func;
+    };
+    Inst inst(std::move(f));
+    find_overlaps_(rect, inst);
+}
 
 } // end of tdp namespace

@@ -22,5 +22,5 @@ clean:
 libaabbtdp.a : default
 
 test: $(OUTPUT)
-	$(CXX) $(CXXFLAGS) -L$(shell pwd) -L$(shell pwd)/cul src/main.cpp -laabbtdp -lcommon -o .unit-tests
+	$(CXX) $(CXXFLAGS) -L$(shell pwd) -L$(shell pwd)/lib/cul other-src/main.cpp -laabbtdp -lcommon -o .unit-tests
 	./.unit-tests
