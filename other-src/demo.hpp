@@ -45,6 +45,8 @@ struct Velocity : public Vector {
 
     Vector & operator = (const Vector & r)
         { return (static_cast<Vector &>(*this) = r); }
+    Vector & as_vector() { return static_cast<Vector &>(*this); }
+    const Vector & as_vector() const { return static_cast<const Vector &>(*this); }
 };
 
 struct MapLimits {

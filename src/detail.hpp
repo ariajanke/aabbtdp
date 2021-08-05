@@ -26,12 +26,7 @@
 
 #pragma once
 
-#include <aabbtdp/physics.hpp>
-
-#include <common/Util.hpp>
-#include <common/Vector2Util.hpp>
-
-#include "PartitionBoxMap.hpp"
+#include "helpers.hpp"
 
 #include <unordered_map> // incidentally included when compiled with g++
 
@@ -46,10 +41,6 @@ namespace tdp {
 namespace detail {
 
 constexpr const int k_default_priority = -1;
-
-using namespace cul::exceptions_abbr;
-using cul::is_real, cul::bottom_of, cul::right_of, cul::normalize,
-      cul::magnitude;
 
 enum Direction : uint8_t { k_left, k_right, k_down, k_up, k_direction_count };
 
@@ -66,6 +57,8 @@ inline void frame_reset(FullEntry & entry) {
     entry.priority = k_default_priority;
 }
 
+Rectangle get_grown_rectangle(const FullEntry &);
+
 // ----------------------------------------------------------------------------
 
 struct PushPair {
@@ -81,57 +74,25 @@ struct PushPair {
 
 // ----------------------------------------------------------------------------
 
-class CollisionEvent {
-public:
-    CollisionEvent() {}
-    CollisionEvent(EntityRef, EntityRef, bool is_push);
-
-    EntityRef first() const { return m_first; }
-    EntityRef second() const { return m_second; }
-    bool is_pushed() const { return m_is_push; }
-
-    // !I need tests!
-    static bool is_less_than(const CollisionEvent &, const CollisionEvent &);
-
-    bool operator <= (const CollisionEvent & r) const { return compare(r) <= 0; }
-    bool operator >= (const CollisionEvent & r) const { return compare(r) >= 0; }
-    bool operator <  (const CollisionEvent & r) const { return compare(r) <  0; }
-    bool operator >  (const CollisionEvent & r) const { return compare(r) >  0; }
-    bool operator != (const CollisionEvent & r) const { return compare(r) != 0; }
-    bool operator == (const CollisionEvent & r) const { return compare(r) == 0; }
-
-    void send_to(EventHandler & handler) const
-        { handler.on_collision(m_first, m_second, m_is_push); }
-
-private:
-    static int compare(const CollisionEvent &, const CollisionEvent &);
-    int compare(const CollisionEvent &) const;
-    EntityRef m_first, m_second;
-    bool m_is_push = false;
-};
-
 using EntryEntityRefMap = std::unordered_map<EntityRef, FullEntry, ecs::EntityHasher>;
 
 // ----------------------------------------------------------------------------
 
+// let's further break this class up
+//
 class TdpHandlerComplete final : public TopDownPhysicsHandler {
+public:
     void update_entry(const Entry & entry) final;
 
     void run(EventHandler &) final;
 
     void set_collision_matrix_(CollisionMatrix &&) final;
 
+    const CollisionMatrix & collision_matrix() const final
+        { return m_col_matrix; }
+
+private:
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
-
-    template <typename Func>
-    void for_each(const Rectangle & bounds, Func && f) {
-        m_pbinfo.map.for_each(bounds, [&f](FullEntry * feptr) { f(*feptr); });
-    }
-
-    template <typename Func>
-    void for_each(const Rectangle & bounds, Func && f) const {
-        m_pbinfo.map.for_each(bounds, [&f](const FullEntry * feptr) { f(*feptr); });
-    }
 
     template <typename Iter>
     [[nodiscard]] std::vector<PushPair> get_next_pushables
@@ -141,30 +102,16 @@ class TdpHandlerComplete final : public TopDownPhysicsHandler {
 
     void order_and_handle_pushes();
 
-    void issue_events(EventHandler &);
-
     void do_collision_work(EventHandler &);
 
-    const CollisionMatrix & collision_matrix() const final
-        { return m_col_matrix; }
-
-    struct PbInfo {
-        PartitionBoxMap<FullEntry *, k_pbm_use_flat_only> map;
-        PbmContainer<FullEntry *> intermediate_container;
-    };
-    PbInfo m_pbinfo;
-
-    // does not modify entity -> entry map, but does take writable references
-    static void update_pbm(PbInfo &, EntryEntityRefMap &);
-
-    static Rectangle get_grown_rectangle(const FullEntry &);
+    SpatialMapFront m_spatial_map;
 
     // ofc this means, each new entry will be asking for a few thousands of
     // instructions to allocate a map entry
     EntryEntityRefMap m_entries;
-    std::vector<CollisionEvent> m_col_events;
-    std::vector<CollisionEvent> m_old_col_events;
+    std::vector<EntrySpatialRef> m_entry_refs;
 
+    EventRecorder m_event_recorder;
     CollisionMatrix m_col_matrix;
 
     // recycled containers
@@ -174,9 +121,9 @@ class TdpHandlerComplete final : public TopDownPhysicsHandler {
 
 // ----------------------------------------------------------------------------
 
-struct Hit {
-    Hit() {}
-    Hit(Direction h_, Direction v_):
+struct HitSide {
+    HitSide() {}
+    HitSide(Direction h_, Direction v_):
         horizontal(h_), vertical(v_)
     {}
     Direction horizontal = k_direction_count;
@@ -185,12 +132,12 @@ struct Hit {
 
 // --------------------------------- Helpers ----------------------------------
 
-inline bool are_same(const Hit & lhs, const Hit & rhs)
+inline bool are_same(const HitSide & lhs, const HitSide & rhs)
     { return lhs.horizontal == rhs.horizontal && lhs.vertical == rhs.vertical; }
 
-inline bool operator == (const Hit & lhs, const Hit & rhs) { return  are_same(lhs, rhs); }
+inline bool operator == (const HitSide & lhs, const HitSide & rhs) { return  are_same(lhs, rhs); }
 
-inline bool operator != (const Hit & lhs, const Hit & rhs) { return !are_same(lhs, rhs); }
+inline bool operator != (const HitSide & lhs, const HitSide & rhs) { return !are_same(lhs, rhs); }
 
 // code disabled to check... BFS structure of code
 #ifdef MACRO_AABBTDP_SHOW_DETAILS_HELPERS
@@ -199,16 +146,16 @@ inline bool operator != (const Hit & lhs, const Hit & rhs) { return !are_same(lh
 
 // !I need tests!
 /** @returns zero vector if there is no need for push */
-std::tuple<Vector, Hit> find_min_push_displacement
+std::tuple<Vector, HitSide> find_min_push_displacement
     (const Rectangle &, const Rectangle & other, const Vector & displc);
 
 std::vector<FullEntry *> prioritized_entries
     (EntryEntityRefMap &, std::vector<FullEntry *> &&);
 
-Hit trim_displacement_for_barriers
+HitSide trim_displacement_for_barriers
     (const Rectangle &, Vector barriers, Vector & displacement);
 
-Hit trim_displacement
+HitSide trim_displacement
     (const Rectangle &, const Rectangle & other, Vector & displc);
 
 // much more intense written for growing or shrinking rectangles
@@ -224,15 +171,15 @@ Rectangle grow_by_displacement(Rectangle, const Vector & displc);
 int large_displacement_step_count
     (const Rectangle &, const Rectangle & other, const Vector & displc);
 
-std::tuple<Vector, Hit> find_min_push_displacement_small
+std::tuple<Vector, HitSide> find_min_push_displacement_small
     (const Rectangle &, const Rectangle & other, const Vector & displc);
 
-Hit trim_small_displacement
+HitSide trim_small_displacement
     (const Rectangle &, const Rectangle & other, Vector & displc);
 
 // ----------------------------- level 2 helpers ------------------------------
 
-Hit values_from_displacement(const Vector &);
+HitSide values_from_displacement(const Vector &);
 
 #endif
 } // end of detail namespace -> into ::tdp

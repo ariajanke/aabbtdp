@@ -22,20 +22,27 @@ LIBS           += -lsfml-graphics -lsfml-window -lsfml-system -lcommon
 
 SOURCES += \
     ../other-src/main.cpp \
+    ../other-src/spatial-map-unit-tests.cpp \
     ../src/detail.cpp \
-    ../src/physics.cpp
+    ../src/physics.cpp \
+    ../src/helpers.cpp
 
 QMAKE_CXXFLAGS += -DMACRO_BUILD_DEMO
 SOURCES        += ../other-src/demo.cpp
-#SOURCES        += ../other-src/sight.cpp
+SOURCES        += ../src/sight.cpp
+SOURCES        += ../other-src/sight-unit-tests.cpp
 HEADERS        += ../other-src/demo-common.hpp
 
 HEADERS += \
-    ../src/PartitionBoxMap.hpp \
+    \#../src/PartitionBoxMap.hpp.bak \
     ../src/SpatialMap.hpp \
     ../src/detail.hpp \
+    ../src/helpers.hpp \
     ../inc/aabbtdp/physics.hpp \
-    ../other-src/demo.hpp
+    ../other-src/demo.hpp \
+    ../inc/aabbtdp/sight.hpp \
+    ../inc/aabbtdp/defs.hpp \
+    ../src/sight-detail.hpp
 
 INCLUDEPATH += \
     ../lib/cul/inc  \

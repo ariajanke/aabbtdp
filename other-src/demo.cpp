@@ -25,6 +25,12 @@
 *****************************************************************************/
 
 #include "demo.hpp"
+
+#include "../src/sight-detail.hpp"
+#include "../src/SpatialMap.hpp"
+#include "../src/helpers.hpp"
+
+#include <aabbtdp/sight.hpp>
 //#include "../src/PartitionBoxMap.hpp"
 
 #include <common/sf/DrawText.hpp>
@@ -98,12 +104,26 @@ struct Lifetime {
     double & operator = (double d) { return (value = d); }
 };
 
+struct Targeting {
+    struct Target {
+        Target() {}
+        Target(Vector l_, Real v_): loc(l_), visibility(v_) {}
+        Vector loc;
+        Real visibility;
+    };
+
+    Rectangle view_area;
+    Vector facing;
+    std::vector<Target> targets;
+    std::vector<ecs::EntityRef> target_candidates;
+};
+
 using cul::DrawRectangle;
 using cul::DrawText;
 using RdEntity = ecs::Entity<
     DrawRectangle, Verticies, Velocity, Rectangle, MapLimits, Name, Fade,
     Pushable, HudDrawn, Layer, ShadowImage, Occupant, Lifetime, Growth,
-    Bouncy>;
+    Bouncy, Targeting>;
 using RdSystem = RdEntity::SystemType;
 constexpr const Real k_demo_et_value = 1. / 60.;
 
@@ -160,15 +180,18 @@ class LifetimeSystem final : public RdSystem {
     }
 };
 
-class SweepPruneDisplaySystem final : public RdSystem {
+class SpatialPartitionsDisplaySystem final : public RdSystem {
 public:
     static constexpr const auto k_chosen_font = cul::BitmapFont::k_8x16_highlighted_font;
-    SweepPruneDisplaySystem(sf::RenderTarget & target_): target(target_) {
+    SpatialPartitionsDisplaySystem(sf::RenderTarget & target_): target(target_) {
+#       if 1
         m_max_intr_info.load_builtin_font(k_chosen_font);
+#       endif
     }
 
 private:
     void update(const ContainerView & view) final {
+#       if 0
         m_entities.reserve(view.end() - view.end());
         m_inter_cont.reserve(m_entities.capacity());
         m_entities.clear();
@@ -180,59 +203,43 @@ private:
         for (auto & e : m_entities) {
             m_inter_cont.emplace_back(e.get<Rectangle>(), e);
         }
-#       if 0
-        m_sp_map.set_elements(m_inter_cont.begin(), m_inter_cont.end());
-#       endif
+
 
         m_drawables.clear();
+#       endif
 
-        static constexpr const uint8_t k_highlight_alpha = 30;
+
+
+
         static constexpr const Real    k_thickness = 2.;
-#       if 0
-        m_sp_map.explore_divisions_f([this](const Rectangle & rect, int depth, bool is_deepest) {
-            auto color = get_color_for_depth(depth);
-            auto srect = adjust_for_depth(rect, depth);
-
-            if (is_deepest) {
-                m_drawables.emplace_back();
-                m_drawables.back().priority = depth + 1;
-                color.a = k_highlight_alpha;
-                m_drawables.back().drawable.reset<DrawRectangle>(
-                    float(srect.left), float(srect.top), float(srect.width),
-                    float(srect.height), color);
-            }
-            color.a = 128;
-            m_drawables.emplace_back();
-            m_drawables.back().priority = depth;
-
-            auto & outline = m_drawables.back().drawable.reset<Outline>();
-            const Vector * last_pt = nullptr;
-            const auto edge_pts = get_edge_points(srect);
-            for (const auto & r : edge_pts) {
-                if (last_pt) {
-                    outline.at((&r - &edge_pts.front()) - 1) =
-                            cul::DrawLine(to_sfvec(*last_pt), to_sfvec(r),
-                                          float(k_thickness), color);
-                }
-                last_pt = &r;
-            }
-        });
-#       endif
-        std::sort(m_drawables.begin(), m_drawables.end(), compare_records);
-        for (const auto & record : m_drawables) {
-            if (auto * drect = record.drawable.as_pointer<DrawRectangle>()) {
-                target.draw(*drect);
-            } else if (auto * dlines = record.drawable.as_pointer<Outline>()) {
-                for (const auto & dline : *dlines) {
-                    target.draw(dline);
-                }
-            }
+        static constexpr const uint8_t k_highlight_alpha = 50;
+        m_entity_rectangles.reserve(view.end() - view.begin());
+        m_entity_rectangles.clear();
+        for (auto & e : view) {
+            if (!e.has<Rectangle>()) continue;
+            m_entity_rectangles.push_back(e.get<Rectangle>());
         }
-#       if 0
-        m_max_intr_info.set_text_top_left(sf::Vector2f(0, 0),
-            "SP Max interactions: " + std::to_string(get_max_interactions())
-            + " / " + std::to_string(m_entities.size()));
-#       endif
+        m_sp_map.set_elements(m_entity_rectangles.begin(), m_entity_rectangles.end());
+
+        Real min_x = k_inf, min_y = k_inf, max_x = -k_inf, max_y = -k_inf;
+        for (const auto & rect : m_entity_rectangles) {
+            min_x = std::min(min_x, rect.left);
+            min_y = std::min(min_y, rect.top );
+            max_x = std::max(max_x, cul::right_of (rect));
+            max_y = std::max(max_y, cul::bottom_of(rect));
+        }
+        Rectangle parent_rect{min_x, min_y, max_x - min_x, max_y - min_y};
+        m_sp_map.explore_partitions(parent_rect, [this](const Rectangle & el, int depth) {
+            auto color = get_color_for_depth(depth);
+            color.a = k_highlight_alpha;
+            target.draw(DrawRectangle{float(el.left), float(el.top), float(el.width), float(el.height), color});
+            target.draw(DrawRectangle{float(el.left), float(el.top - k_thickness / 2), float(el.width), float(k_thickness), sf::Color::White});
+            target.draw(DrawRectangle{float(el.left - k_thickness / 2), float(el.top), float(k_thickness), float(el.height), sf::Color::White});
+
+            target.draw(DrawRectangle{float(cul::right_of(el) - k_thickness / 2), float(el.top), float(k_thickness), float(el.height), sf::Color::White});
+            target.draw(DrawRectangle{float(el.left), float(cul::bottom_of(el) - k_thickness / 2), float(el.width), float(k_thickness), sf::Color::White});
+        });
+
         {
         auto old_view = target.getView();
         auto new_view = old_view;
@@ -241,21 +248,9 @@ private:
         target.draw(m_max_intr_info);
         target.setView(old_view);
         }
-    }
-
-    int get_max_interactions() const {
-#       if 0
-        int rv = 0;
-        for (const auto & e : m_entities) {
-            int count = 0;
-            m_sp_map.for_each(e.get<Rectangle>(), [&count](const RdEntity &) {
-                ++count;
-            });
-            rv = std::max(rv, count);
-        }
-        return rv;
-#       endif
-        return 0;
+        m_max_intr_info.set_text_top_left(sf::Vector2f(0, 40),
+            "Max interactions " + std::to_string(get_interaction_count())
+          + " / " + std::to_string(m_entity_rectangles.size()));
     }
 
     static sf::Vector2f to_sfvec(Vector r)
@@ -272,7 +267,7 @@ private:
         };
         return k_colors.at(std::min(depth, int(k_colors.size() - 1)));
     }
-
+#   if 0
     static Rectangle adjust_for_depth(Rectangle rv, int depth) {
         return rv;
         static constexpr const Real k_step = 2;
@@ -300,16 +295,114 @@ private:
     static bool compare_records(const DrawRecord & rhs, const DrawRecord & lhs) {
         return rhs.priority < lhs.priority;
     }
+#   endif
+    struct HorzGetters final : public tdp::detail::SpatialMapElementGetters<Rectangle> {
+        Real get_low(const Rectangle & entry) const final { return entry.left; }
 
+        Real get_high(const Rectangle & entry) const final { return cul::right_of(entry); }
+
+        ElementCouple divide_for_exploration(const Element & el, Real division) const final {
+            if (!(division >= el.left && division <= cul::right_of(el))) {
+                return cut(el, el.left + el.width * 0.5);
+            }
+            return cut(el, division);
+        }
+
+        static ElementCouple cut(const Rectangle & el, Real division) {
+            if (!(division >= el.left && division <= cul::right_of(el))) {
+                throw std::runtime_error("");
+            }
+            auto left = el;
+            left.width = division - el.left;
+            auto right = el;
+            right.left = cul::right_of(left);
+            right.width = cul::right_of(el) - division;
+            return ElementCouple{ left, right };
+        }
+    };
+
+    struct VertGetters final : public tdp::detail::SpatialMapElementGetters<Rectangle> {
+        Real get_low(const Rectangle & entry) const final { return entry.top; }
+
+        Real get_high(const Rectangle & entry) const final { return cul::bottom_of(entry); }
+
+        ElementCouple divide_for_exploration(const Element & el, Real division) const final {
+            if (!(division >= el.top && division <= cul::bottom_of(el))) {
+                return cut(el, el.top + el.height / 2);
+            } else {
+                return cut(el, division);
+            }
+        }
+
+        static ElementCouple cut(const Rectangle & rect, Real division) {
+            if (!(division >= rect.top && division <= cul::bottom_of(rect))) {
+                throw std::runtime_error("");
+            }
+            auto top = rect;
+            top.height = division - rect.top;
+            auto bottom = rect;
+            bottom.top    = cul::bottom_of(top);
+            bottom.height = cul::bottom_of(rect) - division;
+            return ElementCouple{ top, bottom };
+        }
+    };
+
+    struct MapFactory final : public tdp::detail::SpatialMapFactory<Rectangle> {
+        MapBase & choose_map_for(SetElIterator beg, SetElIterator end, int depth) {
+            using namespace tdp::detail;
+            auto choice = choose_map_for_iterators
+                <Rectangle, HorzGetters, VertGetters, SetElIterator>(beg, end, depth);
+            switch (choice) {
+            case k_should_split_horz:
+                if (!m_horz) {
+                    m_horz = std::make_unique<HorzMap>();
+                }
+                m_horz->set_division(get_division_for<Rectangle>(beg, end, HorzGetters{}));
+                return *m_horz;
+            case k_should_split_vert:
+                if (!m_vert) {
+                    m_vert = std::make_unique<VertMap>();
+                }
+                m_vert->set_division(get_division_for<Rectangle>(beg, end, VertGetters{}));
+                return *m_vert;
+            case k_should_use_flat: return m_flat;
+            }
+            throw std::runtime_error("bad branch");
+        }
+
+        using HorzMap = tdp::detail::PartitionedSpatialMap<Rectangle, HorzGetters, MapFactory>;
+        using VertMap = tdp::detail::PartitionedSpatialMap<Rectangle, VertGetters, MapFactory>;
+
+        tdp::detail::FlatSpatialMap<Rectangle> m_flat;
+        std::unique_ptr<HorzMap> m_horz;
+        std::unique_ptr<VertMap> m_vert;
+    };
+
+    int get_interaction_count() const {
+        std::vector<Rectangle *> col;
+        col.reserve(m_entity_rectangles.size());
+        std::size_t count = 0;
+        for (const auto & rect : m_entity_rectangles) {
+            col = m_sp_map.collect_candidates(rect, std::move(col));
+            count = std::max(col.size(), count);
+        }
+        return int(count);
+    }
+
+#   if 0
     std::vector<RdEntity> m_entities;
     std::vector<std::tuple<Rectangle, RdEntity>> m_inter_cont;
-#   if 0
-    tdp::detail::PartitionBoxMap<RdEntity> m_sp_map;
 #   endif
+    std::vector<Rectangle> m_entity_rectangles;
+
+    tdp::detail::SpatialMap<Rectangle, MapFactory> m_sp_map;
     sf::RenderTarget & target;
+#   if 0
     std::vector<sf::Vertex> m_verticies;
     std::vector<DrawRecord> m_drawables;
+#   endif
     cul::DrawText m_max_intr_info;
+
 };
 
 class ShadowImageSystem final : public RdSystem {
@@ -424,7 +517,7 @@ private:
         target.draw(drect);
         }
         draw_grid_line(target, 3., 100.);
-
+#       if 1
         for (auto & e : view) {
             if (auto * drect = e.ptr<DrawRectangle>()) {
                 if (auto * bounds = e.ptr<Rectangle>()) {
@@ -433,6 +526,7 @@ private:
                 }
             }
         }
+#       endif
         for (auto & e : view) {
             draw_entity(e, false);
         }
@@ -520,6 +614,83 @@ template <typename T>
 const T & c_alt(const T * ptr, const T & obj)
     { return ptr ? *ptr : obj; }
 
+void set_location_at_portion(Rectangle & rec, const Vector & por, const Vector & r) {
+    if (por.x < 0 || por.x > 1 || por.y < 0 || por.y > 1) {
+        throw std::out_of_range("");
+    }
+    rec.left = r.x - por.x*rec.width ;
+    rec.top  = r.y - por.y*rec.height;
+}
+
+class TargetSystem final : public RdSystem {
+public:
+    TargetSystem(sf::RenderTarget & target_): target(target_) {}
+
+    void update(const ContainerView & view) final {
+        for (auto & e : view) {
+            if (!e.has<Targeting>()) continue;
+            update(e);
+            draw(e);
+        }
+    }
+
+private:
+    void update(RdEntity e) {
+        using SightEntry = tdp::Sighting::Entry;
+        auto & tar = e.get<Targeting>();
+        for (auto & eref : tar.target_candidates) {
+            SightEntry entry;
+            entry.entity = eref;
+            entry.bounds = RdEntity{eref}.get<Rectangle>();
+            m_sight->add_entry(entry);
+        }
+        tar.targets.clear();
+        auto vision_source = cul::center_of(e.get<Rectangle>());
+        static thread_local std::vector<std::tuple<Vector, Vector>> s_lines;
+        s_lines = dynamic_cast<tdp::detail::SightingComplete &>(*m_sight).make_image_lines(vision_source, std::move(s_lines));
+        static auto to_sfv2 = [] (Vector r) { return cul::convert_to<sf::Vector2f>(r); };
+        for (auto & line : s_lines) {
+            auto a = to_sfv2(std::get<0>(line) + vision_source);
+            auto b = to_sfv2(std::get<1>(line) + vision_source);
+            cul::DrawLine dline{a, b, 3.f, sf::Color::Green};
+            target.draw(dline);
+        }
+        for (const auto & percept : m_sight->run(vision_source)) {
+            tar.targets.emplace_back(percept.target, percept.visibility);
+        }
+        if (auto * vel = e.ptr<Velocity>()) {
+            if (vel->as_vector() != Vector{}) {
+                tar.facing = cul::normalize(vel->as_vector());
+            }
+        }
+    }
+
+    void draw(const RdEntity & e) {
+        DrawRectangle rect;
+#       if 1
+        static constexpr int k_size = 40;
+        rect.set_size(k_size, k_size);
+        for (const auto & tar : e.get<Targeting>().targets) {
+            rect.set_position(tar.loc.x - k_size / 2, tar.loc.y - k_size / 2);
+            rect.set_color(sf::Color(200, 200, 0, uint8_t((tar.visibility)*255)));
+            target.draw(rect);
+        }
+#       endif
+        const auto & tar = e.get<Targeting>();
+        rect = DrawRectangle(float(tar.view_area.left),
+                             float(tar.view_area.top),
+                             float(tar.view_area.width),
+                             float(tar.view_area.height),
+                             sf::Color(200, 0, 100, 100));
+        target.draw(rect);
+
+
+    }
+
+    std::unique_ptr<tdp::Sighting> m_sight = tdp::Sighting::make_instance();
+    sf::RenderTarget & target;
+};
+
 class RdColSystem final : public RdSystem {
 public:
     RdColSystem() {
@@ -590,7 +761,7 @@ private:
             std::string notice_living_place;
             const std::string * notice = nullptr;
             auto flash_text = ae.make_entity();
-            flash_text.add<HudDrawn>();
+            //flash_text.add<HudDrawn>();
             if (b) {
                 RdEntity be{b};
                 check_bounce(be, a);
@@ -649,6 +820,31 @@ private:
         }
         DefaultEventHandler def_handler;
         m_handle->run(def_handler);
+
+        for (auto & e : view) {
+            if (auto * tar = e.ptr<Targeting>()) {
+                using cul::magnitude;
+                if (tar->facing == Vector{}) continue;
+                auto maj = cul::normalize(magnitude(tar->facing.x) > magnitude(tar->facing.y) ? Vector{tar->facing.x, 0} : Vector{0, tar->facing.y});
+                Rectangle rect{Vector{}, Size2{180. + magnitude(maj.x)*200., 180. + magnitude(maj.y)*200.}};
+                auto loc = cul::center_of(e.get<Rectangle>()) + maj*25.;
+                if (tar->facing.x > 0) {
+                    set_location_at_portion(rect, Vector{0, 0.5}, loc);
+                } else if (tar->facing.x < 0) {
+                    set_location_at_portion(rect, Vector{1, 0.5}, loc);
+                } else if (tar->facing.y > 0) {
+                    set_location_at_portion(rect, Vector{0.5, 0}, loc);
+                } else {
+                    set_location_at_portion(rect, Vector{0.5, 1}, loc);
+                }
+                tar->view_area = rect;
+                tar->target_candidates.clear();
+                m_handle->find_overlaps(rect, [tar, e](const tdp::Entry & entry) {
+                    if (entry.entity == e) return;
+                    tar->target_candidates.push_back(entry.entity);
+                });
+            }
+        }
     }
 
     tdp::TdpHandlerPtr m_handle = tdp::TopDownPhysicsHandler::make_instance();
@@ -850,6 +1046,60 @@ void spawn_random_rectanles
     }
 }
 
+class FpsCounter {
+public:
+    static constexpr const bool k_have_std_dev = true;
+    void update(double et) {
+        ++m_count_this_frame;
+        push_frame_et(et);
+        if ( (m_total_et += et) > 1. ) {
+            m_fps = m_count_this_frame;
+            m_count_this_frame = 0;
+            m_total_et = std::fmod(m_total_et, 1.);
+            update_second_et_std_dev();
+        }
+    }
+
+    int fps() const noexcept { return m_fps; }
+
+    std::enable_if_t<k_have_std_dev, double> std_dev() const noexcept
+        { return m_et_std_dev; }
+
+    std::enable_if_t<k_have_std_dev, double> avg() const noexcept
+        { return m_et_avg;; }
+
+private:
+    void push_frame_et(double et) {
+        if constexpr (k_have_std_dev) {
+            m_ets.push_back(et);
+        }
+    }
+
+    void update_second_et_std_dev() {
+        if constexpr (k_have_std_dev) {
+            m_et_avg = 0.;
+            for (auto x : m_ets) m_et_avg += x;
+            m_et_avg /= double(m_ets.size());
+
+            m_et_std_dev = 0.;
+            for (auto x : m_ets) {
+                m_et_std_dev += (x - m_et_avg)*(x - m_et_avg);
+            }
+            m_et_std_dev = std::sqrt(m_et_std_dev);
+
+            m_ets.clear();
+        }
+    }
+
+
+    int m_fps = 0, m_count_this_frame = 0;
+    double m_total_et = 0.;
+
+    double m_et_std_dev = 0., m_et_avg = 0.;
+    std::vector<double> m_ets;
+};
+
+
 } // end of <anonymous> namespace
 
 void run_demo() {
@@ -868,7 +1118,7 @@ void run_demo() {
         player.add<DrawRectangle>().set_color(sf::Color(200, 200, 255));
         player.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
         player.add<Name>().value = "PLAYER";
-
+        player.add<Targeting>();
         return player;
     } (ent_mana);
 
@@ -879,7 +1129,8 @@ void run_demo() {
         for (int i = 0; i != k_pushers; ++i) {
             auto e = maker.make_entity();
             e.add<DrawRectangle>().set_color(sf::Color(128, 18, 128));
-            e.add<Rectangle>() = Rectangle{Real(i), 0, 10, 10};
+            e.add<Rectangle>() = Rectangle{Real(i % 10)*10 + 1,
+                                           Real(i / 10)*10 + 1, 10, 10};
             e.add<Pushable>();
             e.add<Name>() = "P" + std::to_string(i);
         }
@@ -1081,11 +1332,16 @@ void run_demo() {
         view.setSize(view.getSize().x / 2.f, view.getSize().y / 2.f);
         window.setView(view);
     }
-    SweepPruneDisplaySystem spdisplay(window);
+    SpatialPartitionsDisplaySystem spdisplay(window);
+    TargetSystem tar_sys(window);
     window.setFramerateLimit(60u);
     scenes.load_first_scene(ent_mana);
     bool in_frame_advance_mode = false;
     bool frame_advance_step    = false;
+    FpsCounter fps_counter;
+    sf::Clock clock;
+    DrawText fps_text;
+    fps_text.load_builtin_font(cul::BitmapFont::k_8x16_highlighted_font);
     while (window.isOpen()) {
         {
         sf::Event event;
@@ -1154,14 +1410,24 @@ void run_demo() {
             frame_advance_step = false;
             scenes.on_update(ent_mana);
             run_systems(ent_mana, std::tuple_cat(
-                std::make_tuple(/*RdMapLimits(), */DrawSystem(window),
+                std::make_tuple(DrawSystem(window),
                                 VerticiesMovementSystem(), RdFadeSystem(),
                                 ShadowImageSystem(), MatFlashSystem(),
                                 LifetimeSystem()),
-                std::tie(col_sys, spdisplay)));
+                std::tie(col_sys/*, tar_sys*/)));
+            run_systems(ent_mana, std::tie(spdisplay));
             ent_mana.process_deletion_requests();
         }
-        window.display();
+        [&window, &fps_counter, &fps_text, &clock] {
+            auto view = window.getView();
+            view.setCenter( view.getSize()*0.5f );
+            window.setView(view);
+            fps_counter.update(double(clock.restart().asMilliseconds()) / 1000.);
+            fps_text.set_text_top_left(sf::Vector2f{0, 0}, std::to_string(fps_counter.fps()));
+            window.draw(fps_text);
+            window.display();
+        } ();
         sf::sleep(sf::microseconds(std::int64_t(std::round(1'000'000.0 * k_demo_et_value))));
+
     }
 }

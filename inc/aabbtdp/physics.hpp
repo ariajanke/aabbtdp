@@ -26,22 +26,17 @@
 
 #pragma once
 
+#include <aabbtdp/defs.hpp>
+
 #include <ecs/ecs.hpp>
 
-#include <common/Vector2.hpp>
 #include <common/Grid.hpp>
-#include <common/Util.hpp>
 
 #include <memory>
 
 // if I want this to be a library, then a namespace is needed
 namespace tdp {
-    
-// everything uses doubles
-using Real      = double;
-using Rectangle = cul::Rectangle<Real>;
-using Vector    = cul::Vector2  <Real>;
-using Size      = cul::Size2    <Real>;
+
 using ecs::EntityRef;
 class TopDownPhysicsHandler;
 using TdpHandlerPtr = std::unique_ptr<TopDownPhysicsHandler>;
@@ -120,6 +115,10 @@ struct Entry {
 ///
 /// This class is meant to be inherited by a class/structure defined by the
 /// client.
+///
+/// @warning In general implementors of this class should never call any
+///          methods defined in the TopDownPhysicsHandler class, especially
+///          from the same instance.
 struct EventHandler {
     virtual ~EventHandler() {}
 
@@ -251,6 +250,7 @@ public:
     /// @note This function uses double dispatch to acheive it's magic. :)
     /// @throws if rectangle's width or height is negative or if any field is
     ///         a non-real number
+    /// @warning further calls should not be made in f
     template <typename Func>
     void find_overlaps(const Rectangle &, Func && f);
 

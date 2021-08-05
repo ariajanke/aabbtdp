@@ -28,10 +28,12 @@
 
 #define MACRO_AABBTDP_SHOW_DETAILS_HELPERS
 #include "../src/detail.hpp"
-#include "../src/PartitionBoxMap.hpp"
+#include "../src/sight-detail.hpp"
+
 #include "../src/SpatialMap.hpp"
 
 #include <common/TestSuite.hpp>
+#include <common/Util.hpp>
 
 #include <iostream>
 #include <random>
@@ -50,16 +52,20 @@ using cul::ts::TestSuite, cul::ts::test, cul::ts::set_context, cul::ts::Unit,
 
 void do_helper_tests          (TestSuite &);
 void do_collision_matrix_tests(TestSuite &);
-void do_sweep_and_prune_tests (TestSuite &);
 void do_td_physics_tests      (TestSuite &);
-void do_20210726_pmtests      (TestSuite &);
+
+// more testing ideas: using multiple instances and nested probes/calls
 
 #define mark MACRO_MARK_POSITION_OF_CUL_TEST_SUITE
 
 } // end of <anonymous> namespace
 
+void do_sight_unit_tests(TestSuite &);
+void do_spatial_map_unit_tests(TestSuite &);
+
 int main() {
     std::cout << "Test Entity size " << EntityA::k_component_table_size / sizeof(void *)
+              << ":" << EntityA::k_component_table_size % sizeof(void *)
               << " pointers with " << EntityA::k_number_of_components_inlined << " components inlined." << std::endl;
 
     // note: I prefer tests that mark themselves and run in the order they
@@ -69,9 +75,9 @@ int main() {
 
     do_helper_tests(suite);
     do_collision_matrix_tests(suite);
-    do_sweep_and_prune_tests(suite);
     do_td_physics_tests(suite);
-    do_20210726_pmtests(suite);
+    do_spatial_map_unit_tests(suite);
+    do_sight_unit_tests(suite);
 
 #   ifdef MACRO_BUILD_DEMO
     run_demo();
@@ -225,23 +231,23 @@ void do_helper_tests(TestSuite & suite) {
         using std::get;
         Rectangle pusher(0 , 0, 10, 10);
         Rectangle pushee(11, 0, 10, 10);
-        Hit expected_hit(k_right, k_direction_count);
+        HitSide expected_hit(k_right, k_direction_count);
         unit.start(mark(suite), [&] {
             Vector displacement(2, 0);
             auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<Hit>(gv) == expected_hit
+            return test(   get<HitSide>(gv) == expected_hit
                         && are_very_close(get<Vector>(gv), Vector(1, 0)));
         });
         unit.start(mark(suite), [&] {
             Vector displacement(22, 0);
             auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<Hit>(gv) == expected_hit
+            return test(   get<HitSide>(gv) == expected_hit
                         && are_very_close(get<Vector>(gv), Vector(21, 0)));
         });
         unit.start(mark(suite), [&] {
             Vector displacement(2, 8);
             auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<Hit>(gv) == expected_hit
+            return test(   get<HitSide>(gv) == expected_hit
                         && are_very_close(get<Vector>(gv), Vector(1, 0)));
         });
     });
@@ -251,23 +257,23 @@ void do_helper_tests(TestSuite & suite) {
         using std::get;
         Rectangle pusher(0,   0, 10, 10);
         Rectangle pushee(0, -11, 10, 10);
-        Hit expected_hit(k_direction_count, k_up);
+        HitSide expected_hit(k_direction_count, k_up);
         unit.start(mark(suite), [&] {
             Vector displacement(0, -2);
             auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<Hit>(gv) == expected_hit
+            return test(   get<HitSide>(gv) == expected_hit
                         && are_very_close(get<Vector>(gv), Vector(0, -1)));
         });
         unit.start(mark(suite), [&] {
             Vector displacement(0, -22);
             auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<Hit>(gv) == expected_hit
+            return test(   get<HitSide>(gv) == expected_hit
                         && are_very_close(get<Vector>(gv), Vector(0, -21)));
         });
         unit.start(mark(suite), [&] {
             Vector displacement(8, -2);
             auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<Hit>(gv) == expected_hit
+            return test(   get<HitSide>(gv) == expected_hit
                         && are_very_close(get<Vector>(gv), Vector(0, -1)));
         });
     });
@@ -494,118 +500,6 @@ void do_collision_matrix_tests(cul::ts::TestSuite & suite) {
     // and not more than once after the first frame
 }
 
-void do_sweep_and_prune_tests(cul::ts::TestSuite & suite) {
-    suite.start_series("sweep prune map tests");
-
-#   if 0 // idk what to do with this test case anymore
-    static constexpr const int k_fork_thershold = tdp::detail::k_pbm_partition_thershold;
-    suite.test([] {
-        auto w = int(std::round(std::sqrt(k_fork_thershold)));
-        auto h = k_fork_thershold / w + 1;
-        static constexpr const Real k_size_step = 10;
-        static constexpr const Real k_block_size = 100;
-        std::vector<Rectangle> rects;
-        std::vector<std::tuple<Rectangle, void *>> cont;
-        for (int y = 0; y != h; ++y) {
-        for (int x = 0; x != w; ++x) {
-            if (rects.size() == k_fork_thershold) break;
-            rects.emplace_back(x*k_size_step, y*k_size_step, k_block_size, k_block_size);
-        }}
-        rects.emplace_back(0, (w - 1)*k_size_step, k_block_size*2, k_block_size);
-        for (auto & rect : rects) {
-            cont.emplace_back(rect, &rect);
-        }
-        auto update_last = [&cont, &rects, w](Real x)
-            { rects.back().left = std::get<0>(cont.back()).left = (w - 1)*k_size_step + x; };
-        using SphpMap = tdp::detail::PbHorizontalPartMap<void *>;
-        Real x = 1.;
-        Real last_x = 1.;
-        bool cond_satis = false;
-        while (true) {
-            auto counts = SphpMap::get_counts(cont.begin(), cont.end());
-            if (counts.high_only == 0 && counts.low_only > 0) {
-                // hit gold?
-                cond_satis = true;
-                break;
-            } else if (counts.high_only > 0) {
-                break;
-            }
-            update_last(x);
-            last_x = x;
-            x *= 2.;
-        }
-        if (!cond_satis) { [x, last_x, &update_last, &cont] {
-            Real high = x;
-            Real low  = last_x;
-            assert(high > low);
-            while (true) {
-                Real mid = low + (high - low) / 2;
-                update_last(mid);
-                auto counts = SphpMap::get_counts(cont.begin(), cont.end());
-                assert(high != low);
-                if (counts.high_only == 0 && counts.low_only > 0) {
-                    // hit!
-                    return;
-                } else if (counts.high_only > 0) {
-                    // too high
-                    high = mid;
-                } else {
-                    // too low
-                    low = mid;
-                }
-            }
-        } (); }
-
-        // here's the problem
-        // a parent partitioned container, creates a child whoses elements
-        // are the the elements which the parent received, the child and all
-        // subsequent children repeat this behavior ad infinitum, therefore
-        // infinite loop
-        //
-        // if this neither throws nor triggers a stack overflow... it passes
-        tdp::detail::PartitionBoxMap<void *> spmap;
-        spmap.set_elements(cont.begin(), cont.end());
-
-        return test(true);
-    });
-#   endif
-    // this case replicates an assertion failure
-    mark(suite).test([] {
-        auto rect_list = {
-            Rectangle(213, 104, 37, 26), Rectangle(276, 109, 35, 37),
-            Rectangle(211, 111, 37, 29), Rectangle(356, 115, 30, 34),
-            Rectangle(149, 124, 35, 21),
-            Rectangle(416.001, 177.712, 50, 50)
-        };
-        std::vector<std::tuple<Rectangle, void *>> cont;
-        for (const auto & rect : rect_list) {
-            cont.emplace_back(rect, nullptr);
-        }
-        tdp::detail::PartitionBoxMap<void *> spmap;
-        spmap.set_elements(cont.begin(), cont.end());
-        return test(true);
-    });
-    // the map must not accept rectangles with non-real numbers for any
-    // attribute
-    mark(suite).test([] {
-        auto rect_list = {
-            Rectangle(213, 104, 37, 26), Rectangle(276, 109, 35, 37),
-            Rectangle(211, 111, std::numeric_limits<Real>::infinity(), 29)
-        };
-        std::vector<std::tuple<Rectangle, void *>> cont;
-        for (const auto & rect : rect_list) {
-            cont.emplace_back(rect, nullptr);
-        }
-        tdp::detail::PartitionBoxMap<void *> spmap;
-        try {
-            spmap.set_elements(cont.begin(), cont.end());
-        } catch (std::invalid_argument &) {
-            return test(true);
-        }
-        return test(false);
-    });
-}
-
 void do_td_physics_tests(TestSuite & suite) {
     // this is interface level stuff!
     suite.start_series("Entry");
@@ -757,348 +651,6 @@ void do_td_physics_tests(TestSuite & suite) {
         ColSystem::run_at_least_seconds(eman, colsys, 1.);
         return test(are_very_close(cul::top_left_of(e.get<Rectangle>()),
                                    Vector{20, 12}));
-    });
-}
-
-// --------------------- Testing new spatial partition map --------------------
-
-// essentially the whole namespace
-using tdp::detail::sum_counts, tdp::detail::only_on_high,
-      tdp::detail::only_on_low, tdp::detail::SpatialMapElementGetters,
-      tdp::detail::SpatialMapFactory, tdp::detail::PartitionedSpatialMap,
-      tdp::detail::get_counts, tdp::detail::FlatSpatialMap,
-      tdp::detail::SpatialMapCounts, tdp::detail::SpatialMap,
-      tdp::detail::pivot_sort_around, tdp::detail::pivot_sort;
-
-struct UniDimRecord {
-    UniDimRecord() {}
-    UniDimRecord(Real pos_, Real len_, std::string name_ = ""):
-        position(pos_),
-        length  (len_),
-        name    (name_)
-    {}
-
-    Real position = 0, length = 0;
-    std::string name;
-};
-
-struct UniDimRecordInterface final :
-    public SpatialMapElementGetters<UniDimRecord>
-{
-    Real get_low(const UniDimRecord & rec) const final { return rec.position; }
-    Real get_high(const UniDimRecord & rec) const final { return rec.position + rec.length; }
-};
-
-constexpr const int k_test_factory_max_depth = 100;
-constexpr const auto k_max_depth_exceeded_msg =
-    "Maximum recursion depth for factory functions reached... this shouldn't "
-    "happen in testing code.";
-using RtError = std::runtime_error;
-
-struct UniDimMapFactory final :
-    public SpatialMapFactory<UniDimRecord>
-{
-    using PartMap = PartitionedSpatialMap<UniDimRecord, UniDimRecordInterface, UniDimMapFactory>;
-    static constexpr const int k_fork_thershold = 4;
-    // if shares greater than 1/2 or count < fork_thershold
-    MapBase & choose_map_for(SetElIterator beg, SetElIterator end, int depth) final {
-        if (depth > k_test_factory_max_depth) throw RtError(k_max_depth_exceeded_msg);
-        if (end - beg < k_fork_thershold) return m_flat;
-        Real avg_pt = 0;
-        for (auto itr = beg; itr != end; ++itr) {
-            avg_pt += (**itr).position + (**itr).length / 2;
-        }
-        avg_pt /= Real(end - beg);
-        auto counts = get_counts<UniDimRecord, UniDimRecordInterface>(avg_pt, beg, end);
-        if (counts.shared > (counts.on_high + counts.on_low + counts.shared) / 2) {
-            return m_flat;
-        }
-        if (!m_part_map) {
-            m_part_map = std::make_unique<PartMap>();
-        }
-        m_part_map->set_division(avg_pt);
-        return *m_part_map;
-    }
-
-    FlatSpatialMap<UniDimRecord> m_flat;
-    std::unique_ptr<PartMap> m_part_map;
-};
-
-struct BiDimRecord {
-    BiDimRecord() {}
-    BiDimRecord(Real left_, Real top_, Real wid_, Real hei_):
-        bounds(left_, top_, wid_, hei_)
-    {}
-    Rectangle bounds;
-    std::string name;
-};
-
-struct HorzRecordInterface final : public SpatialMapElementGetters<BiDimRecord> {
-    Real get_low(const BiDimRecord & rec) const final
-        { return rec.bounds.left; }
-
-    Real get_high(const BiDimRecord & rec) const final
-        { return cul::right_of(rec.bounds); }
-};
-
-struct VertRecordInterface final : public SpatialMapElementGetters<BiDimRecord> {
-    Real get_low(const BiDimRecord & rec) const final
-        { return rec.bounds.top; }
-
-    Real get_high(const BiDimRecord & rec) const final
-        { return cul::bottom_of(rec.bounds); }
-};
-
-struct BiDimMapFactory final : public SpatialMapFactory<BiDimRecord> {
-    // these are essentially a forward declarations
-    using HorzPartMap = PartitionedSpatialMap<BiDimRecord, HorzRecordInterface, BiDimMapFactory>;
-    using VertPartMap = PartitionedSpatialMap<BiDimRecord, VertRecordInterface, BiDimMapFactory>;
-
-    // fixed for testing purposes
-    static constexpr const Real k_division = 8;
-
-    // if shares greater than 1/2 or count < fork_thershold
-    MapBase & choose_map_for(SetElIterator beg, SetElIterator end, int depth) final {
-#       if 0
-        std::cout << (end - beg) << " items in depth " << depth << " level(s)" << std::endl;
-#       endif
-        switch (depth) {
-        case 0:
-            if (!m_horz_map_ptr) {
-                m_horz_map_ptr = std::make_unique<HorzPartMap>();
-            }
-            m_horz_map_ptr->set_division(k_division);
-            return *m_horz_map_ptr;
-        case 1: // at this depth, should be divided into quadrants
-            if (!m_vert_map_ptr) {
-                m_vert_map_ptr = std::make_unique<VertPartMap>();
-            }
-            m_vert_map_ptr->set_division(k_division);
-            return *m_vert_map_ptr;
-        case 2:
-            return m_flat;
-        default: throw RtError(k_max_depth_exceeded_msg);
-        }
-    }
-
-    FlatSpatialMap<BiDimRecord> m_flat;
-    std::unique_ptr<HorzPartMap> m_horz_map_ptr;
-    std::unique_ptr<VertPartMap> m_vert_map_ptr;
-};
-
-// --- other helpers for testing ---
-
-template <typename T>
-std::vector<T *> convert_to_pointer_vector(std::vector<T> & vec) {
-    std::vector<T *> rv;
-    rv.reserve(vec.size());
-    for (auto & r : vec) rv.push_back(&r);
-    return rv;
-}
-
-using UniDimRecPtrConstIter = std::vector<UniDimRecord *>::const_iterator;
-
-bool any_has_position(Real pos, UniDimRecPtrConstIter beg, UniDimRecPtrConstIter end) {
-    for (auto itr = beg; itr != end; ++itr) {
-        if (std::equal_to<Real>{}((**itr).position, pos)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void do_20210726_pmtests(TestSuite & suite) {
-    using TestUniMap = SpatialMap<UniDimRecord, UniDimMapFactory>;
-    suite.start_series("new spatial partition map");
-    set_context(suite, [](TestSuite & suite, Unit & unit) {
-        TestUniMap map;
-        unit.start(mark(suite), [&map] {
-            std::vector<UniDimRecord> col = {
-                UniDimRecord { 0  , 1 },
-                UniDimRecord { 0.5, 1 },
-                UniDimRecord { 1  , 1 }
-            };
-            map.set_elements(col.begin(), col.end());
-            // the partition map does not handle intersection logic
-            // it only collects possible intersections
-            return test(map.collect_candidates(UniDimRecord{ 0, 0.1 }).size() == 3);
-        });
-
-    });
-    // lets test partial sort
-    mark(suite).test([] {
-        using namespace cul::exceptions_abbr;
-        std::vector<int> col = { 9, 8, 3, 2, 1, 4, 10, 4 };
-        auto on_low = [](int i) { return i <= 4; };
-        pivot_sort(col.begin(), col.end(), on_low);
-        auto itr = col.begin();
-        int low_count = 0;
-        for (; itr != col.end(); ++itr) {
-            if (!on_low(*itr)) break;
-            ++low_count;
-        }
-        int high_count = 0;
-        for (; itr != col.end(); ++itr) {
-            if (on_low(*itr)) throw RtError("partial sort failed");
-            ++high_count;
-        }
-        return test(low_count == 5 && high_count == 3);
-    });
-    // two items
-
-    //
-    mark(suite).test([] {
-        std::vector<UniDimRecord> col = {
-            UniDimRecord { 0  , 1 },
-            UniDimRecord { 1.5, 1 },
-            UniDimRecord { 3.0, 1 }
-        };
-        return test(   !only_on_low (UniDimRecordInterface{}, col[1], 2)
-                    && !only_on_high(UniDimRecordInterface{}, col[1], 2));
-    });
-
-    mark(suite).test([] {
-        std::vector<UniDimRecord> col = {
-            UniDimRecord { 0  , 1 },
-            UniDimRecord { 1.5, 1 },
-            UniDimRecord { 3.0, 1 }
-        };
-        auto ptrcol = convert_to_pointer_vector(col);
-        auto gv = pivot_sort_around<UniDimRecord, UniDimRecordInterface>(ptrcol.begin(), ptrcol.end(), 2);
-        return test(   gv.high_beg == ptrcol.begin() + 1
-                    && gv.low_end  == ptrcol.begin() + 2);
-    });
-    // do a partial sort that actually changes the order of the elements
-    // both one side (moving low only)
-    mark(suite).test([] {
-        std::vector col = {
-            UniDimRecord { 0.5, 1 },
-            UniDimRecord { 1.5, 1 },
-            UniDimRecord { 2.5, 1 },
-            UniDimRecord { 3.0, 1 },
-            UniDimRecord { 0  , 1 } // <- this needs to be moved
-        };
-        auto ptrcol = convert_to_pointer_vector(col);
-        auto gv = pivot_sort_around<UniDimRecord, UniDimRecordInterface>(ptrcol.begin(), ptrcol.end(), 2);
-        return test(   gv.low_end - ptrcol.begin() == 3
-                    && any_has_position(0, ptrcol.begin(), gv.low_end));
-    });
-    // and two sided (low and high)
-    mark(suite).test([] {
-        std::vector col = {
-            UniDimRecord { 3.0, 1 }, // <- this needs to be moved
-            UniDimRecord { 0.5, 1 },
-            UniDimRecord { 1.5, 1 },
-            UniDimRecord { 2.5, 1 },
-            UniDimRecord { 0  , 1 } // <- as does this
-        };
-        auto ptrcol = convert_to_pointer_vector(col);
-        auto gv = pivot_sort_around<UniDimRecord, UniDimRecordInterface>(ptrcol.begin(), ptrcol.end(), 2);
-        return test(   any_has_position(3, gv.high_beg   , ptrcol.end())
-                    && any_has_position(0, ptrcol.begin(), gv.low_end  ));
-
-    });
-    // test low only candidates
-    mark(suite).test([] {
-        TestUniMap map;
-        std::vector<UniDimRecord> col = {
-            UniDimRecord { 0  , 1 },
-            UniDimRecord { 0.5, 1 },
-            UniDimRecord { 2.5, 1 },
-            UniDimRecord { 3.0, 1 }
-        };
-        map.set_elements(col.begin(), col.end());
-        return test(map.collect_candidates(UniDimRecord{0.75, 0.5}).size() == 2);
-    });
-    // test shared candidate
-    set_context(suite, [](TestSuite & suite, Unit & unit) {
-        // avg should be 2
-        std::vector<UniDimRecord> col = {
-            UniDimRecord { 0  , 1 },
-            UniDimRecord { 0.5, 1 },
-            UniDimRecord { 1.5, 1 },
-            UniDimRecord { 2.5, 1 },
-            UniDimRecord { 3.0, 1 }
-        };
-        TestUniMap map;
-        map.set_elements(col.begin(), col.end());
-        unit.start(mark(suite), [&] {
-            return test(map.collect_candidates(UniDimRecord{ 1.5, 0.4 }).size() == 3);
-        });
-        unit.start(mark(suite), [&] {
-            return test(map.collect_candidates(UniDimRecord{ 2.2, 0.4 }).size() == 3);
-        });
-        unit.start(mark(suite), [&] {
-            // we get *all* elements are candidate interactions
-            return test(map.collect_candidates(UniDimRecord{ 1.8, 0.4 }).size() == 5);
-        });
-    });
-    using TestBiMap = SpatialMap<BiDimRecord, BiDimMapFactory>;
-    set_context(suite, [](TestSuite & suite, Unit & unit) {
-        std::vector col = {
-            BiDimRecord{  2,  2, 2, 2 },
-            BiDimRecord{  4,  4, 2, 2 },
-            BiDimRecord{ 10, 10, 2, 2 },
-            BiDimRecord{ 12, 12, 2, 2 },
-            BiDimRecord{  4,  7, 2, 2 },
-            BiDimRecord{  2, 12, 3, 3 },
-            BiDimRecord{  7, 12, 2, 3 }
-        };
-        for (auto & entry : col) {
-            bool on_right  = entry.bounds.left > BiDimMapFactory::k_division;
-            bool on_bottom = entry.bounds.top  > BiDimMapFactory::k_division;
-            entry.name += on_bottom ? "b" : "t";
-            entry.name += on_right  ? "r" : "l";
-        }
-#       if 0
-        (() => {
-            let col = [ [  2,  2, 2, 2 ],
-                        [  4,  4, 2, 2 ],
-                        [ 10, 10, 2, 2 ],
-                        [ 12, 12, 2, 2 ],
-                        [  4,  7, 2, 2 ],
-                        [  2, 12, 3, 3 ],
-                        [  7, 12, 2, 3 ] ];
-            const context = $('#canvas').getContext('2d');
-            const draw_divs = () => {
-                    context.strokeStyle = '#F99';
-                    context.beginPath();
-                    context.moveTo(0*10, 8*10);
-                    context.lineTo(16*10, 8*10);
-                    context.closePath();
-                    context.stroke();
-                    context.beginPath();
-                    context.moveTo(8*10, 0*10);
-                    context.lineTo(8*10, 16*10);
-                    context.closePath();
-                    context.stroke();
-            };
-            const draw_rect = (e, outline_style, fill_style) => {
-                outline_style = outline_style || '#F0F';
-                fill_style    = fill_style    || '#000';
-                context.fillStyle = outline_style;
-                context.fillRect(e[0]*10 - 1, e[1]*10 - 1, e[2]*10 + 2, e[3]*10 + 2);
-                context.fillStyle = fill_style;
-                context.fillRect(e[0]*10, e[1]*10, e[2]*10, e[3]*10);
-            };
-            context.fillRect(0, 0, 400, 400);
-            context.fillStyle = '#FFF';
-            $('#canvas').getContext('2d').fillRect(0, 0, 400, 400);
-            col.forEach(e => draw_rect(e));
-            draw_rect([12, 13, 2, 2], '#F0F', '#FF0');
-            draw_divs();
-        })();
-#       endif
-        TestBiMap map;
-        map.set_elements(col.begin(), col.end());
-        unit.start(mark(suite), [&] {
-            auto cands = map.collect_candidates(BiDimRecord{12, 13, 2, 2});
-            return test(cands.size() == 3);
-        });
-        unit.start(mark(suite), [&] {
-            auto cands = map.collect_candidates(BiDimRecord{4, 13, 2, 2});
-            return test(cands.size() == 3);
-        });
     });
 }
 

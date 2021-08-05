@@ -8,3 +8,6 @@
 !.travis.yml
 *.autosave
 *libaabbtdp.a
+analysis.txt
+gmon.out
+libaabbp.a

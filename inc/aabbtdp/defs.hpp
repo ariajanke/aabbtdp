@@ -24,23 +24,24 @@
 
 *****************************************************************************/
 
-#include <aabbtdp/physics.hpp>
+#pragma once
 
-#include "detail.hpp"
+#include <common/Vector2.hpp>
 
 namespace tdp {
 
-/* static */ std::unique_ptr<TopDownPhysicsHandler>
-    TopDownPhysicsHandler::make_instance()
-{ return std::make_unique<detail::TdpHandlerComplete>(); }
+/// Real number, defined using double
+using Real = double;
 
-void TopDownPhysicsHandler::set_collision_matrix(CollisionMatrix && matrix)
-    { set_collision_matrix_(std::move(matrix)); }
+/// Rectangle defined with real numbers, used for AABBs everywhere in this
+/// library
+using Rectangle = cul::Rectangle<Real>;
 
-void TopDownPhysicsHandler::set_collision_matrix(const CollisionMatrix & matrix) {
-    auto t = matrix;
-    set_collision_matrix_(std::move(t));
-}
+/// Vector, as in 2D direction and magnitude, defined with real number type
+using Vector = cul::Vector2<Real>;
+
+/// Size object, used to represent a size of an AABB, defined with real number
+/// type
+using Size = cul::Size2<Real>;
 
 } // end of tdp namespace
-

@@ -1,8 +1,13 @@
-# Top-Down Physics for AABBs
-A "minilibrary" for top down physics for use with personal projects.
+# Physics Utilities for AABBs
+A "minilibrary" for AABB physics for use with personal projects.
 
-## Note
-Building this library should not need the use of precompiled binaries (header only).
-Building the unit-tests however, will require linking to a compiled cul (my "common utility" library) binary.
+## Planned Features
+- solidity and collision handling
+- AABB vision handling (ach der Ehrgeiz!)
 
-I need to add in the "growth" feature before this is ready for grpg.
+## Present Goals
+Get this thing presentable. In which case I need a:
+- (portable) demo
+- many, many unit tests
+- headers need to be thoroughly documented
+- example code snippets (in this readme!)
