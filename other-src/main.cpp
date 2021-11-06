@@ -62,8 +62,10 @@ void do_td_physics_tests      (TestSuite &);
 
 void do_sight_unit_tests(TestSuite &);
 void do_spatial_map_unit_tests(TestSuite &);
+void do_spatial_map_unit_tests_n(TestSuite &);
 
 int main() {
+
     std::cout << "Test Entity size " << EntityA::k_component_table_size / sizeof(void *)
               << ":" << EntityA::k_component_table_size % sizeof(void *)
               << " pointers with " << EntityA::k_number_of_components_inlined << " components inlined." << std::endl;
@@ -78,6 +80,7 @@ int main() {
     do_td_physics_tests(suite);
     do_spatial_map_unit_tests(suite);
     do_sight_unit_tests(suite);
+    do_spatial_map_unit_tests_n(suite);
 
 #   ifdef MACRO_BUILD_DEMO
     run_demo();
@@ -105,20 +108,35 @@ public:
         }
     }
 
+    void set_on_trespass_event(std::function<void(EntityA, EntityA)> && f)
+        { m_on_trespass_f = std::move(f); }
+
 private:
     class DefaultEventHandler final : public tdp::EventHandler {
+    public:
+        DefaultEventHandler(const std::function<void(EntityA, EntityA)> & on_trespass_f):
+            m_on_trespass_f(on_trespass_f)
+        {}
+
         using EntityRef = ecs::EntityRef;
         bool check_accept_collision(EntityRef, EntityRef) const final { return true; }
 
         void on_collision(EntityRef a, EntityRef b, bool) final;
 
-        void on_trespass(EntityRef, EntityRef) final {}
+        void on_trespass(EntityRef a, EntityRef b) final {
+            EntityA ae{a}, be{b};
+            m_on_trespass_f(ae, be);
+            m_on_trespass_f(be, ae);
+        }
 
         void finalize_entry(EntityRef eref, Rectangle rect) final;
+
+        const std::function<void(EntityA, EntityA)> & m_on_trespass_f;
     };
 
     void update(const ContainerView & view) final;
 
+    std::function<void(EntityA, EntityA)> m_on_trespass_f = [](EntityA, EntityA) {};
     tdp::TdpHandlerPtr m_handle = make_tdp_handler();
 };
 
@@ -553,6 +571,48 @@ void do_td_physics_tests(TestSuite & suite) {
         return test(e.get<ColInfo>().hit_wall);
     });
 
+    // issue #1
+    // also: test first frame trespass
+    set_context(suite, [](TestSuite & suite, Unit & unit) {
+        EntityManagerA eman;
+        auto proj = eman.make_entity();
+        const auto & proj_rect = proj.add<Rectangle>() = Rectangle{0, 0, 5, 5};
+        Vector center_to_center_diff = [proj_rect] (EntityA target) {
+            target.add<Rectangle>() = Rectangle{15, -5, 20, 20};
+            target.add<Layer    >() = layers::k_floor_mat;
+            target.add<Name     >() = "target";
+            return cul::center_of(target.get<Rectangle>()) - cul::center_of(proj_rect) - Vector{proj_rect.width, proj_rect.height}*0.5;
+        } (eman.make_entity());
+        eman.process_deletion_requests();
+
+        ColSystem colsys;
+        int col_count = 0;
+        colsys.set_on_trespass_event([&col_count, &proj](EntityA a, EntityA) {
+            if (a == proj) ++col_count;
+        });
+
+        // first frame trespass
+        unit.start(mark(suite), [&] {
+            proj.get<Rectangle>().left = center_to_center_diff.x;
+            proj.get<Rectangle>().top  = center_to_center_diff.y;
+            eman.run_system(colsys);
+            return test(col_count == 1);
+        });
+
+        // issue #1
+        unit.start(mark(suite), [&] {
+            // have it hang out for a frame
+            proj.add<Velocity>();
+            eman.run_system(colsys);
+            // I have it failing now...
+            // it's not a "first frame" issue
+            proj.get<Velocity>() = center_to_center_diff*(1. / ColSystem::k_et_value);
+            col_count = 0;
+            eman.run_system(colsys);
+            return test(col_count == 1);
+        });
+    });
+
     // - one entity, trepasses onto another by displacement
     mark(suite).test([] {
         return test(false);
@@ -685,7 +745,7 @@ void ColSystem::update(const ContainerView & view) {
     for (auto & e : view) {
         m_handle->update_entry(to_tdp_entry(e, k_et_value));
     }
-    DefaultEventHandler def_handler;
+    DefaultEventHandler def_handler{m_on_trespass_f};
     m_handle->run(def_handler);
 }
 

@@ -35,7 +35,8 @@ namespace {
 using namespace cul::exceptions_abbr;
 using tdp::Vector, tdp::detail::HitSide, tdp::Rectangle, tdp::detail::FullEntry,
       tdp::detail::EntryEntityRefMap, tdp::detail::PushPair, cul::is_real,
-      cul::bottom_of, cul::right_of, cul::normalize, cul::magnitude;
+      cul::bottom_of, cul::right_of, cul::normalize, cul::magnitude,
+      cul::set_top_left_of, cul::top_left_of;
 
 Vector find_barrier_for_displacement(
     const Vector & displacement,
@@ -43,8 +44,8 @@ Vector find_barrier_for_displacement(
 
 Rectangle displace(Rectangle rv, Vector r);
 
-inline FullEntry & iter_to_entryref(EntryEntityRefMap::iterator itr)
-    { return itr->second; }
+inline FullEntry & iter_to_entryref(EntryEntityRefMap::const_iterator itr)
+    { return const_cast<FullEntry &>(itr->second); }
 
 inline FullEntry & iter_to_entryref(std::vector<PushPair>::iterator itr)
     { return *itr->pushee; }
@@ -63,7 +64,7 @@ std::tuple<Vector, HitSide> find_min_push_displacement
     (const Rectangle &, const Rectangle & other, const Vector & displc);
 
 std::vector<FullEntry *> prioritized_entries
-    (EntryEntityRefMap &, std::vector<FullEntry *> &&);
+    (/*const EntryEntityRefMap &, */ EntryMapView, std::vector<FullEntry *> &&);
 
 HitSide trim_displacement_for_barriers
     (const Rectangle &, Vector barriers, Vector & displacement);
@@ -78,10 +79,10 @@ Rectangle grow(Rectangle, const Size &);
 
 Rectangle grow_by_displacement(Rectangle, const Vector & displc);
 
-// ---------------------------- TdpHandlerComplete ----------------------------
+// -------------------------- TdpHandlerIntermediate --------------------------
 
-void TdpHandlerComplete::update_entry(const Entry & entry) {
-    if (m_col_matrix.is_empty()) {
+void TdpHandlerEntryInformation::update_entry(const Entry & entry) {
+    if (collision_matrix().is_empty()) {
         throw InvArg("TdpHandlerComplete::update_entry: cannot update entries "
                      "with collision matrix not being set.");
     }
@@ -110,8 +111,8 @@ void TdpHandlerComplete::update_entry(const Entry & entry) {
         "is not implemented is the rationale for this error)";
 
     if (entry.growth != Size(0, 0)) {
-        for (int x = 0; x != m_col_matrix.width(); ++x) {
-            if (m_col_matrix(x, entry.collision_layer) == InteractionClass::k_as_solid) {
+        for (int x = 0; x != collision_matrix().width(); ++x) {
+            if (collision_matrix()(x, entry.collision_layer) == InteractionClass::k_as_solid) {
                 throw InvArg(k_solid_has_growth_msg);
             }
         }
@@ -119,23 +120,20 @@ void TdpHandlerComplete::update_entry(const Entry & entry) {
     static_cast<tdp::Entry &>(m_entries[entry.entity]) = entry;
 }
 
-void TdpHandlerComplete::run(EventHandler & handler) {
-    clean_up_containers();
-    m_entry_refs.reserve(m_entries.size());
-    m_entry_refs.clear();
-    m_spatial_map.set_elements(m_entries.begin(), m_entries.end(), [](auto itr) {
-        return EntrySpatialRef{&itr->second, get_grown_rectangle(itr->second)};
-    });
-    order_and_handle_pushes();
-    do_collision_work(handler);
-
-    m_event_recorder.send_events(handler);
+/* protected */ void TdpHandlerEntryInformation::clean_up_containers() {
+    for (auto itr = m_entries.begin(); itr != m_entries.end();) {
+        if (itr->second.entity) {
+            ++itr;
+        } else {
+            itr = m_entries.erase(itr);
+        }
+    }
     for (auto & pair : m_entries) {
-        pair.second.first_appearance = false;
+        frame_reset(pair.second);
     }
 }
 
-void TdpHandlerComplete::set_collision_matrix_
+/* private */ void TdpHandlerEntryInformation::set_collision_matrix_
     (CollisionMatrix && matrix)
 {
     using VecI = CollisionMatrix::Vector;
@@ -179,6 +177,217 @@ void TdpHandlerComplete::set_collision_matrix_
     m_col_matrix = std::move(matrix);
 }
 
+// ----------------------- TdpHandlerCollisionBehaviors -----------------------
+
+void TdpHandlerCollisionBehaviors::run(EventHandler & handler) {
+    clean_up_containers();
+    prepare_for_collision_work();
+    order_and_handle_pushes();
+    do_collision_work(handler);
+    do_post_run(handler);
+}
+
+/* protected */ void TdpHandlerCollisionBehaviors::do_collision_work
+    (EventHandler & handler)
+{
+    auto ordered_entries = prioritized_entries(entries_view(), std::move(m_recycled_order));
+    m_recycled_order.clear();
+    for (auto * entry_ptr : ordered_entries) {
+        auto & entry = *entry_ptr;
+        Vector barrier = find_barrier_for_displacement
+            (entry.displacement, entry.positive_barrier, entry.negative_barrier);
+        if (trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement) != HitSide()) {
+            m_event_recorder.emplace_event(entry.entity, EntityRef(), false);
+        }
+        // this calls "do_collision_work_for_pair" several times
+        do_collision_work_on_entry(entry, handler);
+
+        // fine with other bounds being finalized for trespass events
+        set_top_left_of(entry.bounds, top_left_of(entry.bounds) + entry.displacement);
+        if (entry.growth != Size()) {
+            entry.bounds = grow(entry.bounds, entry.growth);
+        }
+        // this is fine here, not reusing containers at this point, unlike
+        // while being in the for loop above
+        handler.finalize_entry(entry.entity, entry.bounds);
+    }
+    m_recycled_order.swap(ordered_entries);
+}
+
+/* protected */ void TdpHandlerCollisionBehaviors::do_collision_work_for_pair
+    (FullEntry & entry, const FullEntry & other_entry, EventHandler & handler)
+{
+    using namespace interaction_classes;
+    switch (collision_matrix()(entry.collision_layer, other_entry.collision_layer)) {
+    case k_as_solid: {
+        auto gv = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
+        if (gv == HitSide()) return;
+        m_event_recorder.emplace_event(entry.entity, other_entry.entity, false);
+        break;
+    }
+    case k_as_trespass: {
+        bool first_appearance_overlap = entry.first_appearance && overlaps(entry.bounds, other_entry.bounds);
+        bool regular_trespass         = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
+        if (!first_appearance_overlap && !regular_trespass) return;
+        // this is an "uh-oh" moment if we're reusing containers
+        handler.on_trespass(entry.entity, other_entry.entity);
+        break;
+    }
+    default: break;
+    }
+}
+
+/* protected */ void TdpHandlerCollisionBehaviors::add_if_pushable
+    (FullEntry & entry, FullEntry & other_entry, std::vector<PushPair> & container)
+{
+    // "get_next_pushables" should be the only possible 2nd stack frame up!
+    using std::get;
+    auto col_class = collision_matrix()(entry.collision_layer, other_entry.collision_layer);
+    if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) return;
+    auto gv = find_min_push_displacement(entry.bounds, other_entry.bounds, entry.displacement);
+    if (get<Vector>(gv) == Vector()) return;
+    container.emplace_back(&other_entry, &entry, get<Vector>(gv));
+    // updates hit flags
+    m_event_recorder.emplace_event(other_entry.entity, entry.entity, true);
+}
+
+/* protected */ void TdpHandlerCollisionBehaviors::do_post_run(EventHandler & handler) {
+    m_event_recorder.send_events(handler);
+    for (auto & pair : entries_view()) {
+        pair.second.first_appearance = false;
+    }
+}
+
+/* private */ void TdpHandlerCollisionBehaviors::order_and_handle_pushes() {
+    std::vector<PushPair> pushed_entries = get_next_pushables(
+        entries_view().begin(), entries_view().end(), std::move(m_recycled_pushpairs_a));
+    std::vector<PushPair> recycled_cont = std::move(m_recycled_pushpairs_b);
+
+    for (int safety = 0; !pushed_entries.empty(); ++safety) {
+        for (auto & pair : pushed_entries) {
+            assert(pair.pushee->pushable);
+            pair.pushee->priority = pair.pusher->priority + 1;
+            // I think this should take the maximum of either
+            // original displacement or nudge displacement (The original
+            // displacement was not considered in computing this nudge
+            // displacement)
+            pair.pushee->displacement += pair.nudge_displacement;
+        }
+        static constexpr const int k_maximum_push_pair_iterations = 1024;
+        if (safety >= k_maximum_push_pair_iterations) {
+            // throw/warn/do something
+            break;
+        }
+        recycled_cont = get_next_pushables(pushed_entries.begin(), pushed_entries.end(), std::move(recycled_cont));
+        recycled_cont.swap(pushed_entries);
+
+    }
+    m_recycled_pushpairs_a = std::move(pushed_entries);
+    m_recycled_pushpairs_b = std::move(recycled_cont );
+}
+
+template <typename Iter>
+/* private */ std::vector<PushPair> TdpHandlerCollisionBehaviors::get_next_pushables
+    (Iter beg, Iter end, std::vector<PushPair> && rv)
+{
+    using std::get;
+    rv.clear();
+    for (auto itr = beg; itr != end; ++itr) {
+        FullEntry & entry = iter_to_entryref(itr);
+        // because I process events all the way at the end, I don't have to
+        // worry about subsequent calls to this function from the same instance
+        // further down the stack, so I can reuse a container!
+
+        // can I skip if there's no displacement?
+        if (entry.displacement == Vector{}) continue;
+        get_next_pushables_for_entry(entry, rv);
+#       if 0
+        for (auto * other_entry_ptr : m_spatial_map.view_of(get_grown_rectangle(entry))) {
+            auto & other_entry = *other_entry_ptr->entry;
+            auto col_class = collision_matrix()(entry.collision_layer, other_entry.collision_layer);
+            if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) continue;
+            auto gv = find_min_push_displacement(entry.bounds, other_entry.bounds, entry.displacement);
+            if (get<Vector>(gv) == Vector()) continue;;
+            rv.emplace_back(&other_entry, &entry, get<Vector>(gv));
+            // updates hit flags
+            m_event_recorder.emplace_event(other_entry.entity, entry.entity, true);
+        }
+#       endif
+    }
+    return std::move(rv);
+}
+
+// ---------------------------- TdpHandlerComplete ----------------------------
+#if 0
+void TdpHandlerComplete::update_entry(const Entry & entry) {
+    if (collision_matrix().is_empty()) {
+        throw InvArg("TdpHandlerComplete::update_entry: cannot update entries "
+                     "with collision matrix not being set.");
+    }
+    if (entry.collision_layer == Entry::k_no_layer) {
+        throw InvArg("TdpHandlerComplete::update_entry: entry must specify "
+                     "its collision layer.");
+    }
+    if (!entry.entity) {
+        throw InvArg("TdpHandlerComplete::update_entry: this entry needs to "
+                     "have its entity reference set (member named \"entity\").");
+    }
+    if (   !::is_real(entry.bounds      ) || !is_real(entry.displacement )
+        || !  is_real(entry.growth.width) || !is_real(entry.bounds.height))
+    {
+        throw InvArg("TdpHandlerComplete::update_entry: bounds, growth, and "
+                     "displacement must all be in every field real numbers.");
+    }
+    if (entry.bounds.width < 0 || entry.bounds.height < 0) {
+        throw InvArg("TdpHandlerComplete::update_entry: bounds size must be "
+                     "non-negative real numbers.");
+    }
+
+    static constexpr const auto k_solid_has_growth_msg =
+        "TdpHandlerComplete::update_entry: solid entry has growth, the entry "
+        "must be either passive or trespass for every layer. (A behavior that "
+        "is not implemented is the rationale for this error)";
+
+    if (entry.growth != Size(0, 0)) {
+        for (int x = 0; x != collision_matrix().width(); ++x) {
+            if (collision_matrix()(x, entry.collision_layer) == InteractionClass::k_as_solid) {
+                throw InvArg(k_solid_has_growth_msg);
+            }
+        }
+    }
+    static_cast<tdp::Entry &>(m_entries[entry.entity]) = entry;
+}
+#endif
+#if 0
+void TdpHandlerComplete::run(EventHandler & handler) {
+    clean_up_containers();
+#   if 0
+    m_entry_refs.reserve(m_entries.size());
+#   endif
+    m_entry_refs.clear();
+    m_spatial_map.set_elements(/*m_entries.cbegin(), m_entries.cend(), */ entries_view().begin(), entries_view().end(), [](auto itr) {
+        return EntrySpatialRef{&itr->second, get_grown_rectangle(itr->second)};
+    });
+    order_and_handle_pushes();
+    do_collision_work(handler);
+
+    do_post_run(handler);
+#   if 0
+    // do_post_run
+    m_event_recorder.send_events(handler);
+    for (auto & pair : entries_view()) {
+        pair.second.first_appearance = false;
+    }
+#   endif
+}
+#endif
+/* private */ void TdpHandlerComplete::prepare_for_collision_work() {
+    m_entry_refs.clear();
+    m_spatial_map.set_elements(entries_view().begin(), entries_view().end(), [](auto itr) {
+        return EntrySpatialRef{&itr->second, get_grown_rectangle(itr->second)};
+    });
+}
+
 /* private */ void TdpHandlerComplete::find_overlaps_
     (const Rectangle & rect, const OverlapInquiry & inquiry) const
 {
@@ -211,11 +420,15 @@ void TdpHandlerComplete::set_collision_matrix_
             inquiry(*entry->entry);
     }
 }
-
+#if 0
 template <typename Iter>
 /* private */ std::vector<PushPair> TdpHandlerComplete::get_next_pushables
     (Iter beg, Iter end, std::vector<PushPair> && rv)
 {
+    // get_next_pushables
+    // (virtual)get_next_pushables_for_entry
+    // add_if_pushable_for(...)
+
     using std::get;
     rv.clear();
     for (auto itr = beg; itr != end; ++itr) {
@@ -228,7 +441,7 @@ template <typename Iter>
         if (entry.displacement == Vector{}) continue;
         for (auto * other_entry_ptr : m_spatial_map.view_of(get_grown_rectangle(entry))) {
             auto & other_entry = *other_entry_ptr->entry;
-            auto col_class = m_col_matrix(entry.collision_layer, other_entry.collision_layer);
+            auto col_class = collision_matrix()(entry.collision_layer, other_entry.collision_layer);
             if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) continue;
             auto gv = find_min_push_displacement(entry.bounds, other_entry.bounds, entry.displacement);
             if (get<Vector>(gv) == Vector()) continue;;
@@ -239,7 +452,8 @@ template <typename Iter>
     }
     return std::move(rv);
 }
-
+#endif
+#if 0
 /* private */ void TdpHandlerComplete::clean_up_containers() {
     for (auto itr = m_entries.begin(); itr != m_entries.end();) {
         if (itr->second.entity) {
@@ -252,10 +466,11 @@ template <typename Iter>
         frame_reset(pair.second);
     }
 }
-
+#endif
+#if 0
 /* private */ void TdpHandlerComplete::order_and_handle_pushes() {
     std::vector<PushPair> pushed_entries = get_next_pushables(
-        m_entries.begin(), m_entries.end(), std::move(m_recycled_pushpairs_a));
+        entries_view().begin(), entries_view().end(), std::move(m_recycled_pushpairs_a));
     std::vector<PushPair> recycled_cont = std::move(m_recycled_pushpairs_b);
 
     for (int safety = 0; !pushed_entries.empty(); ++safety) {
@@ -280,9 +495,13 @@ template <typename Iter>
     m_recycled_pushpairs_a = std::move(pushed_entries);
     m_recycled_pushpairs_b = std::move(recycled_cont );
 }
-
+#endif
+#if 0
 /* private */ void TdpHandlerComplete::do_collision_work(EventHandler & handler) {
-    auto ordered_entries = prioritized_entries(m_entries, std::move(m_recycled_order));
+    // do_collision_work
+    // (virtual)do_collision_work_on_view
+    // do_collision_work_for_pair
+    auto ordered_entries = prioritized_entries(entries_view()/* m_entries*/, std::move(m_recycled_order));
     m_recycled_order.clear();
     for (auto * entry_ptr : ordered_entries) {
         auto & entry = *entry_ptr;
@@ -295,9 +514,9 @@ template <typename Iter>
         // do we want to wrap this whole loop to skip if displacement is zero?
         for (auto * entry_ptr : m_spatial_map.view_of(get_grown_rectangle(entry))) {
             if (entry.displacement == Vector{}) break;
-            auto & other_entry = *entry_ptr->entry;
+            const auto & other_entry = *entry_ptr->entry;
             using namespace interaction_classes;
-            switch (m_col_matrix(entry.collision_layer, other_entry.collision_layer)) {
+            switch (collision_matrix()(entry.collision_layer, other_entry.collision_layer)) {
             case k_as_solid: {
                 auto gv = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
                 if (gv == HitSide()) continue;
@@ -316,7 +535,7 @@ template <typename Iter>
             }
         }
         // fine with other bounds being finalized for trespass events
-        cul::set_top_left_of(entry.bounds, cul::top_left_of(entry.bounds) + entry.displacement);
+        set_top_left_of(entry.bounds, top_left_of(entry.bounds) + entry.displacement);
         if (entry.growth != Size()) {
             entry.bounds = grow(entry.bounds, entry.growth);
         }
@@ -325,6 +544,29 @@ template <typename Iter>
         handler.finalize_entry(entry.entity, entry.bounds);
     }
     m_recycled_order.swap(ordered_entries);
+}
+#endif
+/* private */ void TdpHandlerComplete::do_collision_work_on_entry
+    (FullEntry & entry, EventHandler & handler)
+{
+    for (auto * entry_ptr : m_spatial_map.view_of(get_grown_rectangle(entry))) {
+        do_collision_work_for_pair(entry, *entry_ptr->entry, handler);
+    }
+}
+
+/* private */ void TdpHandlerComplete::get_next_pushables_for_entry(FullEntry & entry, std::vector<PushPair> & rv)  {
+    for (auto * other_entry_ptr : m_spatial_map.view_of(get_grown_rectangle(entry))) {
+        add_if_pushable(entry, *other_entry_ptr->entry, rv);
+    }
+}
+
+// ------------------------- Quadratic Implementation -------------------------
+
+/* private */ void QuadraticTdpHandler::find_overlaps_(const Rectangle & rect, const OverlapInquiry & inq) const {
+    for (const auto & pair : entries_view()) {
+        if (cul::find_rectangle_intersection(rect, pair.second.bounds).width > 0)
+            inq(pair.second);
+    }
 }
 
 Rectangle get_grown_rectangle(const FullEntry & entry) {
@@ -371,11 +613,19 @@ std::tuple<Vector, HitSide> find_min_push_displacement
 }
 
 std::vector<FullEntry *> prioritized_entries
-    (EntryEntityRefMap & map, std::vector<FullEntry *> && rv)
+    (EntryEntityRefMap & container, std::vector<FullEntry *> && reuse)
+{
+    return prioritized_entries(View{container.begin(), container.end()}, std::move(reuse));
+}
+
+std::vector<FullEntry *> prioritized_entries
+    (EntryMapView view, std::vector<FullEntry *> && rv)
 {
     rv.clear();
-    rv.reserve(map.size());
-    for (auto & pair : map) { rv.emplace_back(&pair.second); }
+#   if 0
+    rv.reserve(view.end() - view.begin());
+#   endif
+    for (auto & pair : view) { rv.emplace_back(&pair.second); }
     static auto order_entries = [](const FullEntry * lhs, const FullEntry * rhs) {
         assert(lhs && rhs);
         return lhs->priority < rhs->priority;
@@ -433,7 +683,7 @@ bool trespass_occuring
     };
     int steps_for_large = large_displacement_step_count(rect, other, displc);
     if (steps_for_large) {
-        for (int i = 1; i != steps_for_large; ++i) {
+        for (int i = 1; i != steps_for_large + 1; ++i) {
             auto t           = Real(i) / Real(steps_for_large);
             auto displc_part = displc*t;
             if (trespass_occuring_small(rect, other, displc_part)) return true;

@@ -71,6 +71,7 @@ struct Name : ecs::InlinedComponent {
     Name() {}
     std::string & operator = (const char * cstr) { return (value = cstr); }
     std::string & operator = (const std::string & sstr) { return (value = sstr); }
+    bool operator == (const char * cstr) const noexcept { return value == cstr; }
     std::string value;
 };
 

@@ -265,6 +265,12 @@ protected:
     virtual void find_overlaps_(const Rectangle &, const OverlapInquiry &) const = 0;
 };
 
+namespace temporary {
+
+TdpHandlerPtr make_quadratic_tdp_physics_instance();
+
+} // end of temporary namespace -> into ::tdp
+
 template <typename Func>
 void TopDownPhysicsHandler::find_overlaps(const Rectangle & rect, Func && f) {
     struct Inst final : public OverlapInquiry {

@@ -42,5 +42,13 @@ void TopDownPhysicsHandler::set_collision_matrix(const CollisionMatrix & matrix)
     set_collision_matrix_(std::move(t));
 }
 
+
+namespace temporary {
+
+TdpHandlerPtr make_quadratic_tdp_physics_instance()
+    { return std::make_unique<detail::QuadraticTdpHandler>(); }
+
+} // end of temporary namespace -> into ::tdp
+
 } // end of tdp namespace
 

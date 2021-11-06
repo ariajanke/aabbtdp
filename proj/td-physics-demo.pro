@@ -23,6 +23,7 @@ LIBS           += -lsfml-graphics -lsfml-window -lsfml-system -lcommon
 SOURCES += \
     ../other-src/main.cpp \
     ../other-src/spatial-map-unit-tests.cpp \
+    ../other-src/spatial-map-unit-tests-n.cpp \
     ../src/detail.cpp \
     ../src/physics.cpp \
     ../src/helpers.cpp
@@ -36,6 +37,7 @@ HEADERS        += ../other-src/demo-common.hpp
 HEADERS += \
     \#../src/PartitionBoxMap.hpp.bak \
     ../src/SpatialMap.hpp \
+    ../src/SpatialMapN.hpp \
     ../src/detail.hpp \
     ../src/helpers.hpp \
     ../inc/aabbtdp/physics.hpp \

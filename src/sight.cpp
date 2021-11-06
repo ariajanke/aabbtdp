@@ -10,7 +10,7 @@ namespace { // ----------------------------------------------------------------
 using tdp::detail::SightingComplete, tdp::detail::ImageEntry,
       tdp::detail::PolarVector, tdp::detail::ImageSpatialMapFactory,
       tdp::detail::AngleGetters, tdp::Sighting, tdp::Real, tdp::Vector,
-      tdp::Rectangle;
+      tdp::Rectangle, tdp::detail::QuadraticSightingComplete;
 using Percept = SightingComplete::Percept;
 using Entry = SightingComplete::Entry;
 using UnitTestFunctions = tdp::detail::SightingUnitTestFunctions;
@@ -41,7 +41,7 @@ void make_images(Vector source, const Varray<Entry> &, Varray<ImageEntry> &);
 
 void update_for_possible_obstruction(ImageEntry &, const ImageEntry &);
 
-Percept convert(Vector source, const ImageEntry &);
+Percept to_percept(Vector source, const ImageEntry &);
 
 // returns [0 1]
 // for each arc segment, beg to last implies an interval that is [beg last]
@@ -60,6 +60,17 @@ ImageEntry make_image(Vector source, const Entry &);
 
 /* static */ std::unique_ptr<Sighting> Sighting::make_instance()
     { return std::make_unique<SightingComplete>(); }
+
+namespace tdp {
+
+namespace temporary {
+
+std::unique_ptr<Sighting> make_sighting_nsquared_instance()
+    { return std::make_unique<QuadraticSightingComplete>(); }
+
+} // end of temporary namespace -> into ::tdp
+
+} // end of tdp namespace
 
 // ----------------------------------------------------------------------------
 
@@ -132,15 +143,40 @@ std::vector<std::tuple<Vector, Vector>>
 /* private */ Percept SightingComplete::find_percept_of
     (Vector source, const ImageEntry & original_image) const
 {
-    using ElementContainer = RadialSpatialMap::ElementContainer;
-    /*static thread_local */ElementContainer temp_cont;
-    temp_cont = m_spatial_map.collect_candidates(original_image, std::move(temp_cont));
     auto image_copy = original_image;
-    for (auto * other_entry : temp_cont) {
+
+    m_temp_cont = m_spatial_map.collect_candidates(original_image, std::move(m_temp_cont));
+    for (auto * other_entry : m_temp_cont) {
         if (other_entry == &original_image) continue;
         update_for_possible_obstruction(image_copy, *other_entry);
     }
-    return convert(source, image_copy);
+
+    return to_percept(source, image_copy);
+}
+
+// ----------------------------------------------------------------------------
+
+void QuadraticSightingComplete::add_entry(const Entry & entry) {
+    m_preentries.push_back(entry);
+}
+
+const std::vector<Percept> & QuadraticSightingComplete::run(Vector source) {
+    m_percepts.clear();
+    make_images(source, m_preentries, m_entries);
+
+    for (const auto & entry : m_entries) {
+        auto image_copy = entry;
+        for (const auto & other_entry : m_entries) {
+            if (&other_entry == &entry) continue;
+            update_for_possible_obstruction(image_copy, other_entry);
+        }
+        m_percepts.emplace_back(to_percept(source, image_copy));
+    }
+
+    // on exit stuff
+    m_entries.clear();
+    m_preentries.clear();
+    return m_percepts;
 }
 
 namespace { // ----------------------------------------------------------------
@@ -184,7 +220,7 @@ void update_for_possible_obstruction
 
 // percept has the target position, so we bring that back into the global
 // frame of reference
-Percept convert(Vector source, const ImageEntry & image) {
+Percept to_percept(Vector source, const ImageEntry & image) {
     // image's visibility is affected by its own opacity (or lack thereof)
     Percept percept;
     percept.entity     = image.entity;

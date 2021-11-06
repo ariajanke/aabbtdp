@@ -646,6 +646,7 @@ private:
         }
         tar.targets.clear();
         auto vision_source = cul::center_of(e.get<Rectangle>());
+#       if 0
         static thread_local std::vector<std::tuple<Vector, Vector>> s_lines;
         s_lines = dynamic_cast<tdp::detail::SightingComplete &>(*m_sight).make_image_lines(vision_source, std::move(s_lines));
         static auto to_sfv2 = [] (Vector r) { return cul::convert_to<sf::Vector2f>(r); };
@@ -655,6 +656,7 @@ private:
             cul::DrawLine dline{a, b, 3.f, sf::Color::Green};
             target.draw(dline);
         }
+#       endif
         for (const auto & percept : m_sight->run(vision_source)) {
             tar.targets.emplace_back(percept.target, percept.visibility);
         }
@@ -687,7 +689,7 @@ private:
 
     }
 
-    std::unique_ptr<tdp::Sighting> m_sight = tdp::Sighting::make_instance();
+    std::unique_ptr<tdp::Sighting> m_sight = tdp::temporary::make_sighting_nsquared_instance();// tdp::Sighting::make_instance();
     sf::RenderTarget & target;
 };
 
@@ -847,7 +849,7 @@ private:
         }
     }
 
-    tdp::TdpHandlerPtr m_handle = tdp::TopDownPhysicsHandler::make_instance();
+    tdp::TdpHandlerPtr m_handle = tdp::temporary::make_quadratic_tdp_physics_instance(); //tdp::TopDownPhysicsHandler::make_instance();
 };
 
 
@@ -1414,7 +1416,7 @@ void run_demo() {
                                 VerticiesMovementSystem(), RdFadeSystem(),
                                 ShadowImageSystem(), MatFlashSystem(),
                                 LifetimeSystem()),
-                std::tie(col_sys/*, tar_sys*/)));
+                std::tie(col_sys, tar_sys)));
             run_systems(ent_mana, std::tie(spdisplay));
             ent_mana.process_deletion_requests();
         }

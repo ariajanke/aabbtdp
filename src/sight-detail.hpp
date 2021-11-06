@@ -6,6 +6,8 @@
 
 #include <common/Vector2Util.hpp>
 
+#include <variant>
+
 namespace tdp {
 
 namespace detail {
@@ -91,6 +93,10 @@ public:
     std::vector<std::tuple<Vector, Vector>> make_image_lines(Vector source, std::vector<std::tuple<Vector, Vector>> && = std::vector<std::tuple<Vector, Vector>>{}) const;
 
 private:
+
+    template <bool kt_using_spatial_map>
+    void prepare_spatial_map();
+
     // input
     std::vector<Entry> m_preentries;
 
@@ -101,7 +107,21 @@ private:
     Percept find_percept_of(Vector source, const ImageEntry &) const;
 
     // any "workspace" variables
+    using ElementContainer = RadialSpatialMap::ElementContainer;
+    mutable ElementContainer m_temp_cont;
     RadialSpatialMap m_spatial_map;
+    std::vector<ImageEntry> m_entries;
+};
+
+class QuadraticSightingComplete final : public Sighting {
+public:
+    void add_entry(const Entry &) final;
+
+    const std::vector<Percept> & run(Vector source) final;
+
+private:
+    std::vector<Entry> m_preentries;
+    std::vector<Percept> m_percepts;
     std::vector<ImageEntry> m_entries;
 };
 

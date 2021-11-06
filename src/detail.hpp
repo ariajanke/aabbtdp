@@ -75,48 +75,112 @@ struct PushPair {
 // ----------------------------------------------------------------------------
 
 using EntryEntityRefMap = std::unordered_map<EntityRef, FullEntry, ecs::EntityHasher>;
+using EntryMapView      = View<EntryEntityRefMap::iterator>;
 
 // ----------------------------------------------------------------------------
 
-// let's further break this class up
-//
-class TdpHandlerComplete final : public TopDownPhysicsHandler {
+class TdpHandlerEntryInformation : public TopDownPhysicsHandler {
 public:
-    void update_entry(const Entry & entry) final;
-
-    void run(EventHandler &) final;
-
-    void set_collision_matrix_(CollisionMatrix &&) final;
-
     const CollisionMatrix & collision_matrix() const final
         { return m_col_matrix; }
 
+    void update_entry(const Entry & entry) final;
+
+protected:
+    EntryMapView entries_view()
+        { return View{m_entries.begin(), m_entries.end()}; }
+
+    auto entries_view() const
+        { return View{m_entries.begin(), m_entries.end()}; }
+
+    // intented to be called once per call to "run"
+    // uh oh... this should never be called by any "TdpHandlerEntryInformation"
+    // method
+    void clean_up_containers();
+
 private:
-    void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
+    void set_collision_matrix_(CollisionMatrix &&) final;
+
+    CollisionMatrix m_col_matrix;
+    EntryEntityRefMap m_entries;
+};
+
+class TdpHandlerCollisionBehaviors : public TdpHandlerEntryInformation {
+public:
+    void run(EventHandler &) final;
+
+protected:
+    void do_collision_work(EventHandler & handler);
+
+    virtual void do_collision_work_on_entry(FullEntry &, EventHandler &) = 0;
+
+    // should only be called by "do_collision_work_on_entry"
+    void do_collision_work_for_pair(FullEntry & entry, const FullEntry & other_entry, EventHandler &);
+
+    virtual void get_next_pushables_for_entry(FullEntry &, std::vector<PushPair> &) = 0;
+
+    // should only be called by "get_next_pushables_for_entry"
+    // possibly adds to the event recorder
+    void add_if_pushable(FullEntry &, FullEntry &, std::vector<PushPair> &);
+
+    void do_post_run(EventHandler &);
+
+    // do whichever prep work (if any) before collision work begins in earnest
+    virtual void prepare_for_collision_work() = 0;
+
+private:
+    void order_and_handle_pushes();
 
     template <typename Iter>
     [[nodiscard]] std::vector<PushPair> get_next_pushables
         (Iter beg, Iter end, std::vector<PushPair> && rv = std::vector<PushPair>());
 
-    void clean_up_containers();
+    EventRecorder m_event_recorder;
+
+    // recycled containers
+    std::vector<PushPair> m_recycled_pushpairs_a, m_recycled_pushpairs_b;
+    std::vector<FullEntry *> m_recycled_order;
+};
+
+// let's further break this class up
+//
+class TdpHandlerComplete final : public TdpHandlerCollisionBehaviors {
+    void prepare_for_collision_work() final;
+
+    void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
     void order_and_handle_pushes();
 
-    void do_collision_work(EventHandler &);
+    void do_collision_work_on_entry(FullEntry &, EventHandler &) final;
+
+    void get_next_pushables_for_entry(FullEntry &, std::vector<PushPair> &) final;
 
     SpatialMapFront m_spatial_map;
 
     // ofc this means, each new entry will be asking for a few thousands of
     // instructions to allocate a map entry
-    EntryEntityRefMap m_entries;
+
     std::vector<EntrySpatialRef> m_entry_refs;
+};
 
-    EventRecorder m_event_recorder;
-    CollisionMatrix m_col_matrix;
+class QuadraticTdpHandler final : public TdpHandlerCollisionBehaviors {
+public:
+    void prepare_for_collision_work() final {}
 
-    // recycled containers
-    std::vector<PushPair> m_recycled_pushpairs_a, m_recycled_pushpairs_b;
-    std::vector<FullEntry *> m_recycled_order;
+private:
+    void do_collision_work_on_entry(FullEntry & entry, EventHandler & handler) final {
+        for (const auto & pair : entries_view()) {
+            do_collision_work_for_pair(entry, pair.second, handler);
+        }
+    }
+
+    void get_next_pushables_for_entry(FullEntry & entry, std::vector<PushPair> & rv) final {
+        for (auto & pair : entries_view()) {
+            add_if_pushable(entry, pair.second, rv);
+        }
+    }
+
+    void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 };
 
 // ----------------------------------------------------------------------------
@@ -148,6 +212,9 @@ inline bool operator != (const HitSide & lhs, const HitSide & rhs) { return !are
 /** @returns zero vector if there is no need for push */
 std::tuple<Vector, HitSide> find_min_push_displacement
     (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+std::vector<FullEntry *> prioritized_entries
+    (EntryMapView, std::vector<FullEntry *> &&);
 
 std::vector<FullEntry *> prioritized_entries
     (EntryEntityRefMap &, std::vector<FullEntry *> &&);

@@ -250,7 +250,7 @@ private:
 template <typename Element, typename HorzGetters, typename VertGetters, typename IterType>
 FactoryChoice choose_map_for_iterators(IterType beg, IterType end, int depth) {
     static constexpr const int k_depth_max           = 1024;
-    static constexpr const int k_few_enough_for_flat =   16;
+    static constexpr const int k_few_enough_for_flat =    8;
 
     //return k_should_use_flat;
 
