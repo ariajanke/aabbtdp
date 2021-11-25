@@ -84,12 +84,14 @@ using EntryMapView      = View<EntryEntityRefMap::iterator>;
 
 // ----------------------------------------------------------------------------
 
-class TdpHandlerEntryInformation : public TopDownPhysicsHandler {
+class TdpHandlerEntryInformation /*: public Physics2DHandler*/ {
 public:
-    const CollisionMatrix & collision_matrix() const final
+    const CollisionMatrix & collision_matrix() const
         { return m_col_matrix; }
 
-    void update_entry(const Entry & entry) final;
+    void update_entry(const Entry & entry) ;
+
+    void set_collision_matrix_(CollisionMatrix &&) ;
 
 protected:
     EntryMapView entries_view()
@@ -109,16 +111,24 @@ protected:
         return &itr->second;
     }
 #   endif
-private:
-    void set_collision_matrix_(CollisionMatrix &&) final;
 
+private:
     CollisionMatrix m_col_matrix;
     EntryEntityRefMap m_entries;
 };
 
-class TdpHandlerCollisionBehaviors : public TdpHandlerEntryInformation {
+class TdpHandlerCollisionBehaviors :
+    public TdpHandlerEntryInformation,
+    public Physics2DHandler
+{
 public:
     void run(EventHandler &) final;
+
+    const CollisionMatrix & collision_matrix() const final
+        { return TdpHandlerEntryInformation::collision_matrix(); }
+
+    void update_entry(const Entry & entry) final
+        { TdpHandlerEntryInformation::update_entry(entry); }
 
 protected:
     // iteration here
@@ -141,6 +151,9 @@ protected:
     virtual void prepare_for_collision_work() = 0;
 
 private:
+    void set_collision_matrix_(CollisionMatrix && colmat)
+        { TdpHandlerEntryInformation::set_collision_matrix_(std::move(colmat)); }
+
     void order_and_handle_pushes();
 
     template <typename Iter>

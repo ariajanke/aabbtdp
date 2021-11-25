@@ -173,11 +173,25 @@ void SweepContainer::for_each(OnPairWise && do_pair_wise, PostGlob && post_glob)
     for_each_sequence(impl);
 }
 
-class IntervalSweepHandler final : public TdpHandlerEntryInformation {
+class IntervalSweepHandler final :
+    public TdpHandlerEntryInformation,
+    public SweepSwitchPhysicsHandler
+{
 public:
     void run(EventHandler &) final;
 
+    void check_to_switch_axis() final {}
+
+    const CollisionMatrix & collision_matrix() const final
+        { return TdpHandlerEntryInformation::collision_matrix(); }
+
+    void update_entry(const Entry & entry) final
+        { TdpHandlerEntryInformation::update_entry(entry); }
+
 private:
+    void set_collision_matrix_(CollisionMatrix && colmat) final
+        { TdpHandlerEntryInformation::set_collision_matrix_(std::move(colmat)); }
+
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
     EventRecorder m_event_recorder;

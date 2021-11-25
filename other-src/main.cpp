@@ -90,7 +90,7 @@ int main() {
 
 namespace {
 
-auto make_tdp_handler() { return tdp::TopDownPhysicsHandler::make_instance(); }
+auto make_tdp_handler() { return tdp::Physics2DHandler::make_default_instance(); }
 
 class ColSystem final : public EntityA::SystemType {
 public:
@@ -499,7 +499,7 @@ void do_collision_matrix_tests(cul::ts::TestSuite & suite) {
         auto e = eman.make_entity();
         e.add<Rectangle>() = Rectangle(10, 10, 10, 10);
         e.add<Layer>() = layers::k_block;
-        auto uptr = tdp::TopDownPhysicsHandler::make_instance();
+        auto uptr = make_tdp_handler();
         bool ok = false;
         try {
             uptr->update_entry(to_tdp_entry(e, 1. / 60.));
@@ -522,7 +522,7 @@ void do_td_physics_tests(TestSuite & suite) {
     // this is interface level stuff!
     suite.start_series("Entry");
     set_context(suite, [](TestSuite & suite, Unit & unit) {
-        auto uptr = tdp::TopDownPhysicsHandler::make_instance();
+        auto uptr = tdp::Physics2DHandler::make_default_instance();
         uptr->set_collision_matrix(make_collision_matrix());
         tdp::Entry entry;
         entry.bounds = Rectangle(0, 0, 10, -10);

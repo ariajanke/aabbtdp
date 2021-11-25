@@ -88,16 +88,8 @@ ImageEntry make_image(Vector source, const Entry &);
 /* static */ std::unique_ptr<Sighting> Sighting::make_instance()
     { return std::make_unique<SightingComplete>(); }
 
-namespace tdp {
-
-namespace temporary {
-
-std::unique_ptr<Sighting> make_sighting_nsquared_instance()
+/* static */ std::unique_ptr<Sighting> Sighting::make_quadratic_instance()
     { return std::make_unique<QuadraticSightingComplete>(); }
-
-} // end of temporary namespace -> into ::tdp
-
-} // end of tdp namespace
 
 // ----------------------------------------------------------------------------
 

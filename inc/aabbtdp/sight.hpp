@@ -52,6 +52,11 @@ public:
     /// data structures that accompany it.
     static std::unique_ptr<Sighting> make_instance();
 
+    /// Creates an instance which always runs in O(n^2)
+    ///
+    /// This function exist to ease testing
+    static std::unique_ptr<Sighting> make_quadratic_instance();
+
     // an unobstructed entry with an opacity of 1 will result in a
     // percept with a visibility of 1
 
@@ -107,11 +112,5 @@ public:
     ///
     virtual const std::vector<Percept> & run(Vector source) = 0;
 };
-
-namespace temporary {
-
-std::unique_ptr<Sighting> make_sighting_nsquared_instance();
-
-} // end of temporary namespace -> into ::tdp
 
 } // end of tdp namespace

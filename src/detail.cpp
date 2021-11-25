@@ -137,7 +137,7 @@ void TdpHandlerEntryInformation::update_entry(const Entry & entry) {
     }
 }
 
-/* private */ void TdpHandlerEntryInformation::set_collision_matrix_
+void TdpHandlerEntryInformation::set_collision_matrix_
     (CollisionMatrix && matrix)
 {
     using VecI = CollisionMatrix::Vector;

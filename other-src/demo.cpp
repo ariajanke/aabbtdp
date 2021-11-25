@@ -702,7 +702,7 @@ private:
 
     }
 
-    std::unique_ptr<tdp::Sighting> m_sight = tdp::temporary::make_sighting_nsquared_instance();// tdp::Sighting::make_instance();
+    std::unique_ptr<tdp::Sighting> m_sight = tdp::Sighting::make_instance();// make_quadratic_instance();
     sf::RenderTarget & target;
 };
 
@@ -865,7 +865,8 @@ private:
     }
 
     tdp::TdpHandlerPtr m_handle =
-        tdp::temporary::make_2nd_sweep_attempt_instance();
+        tdp::Physics2DHandler::make_default_instance();
+        //tdp::SweepSwitchPhysicsHandler::make_instance();
         //tdp::temporary::make_quadratic_tdp_physics_instance();
         //tdp::TopDownPhysicsHandler::make_instance();
 };
@@ -1151,6 +1152,17 @@ void run_demo() {
             e.add<DrawRectangle>().set_color(sf::Color(128, 18, 128));
             e.add<Rectangle>() = Rectangle{Real(i % 10)*10 + 1,
                                            Real(i / 10)*10 + 1, 10, 10};
+            e.add<Pushable>();
+            e.add<Name>() = "P" + std::to_string(i);
+        }
+    }));
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
+        static constexpr const int k_pushers = 100;
+        for (int i = 0; i != k_pushers; ++i) {
+            auto e = maker.make_entity();
+            e.add<DrawRectangle>().set_color(sf::Color(128, 18, 128));
+            e.add<Rectangle>() = Rectangle{Real(i % 10)*50 + 1,
+                                           Real(i / 10)*50 + 1, 10, 10};
             e.add<Pushable>();
             e.add<Name>() = "P" + std::to_string(i);
         }

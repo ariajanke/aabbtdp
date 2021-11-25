@@ -34,12 +34,11 @@
 
 #include <memory>
 
-// if I want this to be a library, then a namespace is needed
 namespace tdp {
 
 using ecs::EntityRef;
-class TopDownPhysicsHandler;
-using TdpHandlerPtr = std::unique_ptr<TopDownPhysicsHandler>;
+class Physics2DHandler;
+using TdpHandlerPtr = std::unique_ptr<Physics2DHandler>;
 
 /// This structure is meant to represent a physical state related to some
 /// entity.
@@ -187,7 +186,7 @@ constexpr const auto k_reflect     = InteractionClass::k_reflect;
 using CollisionMatrix = cul::Grid<InteractionClass>;
 
 /// This represents the physics handler/updater, which describes and handles
-/// all behavior for Top-Down AABB objects.
+/// all behavior for 2D AABB objects.
 ///
 /// Internals are aggresively hidden, so creating an instance via a static
 /// method returning a unique_ptr is needed. This should not be an issue, as
@@ -195,12 +194,17 @@ using CollisionMatrix = cul::Grid<InteractionClass>;
 ///
 /// This class is not meant to be inherited by the client, and should be used
 /// only by the unique_ptr instance.
-class TopDownPhysicsHandler {
-public:    
-    /// @returns a newly created instance
-    static TdpHandlerPtr make_instance();
+class Physics2DHandler {
+public:
+    /// @returns a newly created default instance.
+    ///
+    /// Presently, it returns an old implementation.
+    ///
+    /// @note Just understand which will be "implementation defined", and may
+    ///       change as the library evolves.
+    static TdpHandlerPtr make_default_instance();
 
-    virtual ~TopDownPhysicsHandler() {}
+    virtual ~Physics2DHandler() {}
 
     /// Sets the collision matrix for the physics handler.
     ///
@@ -234,12 +238,6 @@ public:
     /// callbacks.
     ///
     /// This will automatically delete records for entities that have expired.
-    ///
-    /// @note The present implementation is currently O(n^2)
-    ///       In the future this maybe reduced to O(max(n log n, m^2)), where
-    ///       m is the number of mutually overlapping rectangles. So in this
-    ///       hypothetical future version O(n^2) like performance would still
-    ///       easily be quite possible.
     virtual void run(EventHandler &) = 0;
 
     /// Uses backend container to find all entries that overlap the given
@@ -264,15 +262,90 @@ protected:
     virtual void find_overlaps_(const Rectangle &, const OverlapInquiry &) const = 0;
 };
 
-namespace temporary {
+/// This implementation uses a grid to seperate and limit entry interactions.
+///
+/// @note each grid cell is individually allocated, but the number of instance
+///       creations will be limited by which cells will be occupied
+class GridPhysicsHandler : public Physics2DHandler {
+public:
+    /// Since this is implementation is not finished, this function will always
+    /// throw a runtime error.
+    /// @warning UNFINISHED
+    /// @throws Always throws
+    [[noreturn]] static std::unique_ptr<GridPhysicsHandler> make_instance();
 
-TdpHandlerPtr make_quadratic_tdp_physics_instance();
-TdpHandlerPtr make_2nd_sweep_attempt_instance();
+    /// Sets the top left position of the origin grid cell.
+    ///
+    /// Other cells will be located at:
+    /// (x*grid_width + offset.x, y*grid_height + offset.y)
+    /// @param offset top left of the origin grid cell
+    virtual void set_offset(Vector offset) = 0;
 
-} // end of temporary namespace -> into ::tdp
+    /// Sets the size of each grid cell.
+    ///
+    /// @warning This will clear the grid and delete all cells. The grid will
+    ///          be repopulated later.
+    /// @param cell_width  New cell width
+    /// @param cell_height New cell height
+    ///
+    virtual void reset_grid_size(Real cell_width, Real cell_height) = 0;
+
+    /// Deletes any unoccupied cell.
+    ///
+    /// The user may determine the rate at which the cells are removed.
+    /// Deleting them every frame *might* be excessive (don't know without
+    /// testing).
+    virtual void delete_empty_cells() = 0;
+};
+
+/// This implementation uses an interval sweep algorithm to limit the number
+/// of entry interactions.
+///
+/// By default, sweeps are done along the x-axis. It is possible for this to
+/// change.
+class SweepSwitchPhysicsHandler : public Physics2DHandler {
+public:
+    /// @returns a new handler instance that uses interval sweep
+    static std::unique_ptr<SweepSwitchPhysicsHandler> make_instance();
+
+    /// Counts the number of interactions along both axises and then switches
+    /// the handler to run along the axis with the least number of
+    /// interactions.
+    ///
+    /// @note calling every frame may not be desirable, as this can be a pretty
+    ///       heavy operation
+    virtual void check_to_switch_axis() = 0;
+};
+
+/// This implementation uses an AABB Tree to limit the number of entry
+/// interactions.
+class AABBTreePhysicsHandler : public Physics2DHandler {
+public:
+    /// Since this is implementation is not finished, this function will always
+    /// throw a runtime error.
+    /// @warning UNFINISHED
+    /// @throws Always throws
+    [[noreturn]] static std::unique_ptr<AABBTreePhysicsHandler> make_instance();
+
+    /// Forces the handler the recheck the structure of the entire tree, rather
+    /// than allow the implementation to update the underlying structure.
+    virtual void force_structure_recheck() = 0;
+};
+
+/// This is the trivial quatratic implementation, it is guaranteed to take
+/// O(n^2) time.
+///
+/// This exists mostly for testing purposes.
+class QuadraticPhysicsHandler : public Physics2DHandler {
+public:
+    /// @returns a new handler instance that uses a trivial quadratic algorithm
+    static std::unique_ptr<Physics2DHandler> make_instance();
+};
+
+// ----------------------------------------------------------------------------
 
 template <typename Func>
-void TopDownPhysicsHandler::find_overlaps(const Rectangle & rect, Func && f) {
+void Physics2DHandler::find_overlaps(const Rectangle & rect, Func && f) {
     struct Inst final : public OverlapInquiry {
         explicit Inst(Func && f): m_func(std::move(f)) {}
         void operator () (const Entry & entry) const final { m_func(entry); }

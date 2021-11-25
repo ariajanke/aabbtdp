@@ -29,30 +29,46 @@
 #include "physics-interval-sweep.hpp"
 #include "detail.hpp"
 
+namespace {
+
+using namespace cul::exceptions_abbr;
+using std::make_unique;
+
+} // end of <anonymous> namespace
+
 namespace tdp {
 
-/* static */ std::unique_ptr<TopDownPhysicsHandler>
-    TopDownPhysicsHandler::make_instance()
-{ return std::make_unique<detail::TdpHandlerComplete>(); }
+/* static */ TdpHandlerPtr Physics2DHandler::make_default_instance()
+    { return make_unique<tdp::detail::TdpHandlerComplete>(); }
 
-void TopDownPhysicsHandler::set_collision_matrix(CollisionMatrix && matrix)
+void Physics2DHandler::set_collision_matrix(CollisionMatrix && matrix)
     { set_collision_matrix_(std::move(matrix)); }
 
-void TopDownPhysicsHandler::set_collision_matrix(const CollisionMatrix & matrix) {
+void Physics2DHandler::set_collision_matrix(const CollisionMatrix & matrix) {
     auto t = matrix;
     set_collision_matrix_(std::move(t));
 }
 
+/* static */ [[noreturn]]
+    std::unique_ptr<GridPhysicsHandler> GridPhysicsHandler::make_instance()
+{
+    throw RtError("GridPhysicsHandler::make_instance: this implementation is "
+                  "not finished.");
+}
 
-namespace temporary {
+/* static */ std::unique_ptr<SweepSwitchPhysicsHandler>
+    SweepSwitchPhysicsHandler::make_instance()
+{ return make_unique<tdp::detail::IntervalSweepHandler>(); }
 
-TdpHandlerPtr make_quadratic_tdp_physics_instance()
-    { return std::make_unique<detail::QuadraticTdpHandler>(); }
+/* static */ [[noreturn]] std::unique_ptr<AABBTreePhysicsHandler>
+    AABBTreePhysicsHandler::make_instance()
+{
+    throw RtError("AABBTreePhysicsHandler::make_instance: this implementation "
+                  "is not finished.");
+}
 
-TdpHandlerPtr make_2nd_sweep_attempt_instance()
-    { return std::make_unique<detail::IntervalSweepHandler>(); }
-
-} // end of temporary namespace -> into ::tdp
+/* static */ TdpHandlerPtr QuadraticPhysicsHandler::make_instance()
+    { return make_unique<tdp::detail::QuadraticTdpHandler>(); }
 
 } // end of tdp namespace
 
