@@ -18,7 +18,8 @@ linux {
 
 QMAKE_CXXFLAGS += -std=c++17 -DMACRO_COMPILER_GCC
 QMAKE_LFLAGS   += -std=c++17
-LIBS           += -lsfml-graphics -lsfml-window -lsfml-system -lcommon
+LIBS           += -lsfml-graphics -lsfml-window -lsfml-system -lcommon \
+                  -pthread
 
 SOURCES += \
     ../other-src/main.cpp \
@@ -26,7 +27,8 @@ SOURCES += \
     ../other-src/spatial-map-unit-tests-n.cpp \
     ../src/detail.cpp \
     ../src/physics.cpp \
-    ../src/helpers.cpp
+    ../src/helpers.cpp \
+    ../src/physics-interval-sweep.cpp
 
 QMAKE_CXXFLAGS += -DMACRO_BUILD_DEMO
 SOURCES        += ../other-src/demo.cpp
@@ -40,6 +42,7 @@ HEADERS += \
     ../src/SpatialMapN.hpp \
     ../src/detail.hpp \
     ../src/helpers.hpp \
+    ../src/physics-interval-sweep.hpp \
     ../inc/aabbtdp/physics.hpp \
     ../other-src/demo.hpp \
     ../inc/aabbtdp/sight.hpp \

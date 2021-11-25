@@ -196,8 +196,7 @@ using CollisionMatrix = cul::Grid<InteractionClass>;
 /// This class is not meant to be inherited by the client, and should be used
 /// only by the unique_ptr instance.
 class TopDownPhysicsHandler {
-public:
-
+public:    
     /// @returns a newly created instance
     static TdpHandlerPtr make_instance();
 
@@ -268,6 +267,7 @@ protected:
 namespace temporary {
 
 TdpHandlerPtr make_quadratic_tdp_physics_instance();
+TdpHandlerPtr make_2nd_sweep_attempt_instance();
 
 } // end of temporary namespace -> into ::tdp
 

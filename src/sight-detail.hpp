@@ -1,12 +1,34 @@
+/****************************************************************************
+
+    MIT License
+
+    Copyright (c) 2021 Aria Janke
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+*****************************************************************************/
+
 #pragma once
 
 #include <aabbtdp/sight.hpp>
 
-#include "../src/SpatialMap.hpp"
-
 #include <common/Vector2Util.hpp>
-
-#include <variant>
 
 namespace tdp {
 
@@ -34,6 +56,7 @@ struct ImageEntry {
     Real opactity = 1;
     // can always convert to polar at any time
     // these two points define the images' location
+    // conversion incurs a cost...
     Vector anchor_low, anchor_high;
     // how do I describe a complete overlap?
     // perhaps sentinel values
@@ -41,39 +64,6 @@ struct ImageEntry {
 
 inline bool completely_overlaps_source(const ImageEntry & image)
     { return image.anchor_low == image.anchor_high; }
-
-class AngleGetters final : public SpatialMapElementGetters<ImageEntry> {
-public:
-    Real get_low(const ImageEntry & entry) const final;
-
-    Real get_high(const ImageEntry & entry) const final;
-
-    Real domain_min() const final;
-
-    Real domain_max() const final;
-};
-
-// this is a bit more of an interesting challenge, because objects may wrap
-// around from k_pi*2 - e to 0
-class ImageSpatialMapFactory final : public SpatialMapFactory<ImageEntry> {
-public:
-    MapBase & choose_map_for(SetElIterator beg, SetElIterator end, int depth) final;
-
-private:
-    using FlatMap = FlatSpatialMap<ImageEntry>;
-    using PartMap = PartitionedSpatialMap<ImageEntry, AngleGetters, ImageSpatialMapFactory>;
-
-    static constexpr const int k_fork_thershold =   16;
-    static constexpr const int k_depth_max      = 1024;
-
-    static bool too_many_shared(const SpatialMapCounts & counts)
-        { return counts.shared > sum_counts(counts)*2 / 3; }
-
-    FlatMap m_flat;
-    std::unique_ptr<PartMap> m_part_ptr;
-};
-
-using RadialSpatialMap = SpatialMap<ImageEntry, ImageSpatialMapFactory>;
 
 inline bool are_same(const PolarVector & lhs, const PolarVector & rhs)
     { return lhs.r == rhs.r && lhs.theta == rhs.theta; }
@@ -84,18 +74,24 @@ inline bool operator == (const PolarVector & lhs, const PolarVector & rhs)
 inline bool operator != (const PolarVector & lhs, const PolarVector & rhs)
     { return !are_same(lhs, rhs); }
 
+// perfect for sweep interval, as it's only 1D!
 class SightingComplete final : public Sighting {
 public:
+    using VectorPairs = std::vector<std::tuple<Vector, Vector>>;
+    // if number of entries exceed this, "sweep interval" algorithm is used
+    //
+    // this should be performance tested to find an appropriate value
+    static constexpr const int k_sweep_thershold = 12;
+
     void add_entry(const Entry &) final;
 
     const std::vector<Percept> & run(Vector source) final;
 
-    std::vector<std::tuple<Vector, Vector>> make_image_lines(Vector source, std::vector<std::tuple<Vector, Vector>> && = std::vector<std::tuple<Vector, Vector>>{}) const;
+    VectorPairs make_image_lines
+        (Vector source, VectorPairs && = VectorPairs{}) const;
 
 private:
-
-    template <bool kt_using_spatial_map>
-    void prepare_spatial_map();
+    void run_sweep_interval(Vector source);
 
     // input
     std::vector<Entry> m_preentries;
@@ -103,13 +99,7 @@ private:
     // output
     std::vector<Percept> m_percepts;
 
-    // try to restrain to O(log n) since this is in a O(n) loop
-    Percept find_percept_of(Vector source, const ImageEntry &) const;
-
-    // any "workspace" variables
-    using ElementContainer = RadialSpatialMap::ElementContainer;
-    mutable ElementContainer m_temp_cont;
-    RadialSpatialMap m_spatial_map;
+    // workspace
     std::vector<ImageEntry> m_entries;
 };
 
@@ -145,6 +135,9 @@ struct SightingUnitTestFunctions {
         (ImageEntry & image, const ImageEntry & other) = nullptr;
 
     Vector (*make_anchor)() = nullptr;
+
+    // I don't have tests yet :c
+    bool (*images_overlap)(const ImageEntry &, const ImageEntry &) = nullptr;
 };
 
 } // end of detail namespace -> into ::tdp

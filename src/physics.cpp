@@ -26,6 +26,7 @@
 
 #include <aabbtdp/physics.hpp>
 
+#include "physics-interval-sweep.hpp"
 #include "detail.hpp"
 
 namespace tdp {
@@ -47,6 +48,9 @@ namespace temporary {
 
 TdpHandlerPtr make_quadratic_tdp_physics_instance()
     { return std::make_unique<detail::QuadraticTdpHandler>(); }
+
+TdpHandlerPtr make_2nd_sweep_attempt_instance()
+    { return std::make_unique<detail::IntervalSweepHandler>(); }
 
 } // end of temporary namespace -> into ::tdp
 

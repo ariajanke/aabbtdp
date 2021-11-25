@@ -93,63 +93,10 @@ private:
     std::unique_ptr<VertMap> m_vert;
 };
 
+
 template <typename ValueType, typename ObjIntf>
 std::enable_if_t<kt_is_sp_element_getters<ObjIntf, ValueType>, Real>
-    get_division_for(SpIterator<ValueType> beg, SpIterator<ValueType> end, ObjIntf)
-{
-    // beg to end need not be sorted here
-    if (end == beg) return 0;
-
-    Real avg = 0;
-    for (auto itr = beg; itr != end; ++itr) {
-        avg += (ObjIntf{}.get_high(**itr) + ObjIntf{}.get_low(**itr)) / 2;
-    }
-    avg /= Real(end - beg);
-
-    auto mcounts = get_counts<ValueType, ObjIntf>(avg, beg, end);
-
-    //pivot_sort_around<ValueType, ObjIntf>(beg, end, avg);
-
-    auto mid = beg + (end - beg) / 2;
-    auto mid_low  = ObjIntf{}.get_low (**mid);
-    auto mid_high = ObjIntf{}.get_high(**mid);
-    auto late_div  = mid_high + (mid_high - mid_low)*0.005;
-    auto early_div = mid_low  - (mid_high - mid_low)*0.005;
-    auto lcounts = get_counts<ValueType, ObjIntf>(late_div , beg, end);
-    auto hcounts = get_counts<ValueType, ObjIntf>(early_div, beg, end);
-
-    // at least five iterations... yuck!
-    if (prefer_lhs_counts(mcounts, lcounts) && prefer_lhs_counts(mcounts, hcounts)) {
-        return avg;
-    }
-    return (prefer_lhs_counts(lcounts, hcounts)) ? mid_low : mid_high;
-#   if 0
-
-    return prefer_lhs_counts(lcounts, ecounts) ? late_div : early_div;
-#   endif
-#   if 0
-    // let's try a weight based on how far it is from the average point
-    // so that farther objects more strongly drag the division toward it
-    Real x_avg = 0;
-    auto get_x_itr = [](SpIterator<ValueType> itr) {
-        auto low = ObjIntf{}.get_low(**itr);
-        return low + (ObjIntf{}.get_high(**itr) - low) / 2;
-    };
-    for (auto itr = beg; itr != end; ++itr) {
-        x_avg += get_x_itr(itr);
-    }
-    x_avg /= (end - beg);
-    Real sum_diff = 0, sum_weights = 0;
-    for (auto itr = beg; itr != end; ++itr) {
-        auto pos  = get_x_itr(itr);
-        auto diff = cul::magnitude(x_avg - pos);
-
-        sum_diff    += diff;
-        sum_weights += diff*pos;
-    }
-    return sum_weights / sum_diff;
-#   endif
-}
+    get_division_for(SpIterator<ValueType> beg, SpIterator<ValueType> end, ObjIntf);
 
 using FullEntrySpatialMap = SpatialMap<EntrySpatialRef, SpEntryFactory>;
 
@@ -244,6 +191,105 @@ private:
     PointerContainer m_recycled_cont;
     ElementContainer m_entry_cont;
 };
+
+// ----------------------------- level 0 helpers ------------------------------
+
+enum Direction : uint8_t { k_left, k_right, k_down, k_up, k_direction_count };
+
+struct HitSide {
+    HitSide() {}
+    HitSide(Direction h_, Direction v_):
+        horizontal(h_), vertical(v_)
+    {}
+    Direction horizontal = k_direction_count;
+    Direction vertical   = k_direction_count;
+};
+
+inline bool are_same(const HitSide & lhs, const HitSide & rhs)
+    { return lhs.horizontal == rhs.horizontal && lhs.vertical == rhs.vertical; }
+
+inline bool operator == (const HitSide & lhs, const HitSide & rhs) { return  are_same(lhs, rhs); }
+
+inline bool operator != (const HitSide & lhs, const HitSide & rhs) { return !are_same(lhs, rhs); }
+
+// !I need tests!
+/** @returns zero vector if there is no need for push */
+std::tuple<Vector, HitSide> find_min_push_displacement
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+HitSide trim_displacement_for_barriers
+    (const Rectangle &, Vector barriers, Vector & displacement);
+
+HitSide trim_displacement
+    (const Rectangle &, const Rectangle & other, Vector & displc);
+
+// much more intense written for growing or shrinking rectangles
+bool trespass_occuring
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+Rectangle grow(Rectangle, const Size &);
+
+Rectangle grow_by_displacement(Rectangle, const Vector & displc);
+
+Vector find_barrier_for_displacement(
+    const Vector & displacement,
+    const Vector & positive_barrier, const Vector & negative_barrier);
+
+Rectangle displace(Rectangle, Vector);
+
+#ifdef MACRO_AABBTDP_SHOW_DETAILS_HELPERS
+
+
+// ----------------------------- level 1 helpers ------------------------------
+
+int large_displacement_step_count
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+std::tuple<Vector, HitSide> find_min_push_displacement_small
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+HitSide trim_small_displacement
+    (const Rectangle &, const Rectangle & other, Vector & displc);
+
+// ----------------------------- level 2 helpers ------------------------------
+
+HitSide values_from_displacement(const Vector &);
+
+#endif
+
+// ----------------------------------------------------------------------------
+
+template <typename ValueType, typename ObjIntf>
+std::enable_if_t<kt_is_sp_element_getters<ObjIntf, ValueType>, Real>
+    get_division_for(SpIterator<ValueType> beg, SpIterator<ValueType> end, ObjIntf)
+{
+    // beg to end need not be sorted here
+    if (end == beg) return 0;
+
+    Real avg = 0;
+    for (auto itr = beg; itr != end; ++itr) {
+        avg += (ObjIntf{}.get_high(**itr) + ObjIntf{}.get_low(**itr)) / 2;
+    }
+    avg /= Real(end - beg);
+
+    auto mcounts = get_counts<ValueType, ObjIntf>(avg, beg, end);
+
+    //pivot_sort_around<ValueType, ObjIntf>(beg, end, avg);
+
+    auto mid = beg + (end - beg) / 2;
+    auto mid_low  = ObjIntf{}.get_low (**mid);
+    auto mid_high = ObjIntf{}.get_high(**mid);
+    auto late_div  = mid_high + (mid_high - mid_low)*0.005;
+    auto early_div = mid_low  - (mid_high - mid_low)*0.005;
+    auto lcounts = get_counts<ValueType, ObjIntf>(late_div , beg, end);
+    auto hcounts = get_counts<ValueType, ObjIntf>(early_div, beg, end);
+
+    // at least five iterations... yuck!
+    if (prefer_lhs_counts(mcounts, lcounts) && prefer_lhs_counts(mcounts, hcounts)) {
+        return avg;
+    }
+    return (prefer_lhs_counts(lcounts, hcounts)) ? mid_low : mid_high;
+}
 
 // ----------------------------------------------------------------------------
 

@@ -29,6 +29,8 @@
 #include "../src/sight-detail.hpp"
 #include "../src/SpatialMap.hpp"
 #include "../src/helpers.hpp"
+#include "../src/detail.hpp"
+#include "../src/physics-interval-sweep.hpp"
 
 #include <aabbtdp/sight.hpp>
 //#include "../src/PartitionBoxMap.hpp"
@@ -507,7 +509,11 @@ private:
 class DrawSystem final : public RdSystem {
 public:
     static constexpr const auto k_chosen_font = cul::BitmapFont::k_8x8_highlighted_font;
-    DrawSystem(sf::RenderTarget & target_): target(target_) {}
+    DrawSystem(sf::RenderTarget & target_, ecs::EntityRef m_player_ref):
+        m_player_ref(m_player_ref), target(target_)
+    {
+        swp_ptr->set_collision_matrix(make_collision_matrix());
+    }
 
 private:
     void update(const ContainerView & view) final {
@@ -529,13 +535,18 @@ private:
 #       endif
         for (auto & e : view) {
             draw_entity(e, false);
+
+            if (!e.has<Rectangle>()) continue;
+            swp_ptr->update_entry(to_tdp_entry(e, k_demo_et_value));
         }
+
         auto old_view = target.getView();
         auto new_view = old_view;
         new_view.setCenter(new_view.getSize()*0.5f);
         target.setView(new_view);
         for (auto & e : view) {
             draw_entity(e, true);
+
         }
         target.setView(old_view);
     }
@@ -558,6 +569,8 @@ private:
         }
     }
 
+    ecs::EntityRef m_player_ref;
+    std::unique_ptr<tdp::detail::IntervalSweepHandler> swp_ptr = std::make_unique<tdp::detail::IntervalSweepHandler>();
     sf::RenderTarget & target;
 };
 
@@ -818,7 +831,9 @@ private:
     void update(const ContainerView & view) final {
         for (auto & e : view) {
             if (!e.has<Rectangle>()) continue;
-            m_handle->update_entry(to_tdp_entry(e, k_demo_et_value));
+            auto entry = to_tdp_entry(e, k_demo_et_value);
+            //entry.collision_layer = layers::k_passive;
+            m_handle->update_entry(entry);
         }
         DefaultEventHandler def_handler;
         m_handle->run(def_handler);
@@ -849,7 +864,10 @@ private:
         }
     }
 
-    tdp::TdpHandlerPtr m_handle = tdp::temporary::make_quadratic_tdp_physics_instance(); //tdp::TopDownPhysicsHandler::make_instance();
+    tdp::TdpHandlerPtr m_handle =
+        tdp::temporary::make_2nd_sweep_attempt_instance();
+        //tdp::temporary::make_quadratic_tdp_physics_instance();
+        //tdp::TopDownPhysicsHandler::make_instance();
 };
 
 
@@ -1327,6 +1345,14 @@ void run_demo() {
             }
         });
     }));
+
+    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
+        auto e = maker.make_entity();
+        e.add<DrawRectangle>().set_color(sf::Color(100, 100, 200));
+        e.add<Rectangle    >() = make_rect_from_center(Vector(-100, -100), Size2(180, 80));
+        e.add<Layer        >() = layers::k_block;
+    }));
+
     RdColSystem col_sys;
     sf::RenderWindow window(sf::VideoMode(k_window_width, k_window_height), " ");
     {
@@ -1412,12 +1438,12 @@ void run_demo() {
             frame_advance_step = false;
             scenes.on_update(ent_mana);
             run_systems(ent_mana, std::tuple_cat(
-                std::make_tuple(DrawSystem(window),
+                std::make_tuple(DrawSystem(window, player),
                                 VerticiesMovementSystem(), RdFadeSystem(),
                                 ShadowImageSystem(), MatFlashSystem(),
                                 LifetimeSystem()),
                 std::tie(col_sys, tar_sys)));
-            run_systems(ent_mana, std::tie(spdisplay));
+            //run_systems(ent_mana, std::tie(spdisplay));
             ent_mana.process_deletion_requests();
         }
         [&window, &fps_counter, &fps_text, &clock] {

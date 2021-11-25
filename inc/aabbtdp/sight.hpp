@@ -80,26 +80,14 @@ public:
 
     virtual ~Sighting() {}
 
-    // going to start with other AABBs first
-    // all entries that are added are taken as being in the FOV
+    /// Adds a new AABB that maybe "seen" by this handler
+    ///
+    /// Other AABBs which are added between "run" calls will also be a part of
+    /// sighting computations. This should not be called for an object not
+    /// visible at all for any other reason.
     virtual void add_entry(const Entry &) = 0;
-#   if 0
-    /// Updates each entry
-    ///
-    ///
-    virtual void update_entry(const Entry &) = 0;
-#   endif
-    // this can very easily turn into O(n^2), but I'm trying to make an
-    // implementation that avoid it (try to reach O(n log n))
-    //
-    // In game there are many ways I can limit the number of entries sent
-    //
 
-    // This function does mutates the state of this Sighting Handler.
-    // This call makes this handler ready for more entries to be added for
-    // additional calls later
-
-    /// Creates percepts for every tracked entry.
+    /// Creates percepts for every added entry.
     ///
     /// Things which control visibility of each target/entry:
     /// - an obstructing entry's opacity will affect how much visibility is lost

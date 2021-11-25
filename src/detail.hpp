@@ -29,6 +29,9 @@
 #include "helpers.hpp"
 
 #include <unordered_map> // incidentally included when compiled with g++
+#include <unordered_set>
+
+#include <cassert>
 
 // Everything in this file is meant to contain implementation details that a
 // client coder need not see
@@ -42,8 +45,6 @@ namespace detail {
 
 constexpr const int k_default_priority = -1;
 
-enum Direction : uint8_t { k_left, k_right, k_down, k_up, k_direction_count };
-
 // ----------------------------------------------------------------------------
 
 struct FullEntry : tdp::Entry {
@@ -51,6 +52,10 @@ struct FullEntry : tdp::Entry {
     int priority = k_default_priority;
     // (I need some way to handle last appearance)
     bool first_appearance = true;
+
+    // for swptry2
+    Vector nudge;
+    Real low_x, low_y, high_x, high_y;
 };
 
 inline void frame_reset(FullEntry & entry) {
@@ -97,7 +102,13 @@ protected:
     // uh oh... this should never be called by any "TdpHandlerEntryInformation"
     // method
     void clean_up_containers();
-
+#   if 0
+    [[deprecated]] const FullEntry * find_entry(EntityRef ref) const {
+        auto itr = m_entries.find(ref);
+        if (itr == m_entries.end()) return nullptr;
+        return &itr->second;
+    }
+#   endif
 private:
     void set_collision_matrix_(CollisionMatrix &&) final;
 
@@ -110,6 +121,7 @@ public:
     void run(EventHandler &) final;
 
 protected:
+    // iteration here
     void do_collision_work(EventHandler & handler);
 
     virtual void do_collision_work_on_entry(FullEntry &, EventHandler &) = 0;
@@ -145,8 +157,10 @@ private:
 // let's further break this class up
 //
 class TdpHandlerComplete final : public TdpHandlerCollisionBehaviors {
+public:
     void prepare_for_collision_work() final;
 
+private:
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
     void order_and_handle_pushes();
@@ -183,42 +197,24 @@ private:
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 };
 
-// ----------------------------------------------------------------------------
-
-struct HitSide {
-    HitSide() {}
-    HitSide(Direction h_, Direction v_):
-        horizontal(h_), vertical(v_)
-    {}
-    Direction horizontal = k_direction_count;
-    Direction vertical   = k_direction_count;
-};
-
 // --------------------------------- Helpers ----------------------------------
-
-inline bool are_same(const HitSide & lhs, const HitSide & rhs)
-    { return lhs.horizontal == rhs.horizontal && lhs.vertical == rhs.vertical; }
-
-inline bool operator == (const HitSide & lhs, const HitSide & rhs) { return  are_same(lhs, rhs); }
-
-inline bool operator != (const HitSide & lhs, const HitSide & rhs) { return !are_same(lhs, rhs); }
 
 // code disabled to check... BFS structure of code
 #ifdef MACRO_AABBTDP_SHOW_DETAILS_HELPERS
 
 // ----------------------------- level 0 helpers ------------------------------
-
+#if 0
 // !I need tests!
 /** @returns zero vector if there is no need for push */
 std::tuple<Vector, HitSide> find_min_push_displacement
     (const Rectangle &, const Rectangle & other, const Vector & displc);
-
+#endif
 std::vector<FullEntry *> prioritized_entries
     (EntryMapView, std::vector<FullEntry *> &&);
 
 std::vector<FullEntry *> prioritized_entries
     (EntryEntityRefMap &, std::vector<FullEntry *> &&);
-
+#if 0
 HitSide trim_displacement_for_barriers
     (const Rectangle &, Vector barriers, Vector & displacement);
 
@@ -247,7 +243,7 @@ HitSide trim_small_displacement
 // ----------------------------- level 2 helpers ------------------------------
 
 HitSide values_from_displacement(const Vector &);
-
+#endif
 #endif
 } // end of detail namespace -> into ::tdp
 

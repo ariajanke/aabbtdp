@@ -31,6 +31,8 @@
 namespace {
 
 using namespace cul::exceptions_abbr;
+using cul::is_real, cul::magnitude, cul::normalize;
+using tdp::Rectangle, tdp::Vector;
 
 [[nodiscard]] static auto guard(bool & b) {
     struct A {
@@ -180,6 +182,263 @@ void SpatialMapFront::occupy_with_view_of(const Rectangle & rect, PointerContain
     cont = m_spatial_map.collect_candidates(probe, std::move(cont));
 }
 
+// -------------------------- Helper Implementations --------------------------
+
+// 0 means it is not a high displacement
+int large_displacement_step_count
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+std::tuple<Vector, HitSide> find_min_push_displacement_small
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
+
+HitSide trim_small_displacement
+    (const Rectangle &, const Rectangle & other, Vector & displc);
+
+template <Direction kt_high_dir, Direction kt_low_dir>
+Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier);
+
+std::tuple<Vector, HitSide> find_min_push_displacement
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{
+    using std::make_tuple, std::get;
+    int steps_for_large = large_displacement_step_count(rect, other, displc);
+    if (steps_for_large) {
+        // is there a more effecient way to do this?
+        // binary search
+        // ...perhaps enabling large displacement values
+        for (int i = 1; i != steps_for_large; ++i) {
+            auto t           = Real(i) / Real(steps_for_large);
+            auto displc_part = displc*t;
+            auto gv = find_min_push_displacement_small(rect, other, displc_part);
+            if (get<Vector>(gv) != Vector()) {
+                auto rem = displc*(1. - t);
+                auto & r = get<Vector>(gv);
+                r = r.x != 0 ? Vector(r.x + rem.x, 0) : Vector(0, r.y + rem.y);
+                return gv;
+            }
+        }
+        return make_tuple(Vector(), HitSide());
+    }
+    return find_min_push_displacement_small(rect, other, displc);
+}
+
+HitSide trim_displacement_for_barriers
+    (const Rectangle & rect, Vector barriers, Vector & displacement)
+{
+    // parameter assumptions
+    assert(is_real(rect.left) && is_real(rect.top));
+    assert(is_real(rect.width) && rect.width >= 0);
+    assert(is_real(rect.height) && rect.height >= 0);
+    assert(!cul::is_nan(barriers.x) && !cul::is_nan(barriers.y));
+    assert(is_real(displacement));
+
+    // implementing it in this fashion: it's no longer possible for me to screw
+    // up in one dimension, but not the other
+    auto h_dir = trim_dimension<k_right, k_left>
+        (right_of(rect), rect.left, displacement.x, barriers.x);
+    auto v_dir = trim_dimension<k_down, k_up>
+        (bottom_of(rect), rect.top, displacement.y, barriers.y);
+    return HitSide(h_dir, v_dir);
+}
+
+HitSide trim_displacement
+    (const Rectangle & rect, const Rectangle & other, Vector & displc)
+{
+    int steps_for_large = large_displacement_step_count(rect, other, displc);
+    if (steps_for_large) {
+        for (int i = 1; i != steps_for_large; ++i) {
+            auto t           = Real(i) / Real(steps_for_large);
+            auto displc_part = displc*t;
+            HitSide rv = trim_small_displacement(rect, other, displc_part);
+            if (rv != HitSide()) {
+                displc = displc_part;
+                return rv;
+            }
+        }
+        return HitSide();
+    }
+    return trim_small_displacement(rect, other, displc);
+}
+
+bool trespass_occuring
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{
+    static auto trespass_occuring_small =
+        [](const Rectangle & rect, const Rectangle & other, const Vector & displc)
+    {
+        return !overlaps(rect, other) && overlaps(displace(rect, displc), other);
+    };
+    int steps_for_large = large_displacement_step_count(rect, other, displc);
+    if (steps_for_large) {
+        for (int i = 1; i != steps_for_large + 1; ++i) {
+            auto t           = Real(i) / Real(steps_for_large);
+            auto displc_part = displc*t;
+            if (trespass_occuring_small(rect, other, displc_part)) return true;
+        }
+        return false;
+    }
+    return trespass_occuring_small(rect, other, displc);
+}
+
+Rectangle grow(Rectangle rect, const Size & size_) {
+    if (-size_.width > rect.width) {
+        rect.left  = rect.left + rect.width*0.5;
+        rect.width = 0;
+    } else {
+        rect.width += size_.width;
+        rect.left  -= size_.width*0.5;
+    }
+    if (-size_.height > rect.height) {
+        rect.top    = rect.top + rect.height*0.5;
+        rect.height = 0;
+    } else {
+        rect.height += size_.height;
+        rect.top    -= size_.height*0.5;
+    }
+    return rect;
+}
+
+Rectangle grow_by_displacement(Rectangle rect, const Vector & displc) {
+    if (displc.x < 0) {
+        rect.left  +=  displc.x;
+        rect.width += -displc.x;
+    } else if (displc.x > 0) {
+        rect.width += displc.x;
+    }
+    if (displc.y < 0) {
+        rect.top    +=  displc.y;
+        rect.height += -displc.y;
+    } else if (displc.y > 0) {
+        rect.height += displc.y;
+    }
+    return rect;
+}
+
+Vector find_barrier_for_displacement
+    (const Vector & displc, const Vector & pos_bar, const Vector & neg_bar)
+{
+    return Vector(displc.x > 0 ? pos_bar.x : neg_bar.x,
+                  displc.y > 0 ? pos_bar.y : neg_bar.y);
+}
+
+Rectangle displace(Rectangle rv, Vector r) {
+    rv.left += r.x;
+    rv.top  += r.y;
+    return rv;
+}
+
+// ----------------------------- Helpers level 1 ------------------------------
+
+HitSide values_from_displacement(const Vector &);
+
+int large_displacement_step_count
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{
+    using std::max, std::ceil, std::make_tuple, std::get;
+    auto displc_mag = Vector(magnitude(displc.x), magnitude(displc.y));
+    if (   displc_mag.x > other.width  || displc_mag.x > rect.width
+        || displc_mag.y > other.height || displc_mag.y > rect.height)
+    {
+        // this could be further optimized by checking if the rectangle
+        // expanded by the displacement overlaps the other rectangle and fast
+        // fail out of this function
+        //
+        // cost: complexity in implementation
+        // maybe something I can test later
+        return 1 + max(
+            ceil( displc_mag.x / max(other.width , rect.width ) ),
+            ceil( displc_mag.y / max(other.height, rect.height) ));
+    }
+    return 0;
+}
+
+std::tuple<Vector, HitSide> find_min_push_displacement_small
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{
+    using std::max, std::min, std::make_tuple;
+    static const auto k_no_hit = make_tuple(Vector(), HitSide());
+    auto frect = displace(rect, displc);
+    if (overlaps(rect, other) || !overlaps(frect, other)) return k_no_hit;
+
+    auto inner_left   = max(frect.left      , other.left      );
+    auto inner_right  = min(right_of(frect) , right_of(other) );
+    auto inner_top    = max(frect.top       , other.top       );
+    auto inner_bottom = min(bottom_of(frect), bottom_of(other));
+    if (inner_left >= inner_right || inner_top >= inner_bottom) return k_no_hit;
+
+    Size overlap_area(inner_right - inner_left, inner_bottom - inner_top);
+    HitSide hit_parts = values_from_displacement(displc);
+    if ((overlap_area.width > overlap_area.height || displc.x == 0) && displc.y != 0) {
+        return make_tuple(Vector(0, normalize(displc.y)*overlap_area.height),
+                          HitSide   (k_direction_count, hit_parts.vertical));
+    }
+    return make_tuple(Vector(normalize(displc.x)*overlap_area.width, 0),
+                      HitSide   (hit_parts.horizontal, k_direction_count));
+}
+
+HitSide trim_small_displacement
+    (const Rectangle & rect, const Rectangle & other, Vector & displc)
+{
+    using cul::find_highest_false;
+    if (overlaps(rect, other) || !overlaps(displace(rect, displc), other))
+    { return HitSide(); }
+
+    HitSide hit_parts = values_from_displacement(displc);
+
+    if (!overlaps(displace(rect, Vector(displc.x, 0)), other)) {
+        auto mk_displc = [displc](double t) { return Vector(displc.x, displc.y*t); };
+        displc = mk_displc(find_highest_false<double>([&](double t) {
+            return overlaps(displace(rect, mk_displc(t)), other);
+        }));
+        return HitSide(k_direction_count, hit_parts.vertical);
+    }
+
+    if (!overlaps(displace(rect, Vector(0, displc.y)), other)) {
+        auto mk_displc = [displc](double t) { return Vector(displc.x*t, displc.y); };
+        displc = mk_displc(find_highest_false<double>([&](double t) {
+            return overlaps(displace(rect, mk_displc(t)), other);
+        }));
+        return HitSide(hit_parts.horizontal, k_direction_count);
+    }
+
+    // assume the value only changes once
+    auto t = find_highest_false<double>([&](double t) {
+        return overlaps(displace(rect, t*displc), other);
+    });
+    // goes both ways
+    displc = displc*t;
+    return hit_parts;
+}
+
+
+template <Direction kt_high_dir, Direction kt_low_dir>
+Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier) {
+    if (!is_real(barrier)) return k_direction_count;
+
+    static const constexpr Real k_bump_fix = 0.00005;
+    // what should I use to bump with?
+    auto bump = (magnitude(barrier) + (high - low)) / 2;
+    /*  */ if (high < barrier && high + displc_i > barrier) {
+        displc_i = barrier - high - bump*k_bump_fix;
+        assert(high + displc_i < barrier);
+        return kt_high_dir;
+    } else if (low > barrier && low + displc_i < barrier) {
+        displc_i = barrier - low + bump*k_bump_fix;
+        assert(low + displc_i > barrier);
+        return kt_low_dir;
+    }
+    return k_direction_count;
+}
+
+// ----------------------------- Helpers level 2 ------------------------------
+
+HitSide values_from_displacement(const Vector & r)
+    { return HitSide(r.x > 0 ? k_right : k_left, r.y > 0 ? k_down : k_up); }
+
 } // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace
+
+namespace {
+
+}  // end of <anonymous> namespace

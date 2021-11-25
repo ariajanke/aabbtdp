@@ -1,34 +1,35 @@
 #include "sight-detail.hpp"
-#include "helpers.hpp"
 
 #include <numeric>
+#include <functional>
 
 #include <cassert>
 
 namespace { // ----------------------------------------------------------------
 
 using tdp::detail::SightingComplete, tdp::detail::ImageEntry,
-      tdp::detail::PolarVector, tdp::detail::ImageSpatialMapFactory,
-      tdp::detail::AngleGetters, tdp::Sighting, tdp::Real, tdp::Vector,
+      tdp::detail::PolarVector, tdp::Sighting, tdp::Real, tdp::Vector,
       tdp::Rectangle, tdp::detail::QuadraticSightingComplete;
 using Percept = SightingComplete::Percept;
 using Entry = SightingComplete::Entry;
 using UnitTestFunctions = tdp::detail::SightingUnitTestFunctions;
-using MapBase = ImageSpatialMapFactory::MapBase;
+using VectorPairs = SightingComplete::VectorPairs;
+
 template <typename T>
 /* portmanteau of "varriable array" like "vary" */ using Varray = std::vector<T>;
 template <typename ... Types>
 using Tuple = std::tuple<Types...>;
-
+using ImageVarrayIter = Varray<ImageEntry>::iterator;
 using cul::rotate_vector, cul::directed_angle_between, cul::top_left_of,
       cul::is_contained_in, cul::cross, cul::find_intersection,
       cul::get_no_solution_sentinel, cul::magnitude,
-      std::min_element, std::max_element, std::make_tuple;//, tdp::detail::get_div;
+      std::min_element, std::max_element, std::make_tuple;
 using namespace cul::exceptions_abbr;
 
 static constexpr const Real k_pi = cul::k_pi_for_type<Real>;
 
 inline Vector make_anchor() { return Vector{std::cos(0), std::sin(0)}; }
+
 inline bool theta_range_ok(const PolarVector & v)
     { return v.theta >= -k_pi && v.theta <= k_pi; }
 
@@ -40,6 +41,32 @@ inline bool theta_range_ok(const PolarVector & v)
 void make_images(Vector source, const Varray<Entry> &, Varray<ImageEntry> &);
 
 void update_for_possible_obstruction(ImageEntry &, const ImageEntry &);
+
+bool order_images(const ImageEntry &, const ImageEntry &);
+
+// testable with "find_portion_overlapped" except the "completely behind base
+bool images_overlap(Real low, Real high, const ImageEntry & other);
+
+bool images_overlap(const ImageEntry &, const ImageEntry &);
+
+// left off here...
+auto make_in_range_of(Varray<ImageEntry> & container, ImageVarrayIter itr) {
+    // starting at image, do not go beyond this image's end point
+    assert(itr >= container.begin() && itr <= container.end());
+    Real high_angle = PolarVector{itr->anchor_high}.theta;
+    Real low_angle  = PolarVector{itr->anchor_low }.theta;
+    // low to high not always describes the image bounds
+    return [=](ImageVarrayIter jtr) {
+        if (jtr == container.end()) return false;
+        return images_overlap(low_angle, high_angle, *jtr);
+    };
+}
+
+auto make_get_next(Varray<ImageEntry> & container) {
+    auto end_ = container.end();
+    auto beg_ = container.begin();
+    return [end_, beg_] (decltype(end_) itr) { return itr == end_ ? beg_ : itr + 1; };
+}
 
 Percept to_percept(Vector source, const ImageEntry &);
 
@@ -74,38 +101,6 @@ std::unique_ptr<Sighting> make_sighting_nsquared_instance()
 
 // ----------------------------------------------------------------------------
 
-Real AngleGetters::get_low(const ImageEntry & entry) const {
-    // implementation assumption: the arc length of a cartesian line segment
-    // cannot be greater than pi
-    return PolarVector{entry.anchor_low}.theta;
-}
-
-Real AngleGetters::get_high(const ImageEntry & entry) const {
-    return PolarVector{entry.anchor_high}.theta;
-}
-
-Real AngleGetters::domain_min() const { return -k_pi; }
-
-Real AngleGetters::domain_max() const { return k_pi; }
-
-// ----------------------------------------------------------------------------
-
-MapBase & ImageSpatialMapFactory::choose_map_for
-    (SetElIterator beg, SetElIterator end, int depth)
-{
-    if (depth > k_depth_max || end - beg < k_fork_thershold) return m_flat;
-    auto div    = get_division_for<ImageEntry>(beg, end, AngleGetters{});
-    auto counts = get_counts<ImageEntry, AngleGetters>(div, beg, end);
-    if (too_many_shared(counts)) return m_flat;
-    if (!m_part_ptr) {
-        m_part_ptr = std::make_unique<PartMap>();
-    }
-    m_part_ptr->set_division(div);
-    return *m_part_ptr;
-}
-
-// ----------------------------------------------------------------------------
-
 void SightingComplete::add_entry(const Entry & entry) {
     m_preentries.push_back(entry);
 }
@@ -113,14 +108,19 @@ void SightingComplete::add_entry(const Entry & entry) {
 const std::vector<Percept> & SightingComplete::run(Vector source) {
     m_percepts.clear();
     make_images(source, m_preentries, m_entries);
-    m_spatial_map.set_elements(m_entries.begin(), m_entries.end());
 
-    for (auto & entry : m_entries) {
-        m_percepts.emplace_back(find_percept_of(source, entry));
+    if (m_entries.size() < k_sweep_thershold) {
+        for (const auto & image : m_entries) {
+            auto image_copy = image;
+            for (auto & other_image : m_entries) {
+                if (&image == &other_image) continue;
+                update_for_possible_obstruction(image_copy, other_image);
+            }
+            m_percepts.push_back(to_percept(source, image_copy));
+        }
+    } else {
+        run_sweep_interval(source);
     }
-
-    //m_percepts.erase(std::remove_if(m_percepts.begin(), m_percepts.end(), [](const Percept & per) { return per.visibility == 0; }),
-    //                 m_percepts.end());
 
     // on exit stuff
     m_entries.clear();
@@ -128,8 +128,8 @@ const std::vector<Percept> & SightingComplete::run(Vector source) {
     return m_percepts;
 }
 
-std::vector<std::tuple<Vector, Vector>>
-    SightingComplete::make_image_lines(Vector source, std::vector<std::tuple<Vector, Vector>> && rv) const
+VectorPairs SightingComplete::make_image_lines
+    (Vector source, VectorPairs && rv) const
 {
     rv.clear();
     for (const auto & entry : m_preentries) {
@@ -140,18 +140,21 @@ std::vector<std::tuple<Vector, Vector>>
     return std::move(rv);
 }
 
-/* private */ Percept SightingComplete::find_percept_of
-    (Vector source, const ImageEntry & original_image) const
-{
-    auto image_copy = original_image;
-
-    m_temp_cont = m_spatial_map.collect_candidates(original_image, std::move(m_temp_cont));
-    for (auto * other_entry : m_temp_cont) {
-        if (other_entry == &original_image) continue;
-        update_for_possible_obstruction(image_copy, *other_entry);
+/* private */ void SightingComplete::run_sweep_interval(Vector source) {
+    if (m_entries.empty()) return;
+    std::sort(m_entries.begin(), m_entries.end(), order_images);
+    // have to process all of them
+    for (auto itr = m_entries.begin(); itr != m_entries.end(); ++itr) {
+        auto in_range   = make_in_range_of(m_entries, itr);
+        auto get_next   = make_get_next(m_entries);
+        auto image_copy = *itr;
+        for (auto jtr = get_next(itr); in_range(jtr); jtr = get_next(jtr)) {
+            assert(jtr != itr);
+            update_for_possible_obstruction(image_copy, *jtr);
+            // should be fine as far as "pairs going the other way"
+        }
+        m_percepts.push_back(to_percept(source, image_copy));
     }
-
-    return to_percept(source, image_copy);
 }
 
 // ----------------------------------------------------------------------------
@@ -195,6 +198,7 @@ void make_images(Vector observ, const Varray<Entry> & source, Varray<ImageEntry>
     dest.reserve(source.size());
     using namespace std::placeholders;
     std::transform(source.begin(), source.end(), std::back_inserter(dest),
+                   // bind *maybe* outmoded
                    std::bind(make_image, observ, _1));
 }
 
@@ -216,6 +220,26 @@ void update_for_possible_obstruction
     // 1 opacity -> whipes out image by the overlap proportion
     // below: 1 -> no effect, 0 -> whipes out image completely
     image.visibility *= (1 - overlap_por*other.opactity);
+}
+
+bool order_images(const ImageEntry & lhs, const ImageEntry & rhs) {
+    return PolarVector{lhs.anchor_low}.theta < PolarVector{rhs.anchor_low}.theta;
+}
+
+bool images_overlap(Real low, Real high, const ImageEntry & other) {
+    Real other_low  = PolarVector{other.anchor_low }.theta;
+    Real other_high = PolarVector{other.anchor_high}.theta;
+    static auto adjust_high = [](Real high, Real low)
+        { return (high < low) ? high + k_pi*2 : high; };
+    high       = adjust_high(high      , low      );
+    other_high = adjust_high(other_high, other_low);
+    return high > other_low && other_high > low;
+}
+
+bool images_overlap(const ImageEntry & image, const ImageEntry & other) {
+    return images_overlap(PolarVector{image.anchor_low}.theta,
+                          PolarVector{image.anchor_high}.theta,
+                          other);
 }
 
 // percept has the target position, so we bring that back into the global
@@ -436,5 +460,6 @@ bool crosses_anti_anchor_line(const Vector & obsver, const Rectangle & rect) {
     rv.crosses_anti_anchor_line        = ::crosses_anti_anchor_line;
     rv.update_for_possible_obstruction = ::update_for_possible_obstruction;
     rv.make_anchor                     = ::make_anchor;
+    rv.images_overlap                  = ::images_overlap;
     return rv;
 }

@@ -254,4 +254,10 @@ void do_sight_unit_tests(TestSuite & suite) {
         update_for_possible_obstruction(subject, object);
         return test(are_very_close(subject.visibility, 0.4));
     });
+    static const auto images_overlap = inst.images_overlap;
+    suite.start_series("sight - images_overlap");
+    mark(suite).test([] {
+        return test(false);
+    });
+
 }
