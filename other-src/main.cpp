@@ -295,7 +295,7 @@ void do_helper_tests(TestSuite & suite) {
                         && are_very_close(get<Vector>(gv), Vector(0, -1)));
         });
     });
-
+#   if 0 // outmoded
     // I don't think "prioritized_entries" really needs testing
     // (just calls a couple of STL iterator sequence functions)
     //
@@ -316,7 +316,7 @@ void do_helper_tests(TestSuite & suite) {
         auto vec = tdp::detail::prioritized_entries(map, std::vector<FullEntry *>{});
         return test(std::equal(vec.begin(), vec.end(), cor.begin(), cor.end()));
     });
-
+#   endif
     suite.start_series("detail::trim_displacement_for_barriers");
     // x-ways (real y, but non crossing)
     // x-ways, non-real y

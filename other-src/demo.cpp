@@ -120,12 +120,18 @@ struct Targeting {
     std::vector<ecs::EntityRef> target_candidates;
 };
 
+struct PushLevel final {
+    static constexpr const int k_default_value = 0;
+    int & operator = (int i) { return (value = i); }
+    int value = k_default_value;
+};
+
 using cul::DrawRectangle;
 using cul::DrawText;
 using RdEntity = ecs::Entity<
     DrawRectangle, Verticies, Velocity, Rectangle, MapLimits, Name, Fade,
     Pushable, HudDrawn, Layer, ShadowImage, Occupant, Lifetime, Growth,
-    Bouncy, Targeting>;
+    Bouncy, Targeting, PushLevel>;
 using RdSystem = RdEntity::SystemType;
 constexpr const Real k_demo_et_value = 1. / 60.;
 
@@ -180,6 +186,31 @@ class LifetimeSystem final : public RdSystem {
             if (lifetime <= 0) e.request_deletion();
         }
     }
+};
+
+class PushablePushLevelsDisplaySystem final : public RdSystem {
+public:
+    PushablePushLevelsDisplaySystem(sf::RenderTarget & target): m_target(target) {
+        m_brush_text.load_builtin_font(cul::BitmapFont::k_8x16_highlighted_font);
+    }
+
+    void update(const ContainerView & view) final {
+        for (auto & e : view) {
+            if (e.has<PushLevel>() && e.has<Rectangle>()) update(e);
+        }
+    }
+
+private:
+    void update(const RdEntity & entity) {
+        auto level = entity.get<PushLevel>().value;
+        if (level == PushLevel::k_default_value) return;
+        auto cent = cul::convert_to<sf::Vector2f>(cul::center_of(entity.get<Rectangle>()));
+        m_brush_text.set_text_center( cent, std::to_string(level) );
+        m_target.draw(m_brush_text);
+    }
+
+    DrawText m_brush_text;
+    sf::RenderTarget & m_target;
 };
 
 class SpatialPartitionsDisplaySystem final : public RdSystem {
@@ -407,6 +438,8 @@ private:
 
 };
 
+
+
 class ShadowImageSystem final : public RdSystem {
     class EntityMaker {
     public:
@@ -555,7 +588,12 @@ private:
         if (entity.has<HudDrawn>() != draw_if_hud) return;
         if (auto * drect = entity.ptr<DrawRectangle>()) {
             target.draw(*drect);
-            if (auto * name = get_name_ptr(entity)) {
+            auto * name = get_name_ptr(entity);
+            if (auto * pushlevel = entity.ptr<PushLevel>()) {
+                if (pushlevel->value != PushLevel::k_default_value)
+                    name = nullptr;
+            }
+            if (name) {
                 cul::DrawText dtext;
                 dtext.load_builtin_font(k_chosen_font);
                 dtext.set_text_center(sf::Vector2f(drect->x() + drect->width()*0.5f, drect->y() + drect->height()*0.5f), *name);
@@ -839,6 +877,15 @@ private:
         m_handle->run(def_handler);
 
         for (auto & e : view) {
+#           if 0
+            if (auto * level_comp = e.ptr<PushLevel>()) {
+                if (auto * ptr = m_handle->get_push_level_for(e)) {
+                    level_comp->value = *ptr;
+                } else {
+                    level_comp->value = PushLevel::k_default_value;
+                }
+            }
+#           endif
             if (auto * tar = e.ptr<Targeting>()) {
                 using cul::magnitude;
                 if (tar->facing == Vector{}) continue;
@@ -863,12 +910,13 @@ private:
             }
         }
     }
-
-    tdp::TdpHandlerPtr m_handle =
-        tdp::Physics2DHandler::make_default_instance();
-        //tdp::SweepSwitchPhysicsHandler::make_instance();
-        //tdp::temporary::make_quadratic_tdp_physics_instance();
-        //tdp::TopDownPhysicsHandler::make_instance();
+#   if 0
+    std::unique_ptr<tdp::Physics2DHandler> m_handle =
+        tdp::QuadraticPhysicsHandler::make_instance();
+#   else
+    std::unique_ptr<tdp::detail::IntervalSweepHandler> m_handle =
+        std::make_unique<tdp::detail::IntervalSweepHandler>();
+#   endif
 };
 
 
@@ -1315,6 +1363,7 @@ void run_demo() {
         e.add<Pushable>();
         e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
         e.add<Name>().value = "PUSH A";
+        e.add<PushLevel>();
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 150), k_size);
@@ -1322,6 +1371,7 @@ void run_demo() {
         e.add<Pushable>();
         e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
         e.add<Name>().value = "PUSH B";
+        e.add<PushLevel>();
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 200), k_size);
@@ -1374,6 +1424,7 @@ void run_demo() {
     }
     SpatialPartitionsDisplaySystem spdisplay(window);
     TargetSystem tar_sys(window);
+    PushablePushLevelsDisplaySystem pplds(window);
     window.setFramerateLimit(60u);
     scenes.load_first_scene(ent_mana);
     bool in_frame_advance_mode = false;
@@ -1454,7 +1505,7 @@ void run_demo() {
                                 VerticiesMovementSystem(), RdFadeSystem(),
                                 ShadowImageSystem(), MatFlashSystem(),
                                 LifetimeSystem()),
-                std::tie(col_sys, tar_sys)));
+                std::tie(col_sys, pplds/*, tar_sys*/)));
             //run_systems(ent_mana, std::tie(spdisplay));
             ent_mana.process_deletion_requests();
         }

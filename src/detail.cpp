@@ -35,24 +35,9 @@ namespace {
 
 using namespace cul::exceptions_abbr;
 using tdp::Vector, tdp::detail::HitSide, tdp::Rectangle, tdp::detail::FullEntry,
-      tdp::detail::EntryEntityRefMap, tdp::detail::PushPair, cul::is_real,
+      tdp::detail::EntryEntityRefMap, cul::is_real,
       cul::bottom_of, cul::right_of, cul::normalize, cul::magnitude,
-      cul::set_top_left_of, cul::top_left_of;
-template <typename ... Types>
-using Tuple = std::tuple<Types...>;
-#if 0
-Vector find_barrier_for_displacement(
-    const Vector & displacement,
-    const Vector & positive_barrier, const Vector & negative_barrier);
-#endif
-#if 0
-Rectangle displace(Rectangle rv, Vector r);
-#endif
-inline FullEntry & iter_to_entryref(EntryEntityRefMap::const_iterator itr)
-    { return const_cast<FullEntry &>(itr->second); }
-
-inline FullEntry & iter_to_entryref(std::vector<PushPair>::iterator itr)
-    { return *itr->pushee; }
+      cul::set_top_left_of, cul::top_left_of, tdp::detail::Tuple;
 
 bool is_real(const Rectangle &);
 
@@ -62,27 +47,44 @@ namespace tdp {
 
 namespace detail {
 
+void update_broad_boundries(FullEntry & entry) {
+    static constexpr const Real k_adjust_amount = 0.;
+
+    static const auto low_x = [](const FullEntry & fe) {
+        auto dx = fe.displacement.x + fe.nudge.x;
+        return fe.bounds.left + ((dx < 0) ? dx : 0) - k_adjust_amount;
+    };
+
+    static const auto high_x = [](const FullEntry & fe) {
+        auto dx = fe.displacement.x + fe.nudge.x;
+        return right_of(fe.bounds) + ((dx > 0) ? dx : 0) + k_adjust_amount;
+    };
+
+    static const auto low_y = [](const FullEntry & fe) {
+        auto dy = fe.displacement.y + fe.nudge.y;
+        return fe.bounds.top + ((dy < 0) ? dy : 0) - k_adjust_amount;
+    };
+
+    static const auto high_y = [](const FullEntry & fe) {
+        auto dy = fe.displacement.y + fe.nudge.y;
+        return bottom_of(fe.bounds) + ((dy > 0) ? dy : 0) + k_adjust_amount;
+    };
+    entry.low_x  = low_x (entry);
+    entry.low_y  = low_y (entry);
+    entry.high_x = high_x(entry);
+    entry.high_y = high_y(entry);
+}
+
+void absorb_nudge(FullEntry & entry) {
+    entry.displacement += entry.nudge;
+    entry.nudge         = Vector{};
+}
+
 // --------------------------- Helpers (level 0) ------------------------------
-#if 0
-std::tuple<Vector, HitSide> find_min_push_displacement
-    (const Rectangle &, const Rectangle & other, const Vector & displc);
-#endif
+
 std::vector<FullEntry *> prioritized_entries
     (/*const EntryEntityRefMap &, */ EntryMapView, std::vector<FullEntry *> &&);
-#if 0
-HitSide trim_displacement_for_barriers
-    (const Rectangle &, Vector barriers, Vector & displacement);
 
-HitSide trim_displacement
-    (const Rectangle &, const Rectangle & other, Vector & displc);
-
-bool trespass_occuring
-    (const Rectangle &, const Rectangle & other, const Vector & displc);
-
-Rectangle grow(Rectangle, const Size &);
-
-Rectangle grow_by_displacement(Rectangle, const Vector & displc);
-#endif
 // ------------------------ TdpHandlerEntryInformation ------------------------
 
 void TdpHandlerEntryInformation::update_entry(const Entry & entry) {
@@ -124,7 +126,7 @@ void TdpHandlerEntryInformation::update_entry(const Entry & entry) {
     static_cast<tdp::Entry &>(m_entries[entry.entity]) = entry;
 }
 
-/* protected */ void TdpHandlerEntryInformation::clean_up_containers() {
+void TdpHandlerEntryInformation::clean_up_containers() {
     for (auto itr = m_entries.begin(); itr != m_entries.end();) {
         if (itr->second.entity) {
             ++itr;
@@ -181,468 +183,6 @@ void TdpHandlerEntryInformation::set_collision_matrix_
     m_col_matrix = std::move(matrix);
 }
 
-// ----------------------- TdpHandlerCollisionBehaviors -----------------------
-
-void TdpHandlerCollisionBehaviors::run(EventHandler & handler) {
-    clean_up_containers();
-    prepare_for_collision_work();
-    order_and_handle_pushes();
-    do_collision_work(handler);
-    do_post_run(handler);
-}
-
-/* protected */ void TdpHandlerCollisionBehaviors::do_collision_work
-    (EventHandler & handler)
-{
-    auto ordered_entries = prioritized_entries(entries_view(), std::move(m_recycled_order));
-    m_recycled_order.clear();
-    for (auto * entry_ptr : ordered_entries) {
-        auto & entry = *entry_ptr;
-        {
-        Vector barrier = find_barrier_for_displacement
-            (entry.displacement, entry.positive_barrier, entry.negative_barrier);
-        if (trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement) != HitSide()) {
-            m_event_recorder.emplace_event(entry.entity, EntityRef(), false);
-        }
-        }
-        // this calls "do_collision_work_for_pair" several times
-        do_collision_work_on_entry(entry, handler);
-
-        // fine with other bounds being finalized for trespass events
-        set_top_left_of(entry.bounds, top_left_of(entry.bounds) + entry.displacement);
-        if (entry.growth != Size()) {
-            entry.bounds = grow(entry.bounds, entry.growth);
-        }
-        // this is fine here, not reusing containers at this point, unlike
-        // while being in the for loop above
-        handler.finalize_entry(entry.entity, entry.bounds);
-    }
-    m_recycled_order.swap(ordered_entries);
-}
-
-/* protected */ void TdpHandlerCollisionBehaviors::do_collision_work_for_pair
-    (FullEntry & entry, const FullEntry & other_entry, EventHandler & handler)
-{
-    using namespace interaction_classes;
-    switch (collision_matrix()(entry.collision_layer, other_entry.collision_layer)) {
-    case k_as_solid: {
-        auto gv = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
-        if (gv == HitSide()) return;
-        m_event_recorder.emplace_event(entry.entity, other_entry.entity, false);
-        break;
-    }
-    case k_as_trespass: {
-        bool first_appearance_overlap = entry.first_appearance && overlaps(entry.bounds, other_entry.bounds);
-        bool regular_trespass         = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
-        if (!first_appearance_overlap && !regular_trespass) return;
-        // this is an "uh-oh" moment if we're reusing containers
-        handler.on_trespass(entry.entity, other_entry.entity);
-        break;
-    }
-    default: break;
-    }
-}
-
-/* protected */ void TdpHandlerCollisionBehaviors::add_if_pushable
-    (FullEntry & entry, FullEntry & other_entry, std::vector<PushPair> & container)
-{
-    // "get_next_pushables" should be the only possible 2nd stack frame up!
-    using std::get;
-    auto col_class = collision_matrix()(entry.collision_layer, other_entry.collision_layer);
-    if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) return;
-    auto gv = find_min_push_displacement(entry.bounds, other_entry.bounds, entry.displacement);
-    if (get<Vector>(gv) == Vector()) return;
-    container.emplace_back(&other_entry, &entry, get<Vector>(gv));
-    // updates hit flags
-    m_event_recorder.emplace_event(other_entry.entity, entry.entity, true);
-}
-
-/* protected */ void TdpHandlerCollisionBehaviors::do_post_run(EventHandler & handler) {
-    m_event_recorder.send_events(handler);
-    for (auto & pair : entries_view()) {
-        pair.second.first_appearance = false;
-    }
-}
-
-/* private */ void TdpHandlerCollisionBehaviors::order_and_handle_pushes() {
-    std::vector<PushPair> pushed_entries = get_next_pushables(
-        entries_view().begin(), entries_view().end(), std::move(m_recycled_pushpairs_a));
-    std::vector<PushPair> recycled_cont = std::move(m_recycled_pushpairs_b);
-
-    for (int safety = 0; !pushed_entries.empty(); ++safety) {
-        for (auto & pair : pushed_entries) {
-            assert(pair.pushee->pushable);
-            pair.pushee->priority = pair.pusher->priority + 1;
-            // I think this should take the maximum of either
-            // original displacement or nudge displacement (The original
-            // displacement was not considered in computing this nudge
-            // displacement)
-            pair.pushee->displacement += pair.nudge_displacement;
-        }
-        static constexpr const int k_maximum_push_pair_iterations = 1024;
-        if (safety >= k_maximum_push_pair_iterations) {
-            // throw/warn/do something
-            break;
-        }
-        recycled_cont = get_next_pushables(pushed_entries.begin(), pushed_entries.end(), std::move(recycled_cont));
-        recycled_cont.swap(pushed_entries);
-
-    }
-    m_recycled_pushpairs_a = std::move(pushed_entries);
-    m_recycled_pushpairs_b = std::move(recycled_cont );
-}
-
-template <typename Iter>
-/* private */ std::vector<PushPair> TdpHandlerCollisionBehaviors::get_next_pushables
-    (Iter beg, Iter end, std::vector<PushPair> && rv)
-{
-    using std::get;
-    rv.clear();
-    for (auto itr = beg; itr != end; ++itr) {
-        FullEntry & entry = iter_to_entryref(itr);
-        // because I process events all the way at the end, I don't have to
-        // worry about subsequent calls to this function from the same instance
-        // further down the stack, so I can reuse a container!
-
-        // can I skip if there's no displacement?
-        if (entry.displacement == Vector{}) continue;
-        get_next_pushables_for_entry(entry, rv);
-    }
-    return std::move(rv);
-}
-
-// ---------------------------- TdpHandlerComplete ----------------------------
-
-/* private */ void TdpHandlerComplete::prepare_for_collision_work() {
-    m_entry_refs.clear();
-    m_spatial_map.set_elements(entries_view().begin(), entries_view().end(), [](auto itr) {
-        return EntrySpatialRef{&itr->second, get_grown_rectangle(itr->second)};
-    });
-}
-
-/* private */ void TdpHandlerComplete::find_overlaps_
-    (const Rectangle & rect, const OverlapInquiry & inquiry) const
-{
-    if (!::is_real(rect)) {
-        throw InvArg("TdpHandlerComplete::find_overlaps_: rectangle must have "
-                     "all real numbers in every field.");
-    }
-    if (rect.width < 0 || rect.height < 0) {
-        throw InvArg("TdpHandlerComplete::find_overlaps_: rectangle's width "
-                     "and height must be non-negative numbers.");
-    }
-    EntrySpatialRef probe_entry;
-    // yikes feel like I'm wasting a ton of structure just to "key" into the map
-    probe_entry.bounds = rect;
-
-    // more "uh oh", can't reuse container here!
-    // one pastability... use thread local... but recursive/deeper calls...
-    //
-    // here's an idea:
-    // on first call use the thread local, subsequent? use a stack frame local
-    using PointerContainer = SpatialMapFront::PointerContainer;
-    PointerContainer stack_frame_local;
-    PointerContainer & cont = [&stack_frame_local] () -> PointerContainer & {
-        static thread_local PointerContainer recycled;
-        return recycled.empty() ? recycled : stack_frame_local;
-    } ();
-    m_spatial_map.occupy_with_view_of(rect, cont);
-    for (auto * entry : cont) {
-        if (cul::find_rectangle_intersection(rect, entry->bounds).width > 0)
-            inquiry(*entry->entry);
-    }
-}
-
-/* private */ void TdpHandlerComplete::do_collision_work_on_entry
-    (FullEntry & entry, EventHandler & handler)
-{
-    for (auto * entry_ptr : m_spatial_map.view_of(get_grown_rectangle(entry))) {
-        do_collision_work_for_pair(entry, *entry_ptr->entry, handler);
-    }
-}
-
-/* private */ void TdpHandlerComplete::get_next_pushables_for_entry(FullEntry & entry, std::vector<PushPair> & rv)  {
-    for (auto * other_entry_ptr : m_spatial_map.view_of(get_grown_rectangle(entry))) {
-        add_if_pushable(entry, *other_entry_ptr->entry, rv);
-    }
-}
-
-// ------------------------- Quadratic Implementation -------------------------
-
-/* private */ void QuadraticTdpHandler::find_overlaps_(const Rectangle & rect, const OverlapInquiry & inq) const {
-    for (const auto & pair : entries_view()) {
-        if (cul::find_rectangle_intersection(rect, pair.second.bounds).width > 0)
-            inq(pair.second);
-    }
-}
-
-Rectangle get_grown_rectangle(const FullEntry & entry) {
-    static constexpr const Real k_boost_size = 0.5;
-    return grow(grow_by_displacement(entry.bounds, entry.displacement),
-                Size(1, 1)*k_boost_size);
-}
-
-// -------------------------- Helper Implementations --------------------------
-#if 0
-// 0 means it is not a high displacement
-int large_displacement_step_count
-    (const Rectangle &, const Rectangle & other, const Vector & displc);
-
-std::tuple<Vector, HitSide> find_min_push_displacement_small
-    (const Rectangle &, const Rectangle & other, const Vector & displc);
-
-HitSide trim_small_displacement
-    (const Rectangle &, const Rectangle & other, Vector & displc);
-
-template <Direction kt_high_dir, Direction kt_low_dir>
-Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier);
-
-std::tuple<Vector, HitSide> find_min_push_displacement
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
-{
-    using std::make_tuple, std::get;
-    int steps_for_large = large_displacement_step_count(rect, other, displc);
-    if (steps_for_large) {
-        // is there a more effecient way to do this?
-        // binary search
-        // ...perhaps enabling large displacement values
-        for (int i = 1; i != steps_for_large; ++i) {
-            auto t           = Real(i) / Real(steps_for_large);
-            auto displc_part = displc*t;
-            auto gv = find_min_push_displacement_small(rect, other, displc_part);
-            if (get<Vector>(gv) != Vector()) {
-                auto rem = displc*(1. - t);
-                auto & r = get<Vector>(gv);
-                r = r.x != 0 ? Vector(r.x + rem.x, 0) : Vector(0, r.y + rem.y);
-                return gv;
-            }
-        }
-        return make_tuple(Vector(), HitSide());
-    }
-    return find_min_push_displacement_small(rect, other, displc);
-}
-#endif
-std::vector<FullEntry *> prioritized_entries
-    (EntryEntityRefMap & container, std::vector<FullEntry *> && reuse)
-{
-    return prioritized_entries(View{container.begin(), container.end()}, std::move(reuse));
-}
-
-std::vector<FullEntry *> prioritized_entries
-    (EntryMapView view, std::vector<FullEntry *> && rv)
-{
-    rv.clear();
-    for (auto & pair : view) { rv.emplace_back(&pair.second); }
-    static auto order_entries = [](const FullEntry * lhs, const FullEntry * rhs) {
-        assert(lhs && rhs);
-        return lhs->priority < rhs->priority;
-    };
-    std::sort(rv.begin(), rv.end(), order_entries);
-    std::reverse(rv.begin(), rv.end());
-    return std::move(rv);
-}
-#if 0
-HitSide trim_displacement_for_barriers
-    (const Rectangle & rect, Vector barriers, Vector & displacement)
-{
-    // parameter assumptions
-    assert(is_real(rect.left) && is_real(rect.top));
-    assert(is_real(rect.width) && rect.width >= 0);
-    assert(is_real(rect.height) && rect.height >= 0);
-    assert(!cul::is_nan(barriers.x) && !cul::is_nan(barriers.y));
-    assert(is_real(displacement));
-
-    // implementing it in this fashion: it's no longer possible for me to screw
-    // up in one dimension, but not the other
-    auto h_dir = trim_dimension<k_right, k_left>
-        (right_of(rect), rect.left, displacement.x, barriers.x);
-    auto v_dir = trim_dimension<k_down, k_up>
-        (bottom_of(rect), rect.top, displacement.y, barriers.y);
-    return HitSide(h_dir, v_dir);
-}
-
-HitSide trim_displacement
-    (const Rectangle & rect, const Rectangle & other, Vector & displc)
-{
-    int steps_for_large = large_displacement_step_count(rect, other, displc);
-    if (steps_for_large) {
-        for (int i = 1; i != steps_for_large; ++i) {
-            auto t           = Real(i) / Real(steps_for_large);
-            auto displc_part = displc*t;
-            HitSide rv = trim_small_displacement(rect, other, displc_part);
-            if (rv != HitSide()) {
-                displc = displc_part;
-                return rv;
-            }
-        }
-        return HitSide();
-    }
-    return trim_small_displacement(rect, other, displc);
-}
-
-bool trespass_occuring
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
-{
-    static auto trespass_occuring_small =
-        [](const Rectangle & rect, const Rectangle & other, const Vector & displc)
-    {
-        return !overlaps(rect, other) && overlaps(displace(rect, displc), other);
-    };
-    int steps_for_large = large_displacement_step_count(rect, other, displc);
-    if (steps_for_large) {
-        for (int i = 1; i != steps_for_large + 1; ++i) {
-            auto t           = Real(i) / Real(steps_for_large);
-            auto displc_part = displc*t;
-            if (trespass_occuring_small(rect, other, displc_part)) return true;
-        }
-        return false;
-    }
-    return trespass_occuring_small(rect, other, displc);
-}
-
-Rectangle grow(Rectangle rect, const Size & size_) {
-    if (-size_.width > rect.width) {
-        rect.left  = rect.left + rect.width*0.5;
-        rect.width = 0;
-    } else {
-        rect.width += size_.width;
-        rect.left  -= size_.width*0.5;
-    }
-    if (-size_.height > rect.height) {
-        rect.top    = rect.top + rect.height*0.5;
-        rect.height = 0;
-    } else {
-        rect.height += size_.height;
-        rect.top    -= size_.height*0.5;
-    }
-    return rect;
-}
-
-Rectangle grow_by_displacement(Rectangle rect, const Vector & displc) {
-    if (displc.x < 0) {
-        rect.left  +=  displc.x;
-        rect.width += -displc.x;
-    } else if (displc.x > 0) {
-        rect.width += displc.x;
-    }
-    if (displc.y < 0) {
-        rect.top    +=  displc.y;
-        rect.height += -displc.y;
-    } else if (displc.y > 0) {
-        rect.height += displc.y;
-    }
-    return rect;
-}
-#endif
-#if 0
-// ----------------------------- Helpers level 1 ------------------------------
-
-HitSide values_from_displacement(const Vector &);
-
-int large_displacement_step_count
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
-{
-    using std::max, std::ceil, std::make_tuple, std::get;
-    auto displc_mag = Vector(magnitude(displc.x), magnitude(displc.y));
-    if (   displc_mag.x > other.width  || displc_mag.x > rect.width
-        || displc_mag.y > other.height || displc_mag.y > rect.height)
-    {
-        // this could be further optimized by checking if the rectangle
-        // expanded by the displacement overlaps the other rectangle and fast
-        // fail out of this function
-        //
-        // cost: complexity in implementation
-        // maybe something I can test later
-        return 1 + max(
-            ceil( displc_mag.x / max(other.width , rect.width ) ),
-            ceil( displc_mag.y / max(other.height, rect.height) ));
-    }
-    return 0;
-}
-
-std::tuple<Vector, HitSide> find_min_push_displacement_small
-    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
-{
-    using std::max, std::min, std::make_tuple;
-    static const auto k_no_hit = make_tuple(Vector(), HitSide());
-    auto frect = displace(rect, displc);
-    if (overlaps(rect, other) || !overlaps(frect, other)) return k_no_hit;
-
-    auto inner_left   = max(frect.left      , other.left      );
-    auto inner_right  = min(right_of(frect) , right_of(other) );
-    auto inner_top    = max(frect.top       , other.top       );
-    auto inner_bottom = min(bottom_of(frect), bottom_of(other));
-    if (inner_left >= inner_right || inner_top >= inner_bottom) return k_no_hit;
-
-    Size overlap_area(inner_right - inner_left, inner_bottom - inner_top);
-    HitSide hit_parts = values_from_displacement(displc);
-    if ((overlap_area.width > overlap_area.height || displc.x == 0) && displc.y != 0) {
-        return make_tuple(Vector(0, normalize(displc.y)*overlap_area.height),
-                          HitSide   (k_direction_count, hit_parts.vertical));
-    }
-    return make_tuple(Vector(normalize(displc.x)*overlap_area.width, 0),
-                      HitSide   (hit_parts.horizontal, k_direction_count));
-}
-
-HitSide trim_small_displacement
-    (const Rectangle & rect, const Rectangle & other, Vector & displc)
-{
-    using cul::find_highest_false;
-    if (overlaps(rect, other) || !overlaps(displace(rect, displc), other))
-    { return HitSide(); }
-
-    HitSide hit_parts = values_from_displacement(displc);
-
-    if (!overlaps(displace(rect, Vector(displc.x, 0)), other)) {
-        auto mk_displc = [displc](double t) { return Vector(displc.x, displc.y*t); };
-        displc = mk_displc(find_highest_false<double>([&](double t) {
-            return overlaps(displace(rect, mk_displc(t)), other);
-        }));
-        return HitSide(k_direction_count, hit_parts.vertical);
-    }
-
-    if (!overlaps(displace(rect, Vector(0, displc.y)), other)) {
-        auto mk_displc = [displc](double t) { return Vector(displc.x*t, displc.y); };
-        displc = mk_displc(find_highest_false<double>([&](double t) {
-            return overlaps(displace(rect, mk_displc(t)), other);
-        }));
-        return HitSide(hit_parts.horizontal, k_direction_count);
-    }
-
-    // assume the value only changes once
-    auto t = find_highest_false<double>([&](double t) {
-        return overlaps(displace(rect, t*displc), other);
-    });
-    // goes both ways
-    displc = displc*t;
-    return hit_parts;
-}
-
-
-template <Direction kt_high_dir, Direction kt_low_dir>
-Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier) {
-    if (!is_real(barrier)) return k_direction_count;
-
-    static const constexpr Real k_bump_fix = 0.00005;
-    // what should I use to bump with?
-    auto bump = (magnitude(barrier) + (high - low)) / 2;
-    /*  */ if (high < barrier && high + displc_i > barrier) {
-        displc_i = barrier - high - bump*k_bump_fix;
-        assert(high + displc_i < barrier);
-        return kt_high_dir;
-    } else if (low > barrier && low + displc_i < barrier) {
-        displc_i = barrier - low + bump*k_bump_fix;
-        assert(low + displc_i > barrier);
-        return kt_low_dir;
-    }
-    return k_direction_count;
-}
-
-// ----------------------------- Helpers level 2 ------------------------------
-
-HitSide values_from_displacement(const Vector & r)
-    { return HitSide(r.x > 0 ? k_right : k_left, r.y > 0 ? k_down : k_up); }
-#endif
 // there are plans for a more accurate "trespass" detection
 // which would involve ideas expressed here
 #if 0
@@ -768,25 +308,98 @@ bool trespass_occuring
 
 #endif
 
+void do_collision_work
+    (EventHandler & event_handler, IterationBase & group_method, const CollisionMatrix & collision_matrix,
+     EventRecorder & event_recorder, TdpHandlerEntryInformation & info)
+{
+    class ColWorkImpl final : public IterationBase::SequenceInterface {
+    public:
+        explicit ColWorkImpl
+            (int p, EventRecorder & recorder, EventHandler & handler,
+             const CollisionMatrix & col_mat):
+            m_priority(p), m_event_recorder(recorder), m_event_handler(handler),
+            m_col_matrix(col_mat) {}
+
+        // all of this is copy-pasta code...
+        void prestep(FullEntry & entry) final {
+            if (entry.priority != m_priority) return;
+            tdp::detail::check_wall_collision(entry, m_event_recorder);
+        }
+
+        void step(FullEntry & entry, FullEntry & other_entry) final {
+            if (entry.priority != m_priority) return;
+            tdp::detail::check_collision_on(entry, other_entry, m_col_matrix, m_event_recorder, m_event_handler);
+        }
+
+        void poststep(FullEntry & entry) final {
+            if (entry.priority != m_priority) return;
+            tdp::detail::finalize_entry(entry, m_event_handler);
+        }
+
+    private:
+        int m_priority;
+        EventRecorder & m_event_recorder;
+        EventHandler & m_event_handler;
+        const CollisionMatrix & m_col_matrix;
+
+    };
+
+    // note: clean up must take place before populating the group method/container
+    using std::get;
+    static constexpr const int k_max_iterations = 128;
+    int iteration = 0;
+    for (bool should_check_more = true; should_check_more && iteration < k_max_iterations; ++iteration) {
+        should_check_more = false;
+        // We should only process entries of the current highest priority first
+        // Then if we find we can push another entry, that pushed entry then
+        // becomes an even higher priority.
+        group_method.for_each(
+            [&collision_matrix, &iteration, &should_check_more, &event_recorder]
+            (FullEntry & entry, FullEntry & other_entry)
+        {
+            // only consider entry as a possible pusher if iteration == priority
+            if (entry.priority != iteration) return;
+            if (entry.displacement == Vector{} && entry.nudge == Vector{}) return;
+
+            // is other_entry pushable?
+            auto col_class = collision_matrix(entry.collision_layer, other_entry.collision_layer);
+            if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) return;
+
+            // find push displacement
+            auto gv = find_min_push_displacement(entry.bounds,
+                displace(other_entry.bounds, other_entry.displacement + other_entry.nudge),
+                entry.displacement + entry.nudge);
+            if (get<Vector>(gv) == Vector{}) return;
+
+            // The pushed entity should move with a higher priority
+            other_entry.priority  = iteration + 1;
+            other_entry.nudge    += get<Vector>(gv);
+            should_check_more     = true;
+            event_recorder.emplace_event(other_entry.entity, entry.entity, true);
+        });
+    }
+
+    info.absorb_nudges();
+
+    // start finalizing
+    assert(iteration > 0);
+    for (; iteration; --iteration) {
+        // process priority iteration - 1
+        ColWorkImpl impl(iteration - 1, event_recorder, event_handler, collision_matrix);
+        group_method.for_each_sequence(impl);
+    }
+
+    for (auto & pair : info.entries_view()) {
+        pair.second.first_appearance = false;
+    }
+}
+
 } // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace
 
 namespace {
-#if 0
-Vector find_barrier_for_displacement
-    (const Vector & displc, const Vector & pos_bar, const Vector & neg_bar)
-{
-    return Vector(displc.x > 0 ? pos_bar.x : neg_bar.x,
-                  displc.y > 0 ? pos_bar.y : neg_bar.y);
-}
 
-Rectangle displace(Rectangle rv, Vector r) {
-    rv.left += r.x;
-    rv.top  += r.y;
-    return rv;
-}
-#endif
 bool is_real(const Rectangle & rect) {
     using cul::is_real;
     return    is_real(rect.left ) && is_real(rect.top   )

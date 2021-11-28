@@ -36,166 +36,89 @@ namespace detail {
 
 // another exciting implementation may use a bit-matrix
 // and we select pairs that way...
-class SweepContainer final {
+class SweepContainer final : public IterationBase {
 public:
-    template <typename ... Types>
-    using Tuple = std::tuple<Types...>;
-
-    struct SeqInterface {
-        virtual ~SeqInterface() {}
-        virtual void prestep(FullEntry &) = 0;
-        virtual void step(FullEntry &, FullEntry & other_entry) = 0;
-        virtual void poststep(FullEntry &) = 0;
-
-        // debug sort of thing
-        virtual void post_glob_rectangle(const Rectangle &) {}
-    };
     enum Cand { k_x_wise, k_y_wise, k_both };
-
 
     template <typename Iter, typename IterToPointer>
     void populate(Iter beg, Iter end, IterToPointer && to_pointer) {
-        m_reorder_x.clear();
+        m_reorder.clear();
         for (auto itr = beg; itr != end; ++itr) {
-            m_reorder_x.push_back(to_pointer(*itr));
+            m_reorder.push_back(to_pointer(*itr));
         }
     }
 
-    template <typename OnPairWise>
-    void for_each(OnPairWise && do_pair_wise);
+    void for_each_sequence(SequenceInterface & intf) final;
 
-    template <typename OnPairWise, typename PostGlob>
-    void for_each(OnPairWise && do_pair_wise, PostGlob && post_glob);
-
-    void for_each_sequence(SeqInterface & intf);
+    // something to test extensively :)
+    static constexpr const int  k_use_quadratic_thershold = 20;
 
 private:
-    static constexpr const int  k_next_dim_minimum = 12;
-    static constexpr const Real k_adjust_amount    = 0.;
+    static constexpr const Real k_adjust_amount           = 0.;
 
     using WsIter = std::vector<FullEntry *>::iterator;
 
     // bounds should be expanded by nudge and displacement?
 
     auto make_in_range_x(WsIter itr) {
-        assert(itr >= m_reorder_x.begin() && itr < m_reorder_x.end());
-        Real x_end = high_x(**itr);
+        assert(itr >= m_reorder.begin() && itr < m_reorder.end());
+        Real x_end = (**itr).high_x;
         return [x_end, this] (decltype(itr) jtr) {
-            assert(jtr >= m_reorder_x.begin() && jtr <= m_reorder_x.end());
-            if (jtr == m_reorder_x.end()) return false;
-            return low_x(**jtr) < x_end;
+            assert(jtr >= m_reorder.begin() && jtr <= m_reorder.end());
+            if (jtr == m_reorder.end()) return false;
+            return (**jtr).low_x < x_end;
         };
     }
 
     auto make_in_range_y(WsIter jtr) {
-        assert(   (jtr >= m_reorder_y.begin() && jtr < m_reorder_y.end())
-               || (jtr >= m_reorder_x.begin() && jtr < m_reorder_x.end()));
-        Real y_end = high_y(**jtr);
+        assert(jtr >= m_reorder.begin() && jtr < m_reorder.end());
+        Real y_end = (**jtr).high_y;
         return [y_end, this] (decltype(jtr) ktr) {
-            assert(ktr >= m_reorder_y.begin() && ktr <= m_reorder_y.end());
-            if (ktr == m_reorder_y.end()) return false;
-            return low_y(**ktr) < y_end;
+            assert(ktr >= m_reorder.begin() && ktr <= m_reorder.end());
+            if (ktr == m_reorder.end()) return false;
+            return (**ktr).low_y < y_end;
         };
     }
 
-    static Vector full_displacement(const FullEntry & fe)
-        { return fe.displacement + fe.nudge; }
-public:
-    static Real low_x(const FullEntry & fe) {
-        auto dx = full_displacement(fe).x;
-        return fe.bounds.left + ((dx < 0) ? dx : 0) - k_adjust_amount;
-    }
+    static bool order_entries_horizontally(FullEntry * lhs, FullEntry * rhs)
+        { return lhs->low_x < rhs->low_x; }
 
-    static Real high_x(const FullEntry & fe) {
-        auto dx = full_displacement(fe).x;
-        return cul::right_of(fe.bounds) + ((dx > 0) ? dx : 0) + k_adjust_amount;
-    }
+    static bool order_entries_vertically(FullEntry * lhs, FullEntry * rhs)
+        { return lhs->low_y < rhs->low_y; }
 
-    static Real low_y(const FullEntry & fe) {
-        auto dy = full_displacement(fe).y;
-        return fe.bounds.top + ((dy < 0) ? dy : 0) - k_adjust_amount;
-    }
+    void sweep_x_wise(SequenceInterface &);
 
-    static Real high_y(const FullEntry & fe) {
-        auto dy = full_displacement(fe).y;
-        return cul::bottom_of(fe.bounds) + ((dy > 0) ? dy : 0) + k_adjust_amount;
-    }
+    void sweep_y_wise(SequenceInterface &);
 
-private:
-    static bool order_entries_horizontally(FullEntry * lhs, FullEntry * rhs) {
-        return   lhs->low_x //lhs->bounds.left// + lhs->nudge.x
-               < rhs->low_x; //rhs->bounds.left;// + rhs->nudge.x;
-    }
-
-    static bool order_entries_vertically(FullEntry * lhs, FullEntry * rhs) {
-        return   lhs->low_y// lhs->bounds.top// + lhs->nudge.y
-               < rhs->low_y;// rhs->bounds.top;// + rhs->nudge.y;
-    }
-
-    std::vector<FullEntry *> m_reorder_x, m_reorder_y;
+    std::vector<FullEntry *> m_reorder;
 };
 
-template <typename OnPairWise>
-void SweepContainer::for_each(OnPairWise && do_pair_wise) {
-    class Impl final : public SeqInterface {
-    public:
-        Impl(OnPairWise && do_pair_wise): m_f(std::move(do_pair_wise)) {}
-        void prestep(FullEntry &) final {}
-        void step(FullEntry & entry, FullEntry & other_entry) final
-            { m_f(entry, other_entry); }
-        void poststep(FullEntry &) final {}
-
-    private:
-        OnPairWise m_f;
-    };
-    Impl impl(std::move(do_pair_wise));
-    for_each_sequence(impl);
-}
-
-template <typename OnPairWise, typename PostGlob>
-void SweepContainer::for_each(OnPairWise && do_pair_wise, PostGlob && post_glob) {
-    class Impl final : public SeqInterface {
-    public:
-        Impl(OnPairWise && do_pair_wise, PostGlob && post_glob):
-            m_f(std::move(do_pair_wise)), m_pg(std::move(post_glob)) {}
-        void prestep(FullEntry &) final {}
-        void step(FullEntry & entry, FullEntry & other_entry) final
-            { m_f(entry, other_entry); }
-        void poststep(FullEntry &) final {}
-        void post_glob_rectangle(const Rectangle & rect) final
-            { m_pg(rect); }
-
-    private:
-        OnPairWise m_f;
-        PostGlob m_pg;
-    };
-    Impl impl(std::move(do_pair_wise), std::move(post_glob));
-    for_each_sequence(impl);
-}
-
-class IntervalSweepHandler final :
-    public TdpHandlerEntryInformation,
-    public SweepSwitchPhysicsHandler
-{
+class IntervalSweepHandler final : public SweepSwitchPhysicsHandler {
 public:
     void run(EventHandler &) final;
 
     void check_to_switch_axis() final {}
 
     const CollisionMatrix & collision_matrix() const final
-        { return TdpHandlerEntryInformation::collision_matrix(); }
+        { return m_info.collision_matrix(); }
 
     void update_entry(const Entry & entry) final
-        { TdpHandlerEntryInformation::update_entry(entry); }
+        { m_info.update_entry(entry); }
+
+    const int * get_push_level_for(EntityRef eref) const {
+        auto ptr = m_info.find_entry(eref);
+        return ptr ? &ptr->priority : nullptr;
+    }
 
 private:
     void set_collision_matrix_(CollisionMatrix && colmat) final
-        { TdpHandlerEntryInformation::set_collision_matrix_(std::move(colmat)); }
+        { m_info.set_collision_matrix_(std::move(colmat)); }
 
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
     EventRecorder m_event_recorder;
     SweepContainer m_workspace;
+    TdpHandlerEntryInformation m_info;
 };
 
 } // end of detail namespace -> into ::tdp

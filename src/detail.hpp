@@ -43,11 +43,11 @@ namespace tdp {
 
 namespace detail {
 
-constexpr const int k_default_priority = -1;
+constexpr const int k_default_priority = 0;
 
 // ----------------------------------------------------------------------------
 
-struct FullEntry : tdp::Entry {
+struct FullEntry final : public tdp::Entry {
     // record only useful during a frame
     int priority = k_default_priority;
     // (I need some way to handle last appearance)
@@ -55,8 +55,81 @@ struct FullEntry : tdp::Entry {
 
     // for swptry2
     Vector nudge;
+
+    // board phase boundries
     Real low_x, low_y, high_x, high_y;
 };
+
+void update_broad_boundries(FullEntry &);
+
+void absorb_nudge(FullEntry &);
+
+template <typename Iter, typename ToReference>
+void update_broad_boundries(Iter beg, Iter end, ToReference && to_ref) {
+    for (auto itr = beg; itr != end; ++itr) {
+        FullEntry & ref = to_ref(itr);
+        update_broad_boundries(ref);
+    }
+}
+
+template <typename Iter, typename ToReference>
+void absorb_nudges(Iter beg, Iter end, ToReference && to_ref) {
+    for (auto itr = beg; itr != end; ++itr) {
+        FullEntry & ref = to_ref(itr);
+        absorb_nudge(ref);
+    }
+}
+
+inline void update_broad_boundries(
+    std::vector<FullEntry *>::iterator beg,
+    std::vector<FullEntry *>::iterator end)
+{
+    update_broad_boundries(beg, end,
+        [](std::vector<FullEntry *>::iterator itr) -> FullEntry & { return **itr; });
+}
+
+inline void check_wall_collision(FullEntry & entry, EventRecorder & recorder) {
+    Vector barrier = find_barrier_for_displacement
+        (entry.displacement, entry.positive_barrier, entry.negative_barrier);
+    if (trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement) != HitSide()) {
+        recorder.emplace_event(entry.entity, EntityRef(), false);
+    }
+}
+
+inline void check_collision_on(FullEntry & entry, const FullEntry & other_entry,
+                        const CollisionMatrix & col_mat, EventRecorder & recorder,
+                        EventHandler & handler)
+{
+    using namespace tdp::interaction_classes;
+    switch (col_mat(entry.collision_layer, other_entry.collision_layer)) {
+    case k_as_solid: {
+        auto gv = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
+        if (gv == HitSide()) return;
+        recorder.emplace_event(entry.entity, other_entry.entity, false);
+        break;
+    }
+    case k_as_trespass: {
+        bool first_appearance_overlap = entry.first_appearance && overlaps(entry.bounds, other_entry.bounds);
+        bool regular_trespass         = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
+        if (!first_appearance_overlap && !regular_trespass) return;
+        // this is an "uh-oh" moment if we're reusing containers
+        handler.on_trespass(entry.entity, other_entry.entity);
+        break;
+    }
+    default: break;
+    }
+}
+
+inline void finalize_entry(FullEntry & entry, EventHandler & handler) {
+    // fine with other bounds being finalized for trespass events
+    set_top_left_of(entry.bounds, top_left_of(entry.bounds) + entry.displacement);
+    if (entry.growth != Size()) {
+        entry.bounds = grow(entry.bounds, entry.growth);
+    }
+    // this is fine here, not reusing containers at this point, unlike
+    // while being in the for loop above
+    handler.finalize_entry(entry.entity, entry.bounds);
+}
 
 inline void frame_reset(FullEntry & entry) {
     entry.priority = k_default_priority;
@@ -66,25 +139,12 @@ Rectangle get_grown_rectangle(const FullEntry &);
 
 // ----------------------------------------------------------------------------
 
-struct PushPair {
-    PushPair() {}
-    PushPair(FullEntry * pushee_, FullEntry * pusher_, Vector nud_displc):
-        pushee(pushee_), pusher(pusher_), nudge_displacement(nud_displc) {}
-
-    FullEntry * pushee = nullptr;
-    FullEntry * pusher = nullptr;
-
-    Vector nudge_displacement;
-};
-
-// ----------------------------------------------------------------------------
-
 using EntryEntityRefMap = std::unordered_map<EntityRef, FullEntry, ecs::EntityHasher>;
 using EntryMapView      = View<EntryEntityRefMap::iterator>;
 
 // ----------------------------------------------------------------------------
 
-class TdpHandlerEntryInformation /*: public Physics2DHandler*/ {
+class TdpHandlerEntryInformation final {
 public:
     const CollisionMatrix & collision_matrix() const
         { return m_col_matrix; }
@@ -93,7 +153,6 @@ public:
 
     void set_collision_matrix_(CollisionMatrix &&) ;
 
-protected:
     EntryMapView entries_view()
         { return View{m_entries.begin(), m_entries.end()}; }
 
@@ -104,160 +163,62 @@ protected:
     // uh oh... this should never be called by any "TdpHandlerEntryInformation"
     // method
     void clean_up_containers();
-#   if 0
-    [[deprecated]] const FullEntry * find_entry(EntityRef ref) const {
-        auto itr = m_entries.find(ref);
-        if (itr == m_entries.end()) return nullptr;
-        return &itr->second;
+
+    const FullEntry * find_entry(EntityRef eref) const {
+        auto itr = m_entries.find(eref);
+        return itr == m_entries.end() ? nullptr : &itr->second;
     }
-#   endif
+
+    void absorb_nudges() {
+        tdp::detail::absorb_nudges(m_entries.begin(), m_entries.end(),
+            [](auto itr) -> FullEntry & { return itr->second; });
+    }
 
 private:
     CollisionMatrix m_col_matrix;
     EntryEntityRefMap m_entries;
 };
 
-class TdpHandlerCollisionBehaviors :
-    public TdpHandlerEntryInformation,
-    public Physics2DHandler
-{
-public:
-    void run(EventHandler &) final;
-
-    const CollisionMatrix & collision_matrix() const final
-        { return TdpHandlerEntryInformation::collision_matrix(); }
-
-    void update_entry(const Entry & entry) final
-        { TdpHandlerEntryInformation::update_entry(entry); }
-
-protected:
-    // iteration here
-    void do_collision_work(EventHandler & handler);
-
-    virtual void do_collision_work_on_entry(FullEntry &, EventHandler &) = 0;
-
-    // should only be called by "do_collision_work_on_entry"
-    void do_collision_work_for_pair(FullEntry & entry, const FullEntry & other_entry, EventHandler &);
-
-    virtual void get_next_pushables_for_entry(FullEntry &, std::vector<PushPair> &) = 0;
-
-    // should only be called by "get_next_pushables_for_entry"
-    // possibly adds to the event recorder
-    void add_if_pushable(FullEntry &, FullEntry &, std::vector<PushPair> &);
-
-    void do_post_run(EventHandler &);
-
-    // do whichever prep work (if any) before collision work begins in earnest
-    virtual void prepare_for_collision_work() = 0;
-
-private:
-    void set_collision_matrix_(CollisionMatrix && colmat)
-        { TdpHandlerEntryInformation::set_collision_matrix_(std::move(colmat)); }
-
-    void order_and_handle_pushes();
-
-    template <typename Iter>
-    [[nodiscard]] std::vector<PushPair> get_next_pushables
-        (Iter beg, Iter end, std::vector<PushPair> && rv = std::vector<PushPair>());
-
-    EventRecorder m_event_recorder;
-
-    // recycled containers
-    std::vector<PushPair> m_recycled_pushpairs_a, m_recycled_pushpairs_b;
-    std::vector<FullEntry *> m_recycled_order;
-};
-
-// let's further break this class up
-//
-class TdpHandlerComplete final : public TdpHandlerCollisionBehaviors {
-public:
-    void prepare_for_collision_work() final;
-
-private:
-    void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
-
-    void order_and_handle_pushes();
-
-    void do_collision_work_on_entry(FullEntry &, EventHandler &) final;
-
-    void get_next_pushables_for_entry(FullEntry &, std::vector<PushPair> &) final;
-
-    SpatialMapFront m_spatial_map;
-
-    // ofc this means, each new entry will be asking for a few thousands of
-    // instructions to allocate a map entry
-
-    std::vector<EntrySpatialRef> m_entry_refs;
-};
-
-class QuadraticTdpHandler final : public TdpHandlerCollisionBehaviors {
-public:
-    void prepare_for_collision_work() final {}
-
-private:
-    void do_collision_work_on_entry(FullEntry & entry, EventHandler & handler) final {
-        for (const auto & pair : entries_view()) {
-            do_collision_work_for_pair(entry, pair.second, handler);
-        }
-    }
-
-    void get_next_pushables_for_entry(FullEntry & entry, std::vector<PushPair> & rv) final {
-        for (auto & pair : entries_view()) {
-            add_if_pushable(entry, pair.second, rv);
-        }
-    }
-
-    void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
-};
-
 // --------------------------------- Helpers ----------------------------------
 
-// code disabled to check... BFS structure of code
-#ifdef MACRO_AABBTDP_SHOW_DETAILS_HELPERS
+class IterationBase {
+public:
+    struct SequenceInterface {
+        virtual ~SequenceInterface() {}
+        virtual void prestep(FullEntry &) = 0;
+        virtual void step(FullEntry &, FullEntry & other_entry) = 0;
+        virtual void poststep(FullEntry &) = 0;
+    };
 
-// ----------------------------- level 0 helpers ------------------------------
-#if 0
-// !I need tests!
-/** @returns zero vector if there is no need for push */
-std::tuple<Vector, HitSide> find_min_push_displacement
-    (const Rectangle &, const Rectangle & other, const Vector & displc);
-#endif
-std::vector<FullEntry *> prioritized_entries
-    (EntryMapView, std::vector<FullEntry *> &&);
+    virtual ~IterationBase() {}
 
-std::vector<FullEntry *> prioritized_entries
-    (EntryEntityRefMap &, std::vector<FullEntry *> &&);
-#if 0
-HitSide trim_displacement_for_barriers
-    (const Rectangle &, Vector barriers, Vector & displacement);
+    virtual void for_each_sequence(SequenceInterface &) = 0;
 
-HitSide trim_displacement
-    (const Rectangle &, const Rectangle & other, Vector & displc);
+    template <typename OnPairWise>
+    void for_each(OnPairWise && do_pair_wise);
+};
 
-// much more intense written for growing or shrinking rectangles
-bool trespass_occuring
-    (const Rectangle &, const Rectangle & other, const Vector & displc);
+template <typename OnPairWise>
+void IterationBase::for_each(OnPairWise && do_pair_wise) {
+    class Impl final : public SequenceInterface {
+    public:
+        Impl(OnPairWise && do_pair_wise): m_f(std::move(do_pair_wise)) {}
+        void prestep(FullEntry &) final {}
+        void step(FullEntry & entry, FullEntry & other_entry) final
+            { m_f(entry, other_entry); }
+        void poststep(FullEntry &) final {}
 
-Rectangle grow(Rectangle, const Size &);
+    private:
+        OnPairWise m_f;
+    };
+    Impl impl(std::move(do_pair_wise));
+    for_each_sequence(impl);
+}
 
-Rectangle grow_by_displacement(Rectangle, const Vector & displc);
+void do_collision_work
+    (EventHandler &, IterationBase &, const CollisionMatrix &,
+     EventRecorder &, TdpHandlerEntryInformation &);
 
-// ----------------------------- level 1 helpers ------------------------------
-
-int large_displacement_step_count
-    (const Rectangle &, const Rectangle & other, const Vector & displc);
-
-std::tuple<Vector, HitSide> find_min_push_displacement_small
-    (const Rectangle &, const Rectangle & other, const Vector & displc);
-
-HitSide trim_small_displacement
-    (const Rectangle &, const Rectangle & other, Vector & displc);
-
-// ----------------------------- level 2 helpers ------------------------------
-
-HitSide values_from_displacement(const Vector &);
-#endif
-#endif
 } // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

@@ -1,4 +1,5 @@
 #include "sight-detail.hpp"
+#include "helpers.hpp"
 
 #include <numeric>
 #include <functional>
@@ -9,7 +10,8 @@ namespace { // ----------------------------------------------------------------
 
 using tdp::detail::SightingComplete, tdp::detail::ImageEntry,
       tdp::detail::PolarVector, tdp::Sighting, tdp::Real, tdp::Vector,
-      tdp::Rectangle, tdp::detail::QuadraticSightingComplete;
+      tdp::Rectangle, tdp::detail::QuadraticSightingComplete,
+      tdp::detail::Tuple;
 using Percept = SightingComplete::Percept;
 using Entry = SightingComplete::Entry;
 using UnitTestFunctions = tdp::detail::SightingUnitTestFunctions;
@@ -17,8 +19,7 @@ using VectorPairs = SightingComplete::VectorPairs;
 
 template <typename T>
 /* portmanteau of "varriable array" like "vary" */ using Varray = std::vector<T>;
-template <typename ... Types>
-using Tuple = std::tuple<Types...>;
+
 using ImageVarrayIter = Varray<ImageEntry>::iterator;
 using cul::rotate_vector, cul::directed_angle_between, cul::top_left_of,
       cul::is_contained_in, cul::cross, cul::find_intersection,

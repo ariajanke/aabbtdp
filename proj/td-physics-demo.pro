@@ -28,13 +28,16 @@ SOURCES += \
     ../src/detail.cpp \
     ../src/physics.cpp \
     ../src/helpers.cpp \
-    ../src/physics-interval-sweep.cpp
+    ../src/physics-interval-sweep.cpp \
+    ../src/physics-quadratic-naive.cpp \
+    ../src/physics-grid.cpp \
+    ../src/physics-aabb-tree.cpp
 
 QMAKE_CXXFLAGS += -DMACRO_BUILD_DEMO
 SOURCES        += ../other-src/demo.cpp
 SOURCES        += ../src/sight.cpp
 SOURCES        += ../other-src/sight-unit-tests.cpp
-HEADERS        += ../other-src/demo-common.hpp
+HEADERS        += ../other-src/demo -common.hpp
 
 HEADERS += \
     \#../src/PartitionBoxMap.hpp.bak \
@@ -43,6 +46,9 @@ HEADERS += \
     ../src/detail.hpp \
     ../src/helpers.hpp \
     ../src/physics-interval-sweep.hpp \
+    ../src/physics-quadratic-naive.hpp \
+    ../src/physics-grid.hpp \
+    ../src/physics-aabb-tree.hpp \
     ../inc/aabbtdp/physics.hpp \
     ../other-src/demo.hpp \
     ../inc/aabbtdp/sight.hpp \

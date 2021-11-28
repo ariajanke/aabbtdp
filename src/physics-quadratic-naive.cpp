@@ -24,52 +24,58 @@
 
 *****************************************************************************/
 
-#include <aabbtdp/physics.hpp>
-
-#include "physics-interval-sweep.hpp"
 #include "physics-quadratic-naive.hpp"
-#include "detail.hpp"
 
 namespace {
 
-using namespace cul::exceptions_abbr;
-using std::make_unique;
+using tdp::detail::IterationBase, tdp::detail::EntryMapView;
+
+class QuadraticIteration final : public  IterationBase {
+public:
+    QuadraticIteration(EntryMapView && emv): m_view(std::move(emv)) {}
+
+    void for_each_sequence(SequenceInterface & intf) final {
+        for (auto & pair : m_view) {
+            intf.prestep(pair.second);
+            for (auto & other_pair : m_view) {
+                if (pair.first == other_pair.first) continue;
+                intf.step(pair.second, other_pair.second);
+            }
+            intf.poststep(pair.second);
+        }
+    }
+
+private:
+    EntryMapView m_view;
+};
 
 } // end of <anonymous> namespace
 
 namespace tdp {
 
-/* static */ TdpHandlerPtr Physics2DHandler::make_default_instance()
-    { return make_unique<tdp::detail::IntervalSweepHandler>(); }
+namespace detail {
 
-void Physics2DHandler::set_collision_matrix(CollisionMatrix && matrix)
-    { set_collision_matrix_(std::move(matrix)); }
+void Quadratic2DPhysicsImpl::run(EventHandler & event_handler) {
+    m_info.clean_up_containers();
 
-void Physics2DHandler::set_collision_matrix(const CollisionMatrix & matrix) {
-    auto t = matrix;
-    set_collision_matrix_(std::move(t));
+    QuadraticIteration qi{m_info.entries_view()};
+
+    // still quite a few dupelications...
+
+    do_collision_work(event_handler, qi, collision_matrix(), m_event_recorder, m_info);
+
+    m_event_recorder.send_events(event_handler);
 }
 
-/* static */ [[noreturn]]
-    std::unique_ptr<GridPhysicsHandler> GridPhysicsHandler::make_instance()
+/* private */ void Quadratic2DPhysicsImpl::find_overlaps_
+    (const Rectangle & rect, const OverlapInquiry & inq) const
 {
-    throw RtError("GridPhysicsHandler::make_instance: this implementation is "
-                  "not finished.");
+    for (const auto & pair : m_info.entries_view()) {
+        if (cul::find_rectangle_intersection(rect, pair.second.bounds).width > 0)
+            inq(pair.second);
+    }
 }
 
-/* static */ std::unique_ptr<SweepSwitchPhysicsHandler>
-    SweepSwitchPhysicsHandler::make_instance()
-{ return make_unique<tdp::detail::IntervalSweepHandler>(); }
-
-/* static */ [[noreturn]] std::unique_ptr<AABBTreePhysicsHandler>
-    AABBTreePhysicsHandler::make_instance()
-{
-    throw RtError("AABBTreePhysicsHandler::make_instance: this implementation "
-                  "is not finished.");
-}
-
-/* static */ TdpHandlerPtr QuadraticPhysicsHandler::make_instance()
-    { return make_unique<tdp::detail::Quadratic2DPhysicsImpl>(); }
+} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace
-

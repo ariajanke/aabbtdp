@@ -168,6 +168,9 @@ private:
     IterType m_beg, m_end;
 };
 
+template <typename ... Types>
+using Tuple = std::tuple<Types...>;
+
 class SpatialMapFront final {
 public:
     using Element          = EntrySpatialRef;
