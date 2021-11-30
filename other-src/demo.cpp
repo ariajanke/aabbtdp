@@ -29,7 +29,7 @@
 #include "../src/sight-detail.hpp"
 #include "../src/SpatialMap.hpp"
 #include "../src/helpers.hpp"
-#include "../src/detail.hpp"
+
 #include "../src/physics-interval-sweep.hpp"
 
 #include <aabbtdp/sight.hpp>
@@ -252,6 +252,7 @@ private:
             if (!e.has<Rectangle>()) continue;
             m_entity_rectangles.push_back(e.get<Rectangle>());
         }
+#       if 0
         m_sp_map.set_elements(m_entity_rectangles.begin(), m_entity_rectangles.end());
 
         Real min_x = k_inf, min_y = k_inf, max_x = -k_inf, max_y = -k_inf;
@@ -272,7 +273,7 @@ private:
             target.draw(DrawRectangle{float(cul::right_of(el) - k_thickness / 2), float(el.top), float(k_thickness), float(el.height), sf::Color::White});
             target.draw(DrawRectangle{float(el.left), float(cul::bottom_of(el) - k_thickness / 2), float(el.width), float(k_thickness), sf::Color::White});
         });
-
+#       endif
         {
         auto old_view = target.getView();
         auto new_view = old_view;
@@ -379,7 +380,7 @@ private:
             return ElementCouple{ top, bottom };
         }
     };
-
+#   if 0
     struct MapFactory final : public tdp::detail::SpatialMapFactory<Rectangle> {
         MapBase & choose_map_for(SetElIterator beg, SetElIterator end, int depth) {
             using namespace tdp::detail;
@@ -409,9 +410,11 @@ private:
         tdp::detail::FlatSpatialMap<Rectangle> m_flat;
         std::unique_ptr<HorzMap> m_horz;
         std::unique_ptr<VertMap> m_vert;
-    };
 
+    };
+#   endif
     int get_interaction_count() const {
+#       if 0
         std::vector<Rectangle *> col;
         col.reserve(m_entity_rectangles.size());
         std::size_t count = 0;
@@ -420,6 +423,8 @@ private:
             count = std::max(col.size(), count);
         }
         return int(count);
+#       endif
+        return 0;
     }
 
 #   if 0
@@ -427,8 +432,9 @@ private:
     std::vector<std::tuple<Rectangle, RdEntity>> m_inter_cont;
 #   endif
     std::vector<Rectangle> m_entity_rectangles;
-
+#   if 0
     tdp::detail::SpatialMap<Rectangle, MapFactory> m_sp_map;
+#   endif
     sf::RenderTarget & target;
 #   if 0
     std::vector<sf::Vertex> m_verticies;
@@ -1505,7 +1511,7 @@ void run_demo() {
                                 VerticiesMovementSystem(), RdFadeSystem(),
                                 ShadowImageSystem(), MatFlashSystem(),
                                 LifetimeSystem()),
-                std::tie(col_sys, pplds/*, tar_sys*/)));
+                std::tie(col_sys, pplds, tar_sys)));
             //run_systems(ent_mana, std::tie(spdisplay));
             ent_mana.process_deletion_requests();
         }

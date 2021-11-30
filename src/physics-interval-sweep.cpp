@@ -26,21 +26,6 @@
 
 #include "physics-interval-sweep.hpp"
 
-namespace {
-
-using SequenceInterface = tdp::detail::SweepContainer::SequenceInterface;
-using tdp::detail::EventRecorder, tdp::EventHandler, tdp::CollisionMatrix,
-      tdp::detail::FullEntry, tdp::Vector, tdp::Size, tdp::detail::HitSide,
-      ecs::EntityRef, tdp::Rectangle, tdp::detail::find_min_push_displacement,
-      tdp::detail::find_barrier_for_displacement,
-      tdp::detail::trim_displacement_for_barriers,
-      tdp::detail::trim_displacement, tdp::detail::trespass_occuring,
-      tdp::detail::grow, tdp::detail::Tuple;
-
-
-
-} // end of <anonymous> namespace
-
 namespace tdp {
 
 namespace detail {
@@ -113,22 +98,19 @@ void SweepContainer::for_each_sequence(SequenceInterface & intf) {
     }
 }
 
-void IntervalSweepHandler::run(EventHandler & event_handler) {
-    // we want to process pushes first, in this case
-    // the most limiting pushes
+// ----------------------------------------------------------------------------
+
+/* private */ void IntervalSweepHandler::prepare_iteration
+    (CollisionWorker & do_collision_work, EventHandler & event_handler)
+{
     using PairType = EntryEntityRefMap::value_type;
-    m_info.clean_up_containers();
-    m_workspace.populate(m_info.entries_view().begin(), m_info.entries_view().end(),
+    m_workspace.populate(entries_view().begin(), entries_view().end(),
                          [](PairType & pt) { return &pt.second; });
-
-    // ...
-    do_collision_work(event_handler, m_workspace, collision_matrix(), m_event_recorder, m_info);
-
-    m_event_recorder.send_events(event_handler);
+    do_collision_work(event_handler, m_workspace);
 }
 
 /* private */ void IntervalSweepHandler::find_overlaps_(const Rectangle & rect, const OverlapInquiry & inq) const {
-    for (const auto & pair : m_info.entries_view()) {
+    for (const auto & pair : entries_view()) {
         if (cul::find_rectangle_intersection(rect, pair.second.bounds).width > 0)
             inq(pair.second);
     }

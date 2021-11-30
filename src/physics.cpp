@@ -28,7 +28,7 @@
 
 #include "physics-interval-sweep.hpp"
 #include "physics-quadratic-naive.hpp"
-#include "detail.hpp"
+#include "physics-grid.hpp"
 
 namespace {
 
@@ -50,12 +50,9 @@ void Physics2DHandler::set_collision_matrix(const CollisionMatrix & matrix) {
     set_collision_matrix_(std::move(t));
 }
 
-/* static */ [[noreturn]]
-    std::unique_ptr<GridPhysicsHandler> GridPhysicsHandler::make_instance()
-{
-    throw RtError("GridPhysicsHandler::make_instance: this implementation is "
-                  "not finished.");
-}
+/* static */ std::unique_ptr<GridPhysicsHandler>
+    GridPhysicsHandler::make_instance()
+{ return make_unique<tdp::detail::GridPhysicsHandlerImpl>(); }
 
 /* static */ std::unique_ptr<SweepSwitchPhysicsHandler>
     SweepSwitchPhysicsHandler::make_instance()

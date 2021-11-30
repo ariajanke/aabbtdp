@@ -57,11 +57,8 @@ public:
     /// This function exist to ease testing
     static std::unique_ptr<Sighting> make_quadratic_instance();
 
-    // an unobstructed entry with an opacity of 1 will result in a
-    // percept with a visibility of 1
-
     /// Each entry is a rectanglur image with a set opacity.
-    struct Entry {
+    struct Entry final {
         EntityRef entity;
         Real      opacity = 1;
         Rectangle bounds;
@@ -73,7 +70,7 @@ public:
 
     /// A percept describes an "image" of an entity, which includes its
     /// visibility and location.
-    struct Percept {
+    struct Percept final {
         /// The same entity reference used with the entry is passed back here
         EntityRef entity;
         /// target visibility within [0 1], where 0 is completely invisible or
@@ -104,12 +101,15 @@ public:
     ///   If not completely opaque, then their visibility proportionally alpha
     ///   blended away.
     /// - Distance from the source will not affect visibility in any way.
+    ///
+    /// @note an unobstructed entry with an opacity of 1 will result in a
+    ///       percept with a visibility of 1
+    ///
     /// @param source The origin of observation. This is treated as the
     ///               "camera's" or "eye's" absolute location.
     /// @returns a reference to the set of percepts post process. This
     ///          container is owned by the handler and it and its members will
     ///          all become invalid if "run" is ran again.
-    ///
     virtual const std::vector<Percept> & run(Vector source) = 0;
 };
 

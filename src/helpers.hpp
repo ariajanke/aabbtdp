@@ -28,77 +28,27 @@
 
 #include <aabbtdp/physics.hpp>
 
-#include "SpatialMap.hpp"
-
 #include <common/Vector2Util.hpp>
 
 namespace tdp {
 
 namespace detail {
 
-struct FullEntry;
-
-struct EntrySpatialRef {
-    EntrySpatialRef() {}
-    EntrySpatialRef(FullEntry * ptr_, Rectangle bounds_): entry(ptr_), bounds(bounds_) {}
-    FullEntry * entry = nullptr;
-    Rectangle bounds;
-};
-
-class FullEntryHorzGetters final : public SpatialMapElementGetters<EntrySpatialRef> {
+template <typename IterType>
+class View {
 public:
-    Real get_low(const EntrySpatialRef & entry) const final
-        { return entry.bounds.left; }
+    View(IterType b_, IterType e_): m_beg(b_), m_end(e_) {}
 
-    Real get_high(const EntrySpatialRef & entry) const final
-        { return cul::right_of(entry.bounds); }
-};
+    IterType begin() const { return m_beg; }
 
-class FullEntryVertGetters final : public SpatialMapElementGetters<EntrySpatialRef> {
-public:
-    Real get_low(const EntrySpatialRef & entry) const final
-        { return entry.bounds.top; }
-
-    Real get_high(const EntrySpatialRef & entry) const final
-        { return cul::bottom_of(entry.bounds); }
-};
-
-enum FactoryChoice { k_should_split_horz, k_should_split_vert, k_should_use_flat };
-
-// stupidly ugly :c
-template <typename Element, typename HorzGetters, typename VertGetters, typename IterType>
-FactoryChoice choose_map_for_iterators(IterType beg, IterType end, int depth);
-
-class SpEntryFactory final : public SpatialMapFactory<EntrySpatialRef> {
-public:
-    using Element = EntrySpatialRef;
-    MapBase & choose_map_for(SetElIterator beg, SetElIterator end, int depth);
-#   if 0
-    static constexpr const int k_depth_max           = 1024;
-    static constexpr const int k_few_enough_for_flat =   16;
-#   endif
-    static bool too_many_shared(const SpatialMapCounts & counts);
+    IterType end() const { return m_end; }
 
 private:
-    using GettersBase = SpatialMapElementGetters<Element>;
-    using HorzMap = PartitionedSpatialMap<Element, FullEntryHorzGetters, SpEntryFactory>;
-    using VertMap = PartitionedSpatialMap<Element, FullEntryVertGetters, SpEntryFactory>;
-
-    HorzMap & ensure_horz_map(Real division);
-
-    VertMap & ensure_vert_map(Real division);
-
-    FlatSpatialMap<Element> m_flat;
-    std::unique_ptr<HorzMap> m_horz;
-    std::unique_ptr<VertMap> m_vert;
+    IterType m_beg, m_end;
 };
 
-
-template <typename ValueType, typename ObjIntf>
-std::enable_if_t<kt_is_sp_element_getters<ObjIntf, ValueType>, Real>
-    get_division_for(SpIterator<ValueType> beg, SpIterator<ValueType> end, ObjIntf);
-
-using FullEntrySpatialMap = SpatialMap<EntrySpatialRef, SpEntryFactory>;
+template <typename ... Types>
+using Tuple = std::tuple<Types...>;
 
 // ----------------------------------------------------------------------------
 
@@ -131,6 +81,8 @@ private:
     bool m_is_push = false;
 };
 
+// ------------------------------ EventRecorder -------------------------------
+
 /// EventRecorder's task is not just record events but also prevent old
 /// dupelicate events from reaching the event handler
 class EventRecorder final {
@@ -153,52 +105,64 @@ private:
     CollisionEvents m_new_events;
 };
 
+// -------------------------------- FullEntry ---------------------------------
+
+constexpr const int k_default_priority = 0;
+
+struct FullEntry final : public tdp::Entry {
+    // record only useful during a frame
+    int priority = k_default_priority;
+    // (I need some way to handle last appearance)
+    bool first_appearance = true;
+
+    // for swptry2
+    Vector nudge;
+
+    // board phase boundries
+    Real low_x, low_y, high_x, high_y;
+};
+
+using EntryEntityRefMap = std::unordered_map<EntityRef, FullEntry, ecs::EntityHasher>;
+using EntryMapView      = View<EntryEntityRefMap::iterator>;
+
+void update_broad_boundries(FullEntry &);
+
+void absorb_nudge(FullEntry &);
+
+template <typename Iter, typename ToReference>
+void update_broad_boundries(Iter beg, Iter end, ToReference && to_ref) {
+    for (auto itr = beg; itr != end; ++itr) {
+        FullEntry & ref = to_ref(itr);
+        update_broad_boundries(ref);
+    }
+}
+
+template <typename Iter, typename ToReference>
+void absorb_nudges(Iter beg, Iter end, ToReference && to_ref) {
+    for (auto itr = beg; itr != end; ++itr) {
+        FullEntry & ref = to_ref(itr);
+        absorb_nudge(ref);
+    }
+}
+
+inline void absorb_nudges(EntryMapView entries_view) {
+    absorb_nudges(entries_view.begin(), entries_view.end(),
+                  [] (auto itr) -> FullEntry & { return itr->second; });
+}
+
+inline void update_broad_boundries(
+    std::vector<FullEntry *>::iterator beg,
+    std::vector<FullEntry *>::iterator end)
+{
+    update_broad_boundries(beg, end,
+        [](std::vector<FullEntry *>::iterator itr) -> FullEntry & { return **itr; });
+}
+
 // ----------------------------------------------------------------------------
-
-template <typename IterType>
-class View {
-public:
-    View(IterType b_, IterType e_): m_beg(b_), m_end(e_) {}
-
-    IterType begin() const { return m_beg; }
-
-    IterType end() const { return m_end; }
-
-private:
-    IterType m_beg, m_end;
-};
-
-template <typename ... Types>
-using Tuple = std::tuple<Types...>;
-
-class SpatialMapFront final {
-public:
-    using Element          = EntrySpatialRef;
-    using ElementContainer = std::vector<EntrySpatialRef>;
-    using PointerContainer = SpElementContainer<Element>;
-    using PointerIterator  = SpIterator<Element>;
-
-    // full entrys to spatial entry conversions
-    template <typename IterType, typename Func>
-    void set_elements(IterType beg, IterType end, Func && convert_iterator_to_element);
-
-    // no nested calls allowed
-    View<PointerIterator> view_of(const Rectangle &);
-
-    // nest your calls as you please
-    void occupy_with_view_of(const Rectangle &, PointerContainer &) const;
-
-private:
-    bool m_nest_guard = false;
-    FullEntrySpatialMap m_spatial_map;
-    PointerContainer m_recycled_cont;
-    ElementContainer m_entry_cont;
-};
-
-// ----------------------------- level 0 helpers ------------------------------
 
 enum Direction : uint8_t { k_left, k_right, k_down, k_up, k_direction_count };
 
+// does this structure have a purpose?
 struct HitSide {
     HitSide() {}
     HitSide(Direction h_, Direction v_):
@@ -242,7 +206,6 @@ Rectangle displace(Rectangle, Vector);
 
 #ifdef MACRO_AABBTDP_SHOW_DETAILS_HELPERS
 
-
 // ----------------------------- level 1 helpers ------------------------------
 
 int large_displacement_step_count
@@ -259,89 +222,6 @@ HitSide trim_small_displacement
 HitSide values_from_displacement(const Vector &);
 
 #endif
-
-// ----------------------------------------------------------------------------
-
-template <typename ValueType, typename ObjIntf>
-std::enable_if_t<kt_is_sp_element_getters<ObjIntf, ValueType>, Real>
-    get_division_for(SpIterator<ValueType> beg, SpIterator<ValueType> end, ObjIntf)
-{
-    // beg to end need not be sorted here
-    if (end == beg) return 0;
-
-    Real avg = 0;
-    for (auto itr = beg; itr != end; ++itr) {
-        avg += (ObjIntf{}.get_high(**itr) + ObjIntf{}.get_low(**itr)) / 2;
-    }
-    avg /= Real(end - beg);
-
-    auto mcounts = get_counts<ValueType, ObjIntf>(avg, beg, end);
-
-    //pivot_sort_around<ValueType, ObjIntf>(beg, end, avg);
-
-    auto mid = beg + (end - beg) / 2;
-    auto mid_low  = ObjIntf{}.get_low (**mid);
-    auto mid_high = ObjIntf{}.get_high(**mid);
-    auto late_div  = mid_high + (mid_high - mid_low)*0.005;
-    auto early_div = mid_low  - (mid_high - mid_low)*0.005;
-    auto lcounts = get_counts<ValueType, ObjIntf>(late_div , beg, end);
-    auto hcounts = get_counts<ValueType, ObjIntf>(early_div, beg, end);
-
-    // at least five iterations... yuck!
-    if (prefer_lhs_counts(mcounts, lcounts) && prefer_lhs_counts(mcounts, hcounts)) {
-        return avg;
-    }
-    return (prefer_lhs_counts(lcounts, hcounts)) ? mid_low : mid_high;
-}
-
-// ----------------------------------------------------------------------------
-
-template <typename Element, typename HorzGetters, typename VertGetters, typename IterType>
-FactoryChoice choose_map_for_iterators(IterType beg, IterType end, int depth) {
-    static constexpr const int k_depth_max           = 1024;
-    static constexpr const int k_few_enough_for_flat =    8;
-
-    //return k_should_use_flat;
-
-    static auto enough_for_fork = [](const SpatialMapCounts & counts) {
-        return std::min(counts.on_low, counts.on_high) > (sum_counts(counts) / 12);
-    };
-
-    if (depth > k_depth_max || end - beg <= k_few_enough_for_flat)
-        return k_should_use_flat;
-
-    auto hdiv = get_division_for<Element>(beg, end, HorzGetters{});
-    auto vdiv = get_division_for<Element>(beg, end, VertGetters{});
-    auto hcounts = get_counts<Element, HorzGetters>(hdiv, beg, end);
-    auto vcounts = get_counts<Element, VertGetters>(vdiv, beg, end);
-
-    if (prefer_lhs_counts(hcounts, vcounts)) {
-        if (SpEntryFactory::too_many_shared(hcounts) || !enough_for_fork(hcounts))
-            return k_should_use_flat;
-        return k_should_split_horz;
-    }
-    if (SpEntryFactory::too_many_shared(vcounts) || !enough_for_fork(vcounts))
-        return k_should_use_flat;
-    return k_should_split_vert;
-}
-
-// ----------------------------------------------------------------------------
-
-template <typename IterType, typename Func>
-void SpatialMapFront::set_elements
-    (IterType beg, IterType end, Func && convert_iterator_to_element)
-{
-    m_entry_cont.clear();
-    if constexpr (kt_is_random_access_iterator<IterType>) {
-        m_entry_cont.reserve(end - beg);
-    }
-    for (auto itr = beg; itr != end; ++itr) {
-        auto cpy_itr = itr;
-        Element el = convert_iterator_to_element(cpy_itr);
-        m_entry_cont.push_back(el);
-    }
-    m_spatial_map.set_elements(m_entry_cont.begin(), m_entry_cont.end());
-}
 
 } // end of detail namespace -> into ::tdp
 

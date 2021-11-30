@@ -25,13 +25,13 @@ SOURCES += \
     ../other-src/main.cpp \
     ../other-src/spatial-map-unit-tests.cpp \
     ../other-src/spatial-map-unit-tests-n.cpp \
-    ../src/detail.cpp \
     ../src/physics.cpp \
     ../src/helpers.cpp \
     ../src/physics-interval-sweep.cpp \
     ../src/physics-quadratic-naive.cpp \
     ../src/physics-grid.cpp \
-    ../src/physics-aabb-tree.cpp
+    ../src/physics-aabb-tree.cpp \
+    ../src/CollisionHandler.cpp
 
 QMAKE_CXXFLAGS += -DMACRO_BUILD_DEMO
 SOURCES        += ../other-src/demo.cpp
@@ -43,7 +43,6 @@ HEADERS += \
     \#../src/PartitionBoxMap.hpp.bak \
     ../src/SpatialMap.hpp \
     ../src/SpatialMapN.hpp \
-    ../src/detail.hpp \
     ../src/helpers.hpp \
     ../src/physics-interval-sweep.hpp \
     ../src/physics-quadratic-naive.hpp \
@@ -53,7 +52,8 @@ HEADERS += \
     ../other-src/demo.hpp \
     ../inc/aabbtdp/sight.hpp \
     ../inc/aabbtdp/defs.hpp \
-    ../src/sight-detail.hpp
+    ../src/sight-detail.hpp \
+    ../src/CollisionHandler.hpp
 
 INCLUDEPATH += \
     ../lib/cul/inc  \

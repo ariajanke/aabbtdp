@@ -27,8 +27,7 @@
 #pragma once
 
 #include "helpers.hpp"
-
-#include "detail.hpp"
+#include "CollisionHandler.hpp"
 
 namespace tdp {
 
@@ -93,32 +92,21 @@ private:
     std::vector<FullEntry *> m_reorder;
 };
 
-class IntervalSweepHandler final : public SweepSwitchPhysicsHandler {
-public:
-    void run(EventHandler &) final;
+// ----------------------------------------------------------------------------
 
+class IntervalSweepHandler final :
+    public SweepSwitchPhysicsHandler,
+    public CollisionHandler
+{
+public:
     void check_to_switch_axis() final {}
 
-    const CollisionMatrix & collision_matrix() const final
-        { return m_info.collision_matrix(); }
-
-    void update_entry(const Entry & entry) final
-        { m_info.update_entry(entry); }
-
-    const int * get_push_level_for(EntityRef eref) const {
-        auto ptr = m_info.find_entry(eref);
-        return ptr ? &ptr->priority : nullptr;
-    }
-
 private:
-    void set_collision_matrix_(CollisionMatrix && colmat) final
-        { m_info.set_collision_matrix_(std::move(colmat)); }
-
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
-    EventRecorder m_event_recorder;
+    void prepare_iteration(CollisionWorker &, EventHandler &) final;
+
     SweepContainer m_workspace;
-    TdpHandlerEntryInformation m_info;
 };
 
 } // end of detail namespace -> into ::tdp

@@ -24,7 +24,7 @@
 
 *****************************************************************************/
 
-#include "detail.hpp"
+#include "CollisionHandler.hpp"
 
 #include <iostream>
 #include <thread>
@@ -47,47 +47,42 @@ namespace tdp {
 
 namespace detail {
 
-void update_broad_boundries(FullEntry & entry) {
-    static constexpr const Real k_adjust_amount = 0.;
+void do_collision_work
+    (EventHandler &, IterationBase &, const CollisionMatrix &,
+     EventRecorder &, EntryMapView);
 
-    static const auto low_x = [](const FullEntry & fe) {
-        auto dx = fe.displacement.x + fe.nudge.x;
-        return fe.bounds.left + ((dx < 0) ? dx : 0) - k_adjust_amount;
-    };
+CollisionHandler::CollisionWorker::CollisionWorker
+    (bool & b, EventRecorder & event_recorder,
+     CollisionMatrix & col_matrix, EntryEntityRefMap & entries)
+:
+    m_was_called(b),
+    m_event_recorder(event_recorder),
+    m_col_matrix(col_matrix),
+    m_entries(entries)
+{}
 
-    static const auto high_x = [](const FullEntry & fe) {
-        auto dx = fe.displacement.x + fe.nudge.x;
-        return right_of(fe.bounds) + ((dx > 0) ? dx : 0) + k_adjust_amount;
-    };
-
-    static const auto low_y = [](const FullEntry & fe) {
-        auto dy = fe.displacement.y + fe.nudge.y;
-        return fe.bounds.top + ((dy < 0) ? dy : 0) - k_adjust_amount;
-    };
-
-    static const auto high_y = [](const FullEntry & fe) {
-        auto dy = fe.displacement.y + fe.nudge.y;
-        return bottom_of(fe.bounds) + ((dy > 0) ? dy : 0) + k_adjust_amount;
-    };
-    entry.low_x  = low_x (entry);
-    entry.low_y  = low_y (entry);
-    entry.high_x = high_x(entry);
-    entry.high_y = high_y(entry);
+void CollisionHandler::CollisionWorker::operator () (EventHandler & event_handler, IterationBase & iteration_method) {
+    do_collision_work(event_handler, iteration_method, m_col_matrix,
+                      m_event_recorder, View{m_entries.begin(), m_entries.end()});
+    m_was_called = true;
 }
 
-void absorb_nudge(FullEntry & entry) {
-    entry.displacement += entry.nudge;
-    entry.nudge         = Vector{};
+void CollisionHandler::run(EventHandler & event_handler) {
+    for (auto itr = m_entries.begin(); itr != m_entries.end();) {
+        if (itr->second.entity) {
+            ++itr;
+        } else {
+            itr = m_entries.erase(itr);
+        }
+    }
+
+    bool was_called = false;
+    CollisionWorker cw{was_called, m_event_recorder, m_col_matrix, m_entries};
+    prepare_iteration(cw, event_handler);
+    m_event_recorder.send_events(event_handler);
 }
 
-// --------------------------- Helpers (level 0) ------------------------------
-
-std::vector<FullEntry *> prioritized_entries
-    (/*const EntryEntityRefMap &, */ EntryMapView, std::vector<FullEntry *> &&);
-
-// ------------------------ TdpHandlerEntryInformation ------------------------
-
-void TdpHandlerEntryInformation::update_entry(const Entry & entry) {
+void CollisionHandler::update_entry(const Entry & entry) {
     if (collision_matrix().is_empty()) {
         throw InvArg("TdpHandlerComplete::update_entry: cannot update entries "
                      "with collision matrix not being set.");
@@ -126,22 +121,7 @@ void TdpHandlerEntryInformation::update_entry(const Entry & entry) {
     static_cast<tdp::Entry &>(m_entries[entry.entity]) = entry;
 }
 
-void TdpHandlerEntryInformation::clean_up_containers() {
-    for (auto itr = m_entries.begin(); itr != m_entries.end();) {
-        if (itr->second.entity) {
-            ++itr;
-        } else {
-            itr = m_entries.erase(itr);
-        }
-    }
-    for (auto & pair : m_entries) {
-        frame_reset(pair.second);
-    }
-}
-
-void TdpHandlerEntryInformation::set_collision_matrix_
-    (CollisionMatrix && matrix)
-{
+void CollisionHandler::set_collision_matrix_(CollisionMatrix && matrix) {
     using VecI = CollisionMatrix::Vector;
     using namespace interaction_classes;
     if (matrix.width() != matrix.height()) {
@@ -182,6 +162,149 @@ void TdpHandlerEntryInformation::set_collision_matrix_
     }
     m_col_matrix = std::move(matrix);
 }
+
+// ----------------------------------------------------------------------------
+
+class ColWorkImpl final : public IterationBase::SequenceInterface {
+public:
+    explicit ColWorkImpl
+        (int p, EventRecorder & recorder, EventHandler & handler,
+         const CollisionMatrix & col_mat):
+        m_priority(p), m_event_recorder(recorder), m_event_handler(handler),
+        m_col_matrix(col_mat) {}
+
+    void prestep(FullEntry & entry) final;
+
+    void step(FullEntry & entry, FullEntry & other_entry) final;
+
+    void poststep(FullEntry & entry) final;
+
+private:
+    // is there a clean way to put priority up to the "boarder" phase?
+    int m_priority;
+    EventRecorder & m_event_recorder;
+    EventHandler & m_event_handler;
+    const CollisionMatrix & m_col_matrix;
+};
+
+void do_collision_work
+    (EventHandler & event_handler, IterationBase & group_method, const CollisionMatrix & collision_matrix,
+     EventRecorder & event_recorder, EntryMapView entries_view)
+{
+    // note: clean up must take place before populating the group method/container
+    using std::get;
+    static constexpr const int k_max_iterations = 128;
+    int iteration = 0;
+    for (bool should_check_more = true; should_check_more && iteration < k_max_iterations; ++iteration) {
+        should_check_more = false;
+        // We should only process entries of the current highest priority first
+        // Then if we find we can push another entry, that pushed entry then
+        // becomes an even higher priority.
+        group_method.for_each(
+            [&collision_matrix, &iteration, &should_check_more, &event_recorder]
+            (FullEntry & entry, FullEntry & other_entry)
+        {
+            // only consider entry as a possible pusher if iteration == priority
+            if (entry.priority != iteration) return;
+            if (entry.displacement == Vector{} && entry.nudge == Vector{}) return;
+
+            // is other_entry pushable?
+            auto col_class = collision_matrix(entry.collision_layer, other_entry.collision_layer);
+            if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) return;
+
+            // find push displacement
+            auto gv = find_min_push_displacement(entry.bounds,
+                displace(other_entry.bounds, other_entry.displacement + other_entry.nudge),
+                entry.displacement + entry.nudge);
+            if (get<Vector>(gv) == Vector{}) return;
+
+            // The pushed entity should move with a higher priority
+            other_entry.priority  = iteration + 1;
+            other_entry.nudge    += get<Vector>(gv);
+            should_check_more     = true;
+            event_recorder.emplace_event(other_entry.entity, entry.entity, true);
+        });
+    }
+
+    absorb_nudges(entries_view);
+
+    // start finalizing
+    assert(iteration > 0);
+    for (; iteration; --iteration) {
+        // process priority iteration - 1
+        ColWorkImpl impl(iteration - 1, event_recorder, event_handler, collision_matrix);
+        group_method.for_each_sequence(impl);
+    }
+
+    for (auto & pair : entries_view) {
+        pair.second.first_appearance = false;
+        pair.second.priority         = k_default_priority;
+    }
+}
+
+// ----------------------------------------------------------------------------
+
+void ColWorkImpl::prestep(FullEntry & entry) {
+    // I'd like to pass priority checks to the board phase...
+    // it could cull a lot
+    if (entry.priority != m_priority) return;
+    // Wall Collision
+    Vector barrier = find_barrier_for_displacement
+        (entry.displacement, entry.positive_barrier, entry.negative_barrier);
+    if (trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement) != HitSide()) {
+        m_event_recorder.emplace_event(entry.entity, EntityRef(), false);
+    }
+}
+
+void ColWorkImpl::step(FullEntry & entry, FullEntry & other_entry) {
+    if (entry.priority != m_priority) return;
+
+    using namespace tdp::interaction_classes;
+    switch (m_col_matrix(entry.collision_layer, other_entry.collision_layer)) {
+    case k_as_solid: {
+        auto gv = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
+        if (gv == HitSide()) return;
+        m_event_recorder.emplace_event(entry.entity, other_entry.entity, false);
+        break;
+    }
+    case k_as_trespass: {
+        bool first_appearance_overlap = entry.first_appearance && overlaps(entry.bounds, other_entry.bounds);
+        bool regular_trespass         = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
+        if (!first_appearance_overlap && !regular_trespass) return;
+        // this is an "uh-oh" moment if we're reusing containers
+        m_event_handler.on_trespass(entry.entity, other_entry.entity);
+        break;
+    }
+    default: break;
+    }
+}
+
+void ColWorkImpl::poststep(FullEntry & entry) {
+    if (entry.priority != m_priority) return;
+    // fine with other bounds being finalized for trespass events
+    set_top_left_of(entry.bounds, top_left_of(entry.bounds) + entry.displacement);
+    if (entry.growth != Size()) {
+        entry.bounds = grow(entry.bounds, entry.growth);
+    }
+    // this is fine here, not reusing containers at this point, unlike
+    // while being in the for loop above
+    m_event_handler.finalize_entry(entry.entity, entry.bounds);
+}
+
+} // end of detail namespace -> into ::tdp
+
+} // end of tdp namespace
+
+namespace {
+
+bool is_real(const Rectangle & rect) {
+    using cul::is_real;
+    return    is_real(rect.left ) && is_real(rect.top   )
+           && is_real(rect.width) && is_real(rect.height);
+}
+
+} // end of <anonymous> namespace
+
 
 // there are plans for a more accurate "trespass" detection
 // which would involve ideas expressed here
@@ -307,103 +430,3 @@ bool trespass_occuring
 }
 
 #endif
-
-void do_collision_work
-    (EventHandler & event_handler, IterationBase & group_method, const CollisionMatrix & collision_matrix,
-     EventRecorder & event_recorder, TdpHandlerEntryInformation & info)
-{
-    class ColWorkImpl final : public IterationBase::SequenceInterface {
-    public:
-        explicit ColWorkImpl
-            (int p, EventRecorder & recorder, EventHandler & handler,
-             const CollisionMatrix & col_mat):
-            m_priority(p), m_event_recorder(recorder), m_event_handler(handler),
-            m_col_matrix(col_mat) {}
-
-        // all of this is copy-pasta code...
-        void prestep(FullEntry & entry) final {
-            if (entry.priority != m_priority) return;
-            tdp::detail::check_wall_collision(entry, m_event_recorder);
-        }
-
-        void step(FullEntry & entry, FullEntry & other_entry) final {
-            if (entry.priority != m_priority) return;
-            tdp::detail::check_collision_on(entry, other_entry, m_col_matrix, m_event_recorder, m_event_handler);
-        }
-
-        void poststep(FullEntry & entry) final {
-            if (entry.priority != m_priority) return;
-            tdp::detail::finalize_entry(entry, m_event_handler);
-        }
-
-    private:
-        int m_priority;
-        EventRecorder & m_event_recorder;
-        EventHandler & m_event_handler;
-        const CollisionMatrix & m_col_matrix;
-
-    };
-
-    // note: clean up must take place before populating the group method/container
-    using std::get;
-    static constexpr const int k_max_iterations = 128;
-    int iteration = 0;
-    for (bool should_check_more = true; should_check_more && iteration < k_max_iterations; ++iteration) {
-        should_check_more = false;
-        // We should only process entries of the current highest priority first
-        // Then if we find we can push another entry, that pushed entry then
-        // becomes an even higher priority.
-        group_method.for_each(
-            [&collision_matrix, &iteration, &should_check_more, &event_recorder]
-            (FullEntry & entry, FullEntry & other_entry)
-        {
-            // only consider entry as a possible pusher if iteration == priority
-            if (entry.priority != iteration) return;
-            if (entry.displacement == Vector{} && entry.nudge == Vector{}) return;
-
-            // is other_entry pushable?
-            auto col_class = collision_matrix(entry.collision_layer, other_entry.collision_layer);
-            if (col_class != InteractionClass::k_as_solid || !other_entry.pushable) return;
-
-            // find push displacement
-            auto gv = find_min_push_displacement(entry.bounds,
-                displace(other_entry.bounds, other_entry.displacement + other_entry.nudge),
-                entry.displacement + entry.nudge);
-            if (get<Vector>(gv) == Vector{}) return;
-
-            // The pushed entity should move with a higher priority
-            other_entry.priority  = iteration + 1;
-            other_entry.nudge    += get<Vector>(gv);
-            should_check_more     = true;
-            event_recorder.emplace_event(other_entry.entity, entry.entity, true);
-        });
-    }
-
-    info.absorb_nudges();
-
-    // start finalizing
-    assert(iteration > 0);
-    for (; iteration; --iteration) {
-        // process priority iteration - 1
-        ColWorkImpl impl(iteration - 1, event_recorder, event_handler, collision_matrix);
-        group_method.for_each_sequence(impl);
-    }
-
-    for (auto & pair : info.entries_view()) {
-        pair.second.first_appearance = false;
-    }
-}
-
-} // end of detail namespace -> into ::tdp
-
-} // end of tdp namespace
-
-namespace {
-
-bool is_real(const Rectangle & rect) {
-    using cul::is_real;
-    return    is_real(rect.left ) && is_real(rect.top   )
-           && is_real(rect.width) && is_real(rect.height);
-}
-
-} // end of <anonymous> namespace

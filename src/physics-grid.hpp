@@ -27,7 +27,8 @@
 #pragma once
 
 #include <aabbtdp/physics.hpp>
-#include "detail.hpp"
+#include "helpers.hpp"
+#include "CollisionHandler.hpp"
 
 namespace tdp {
 
@@ -35,6 +36,14 @@ namespace detail {
 
 using VectorI    = cul::Vector2  <int>;
 using RectangleI = cul::Rectangle<int>;
+using SizeI      = cul::Size2    <int>;
+
+VectorI find_rectangle_start
+    (Real low_x, Real low_y, const Size & cell_size, const Vector & offset);
+
+inline VectorI find_rectangle_start
+    (const FullEntry & entry, const Size & cell_size, const Vector & offset)
+{ return find_rectangle_start(entry.low_x, entry.low_y, cell_size, offset); }
 
 RectangleI find_rectangle_range
     (Real low_x, Real low_y, Real high_x, Real high_y,
@@ -61,15 +70,28 @@ using GridPhysicsMap = std::unordered_map<VectorI, GridPhysicsMapElement, Vector
 //     remove from old places
 // end
 
-class GridPhysicsHandlerImpl final : public GridPhysicsHandler {
+class GridIteration final : public IterationBase {
 public:
-    const CollisionMatrix & collision_matrix() const final
-        { return m_info.collision_matrix(); }
+    GridIteration(EntryMapView view, const GridPhysicsMap & grid,
+                  const Vector & offset, const Size & cell_size):
+        m_view(view), m_grid(grid), m_offset(offset), m_cell_size(cell_size)
+    {}
 
-    void update_entry(const Entry &) final;
+    void for_each_sequence(SequenceInterface &) final;
 
-    void run(EventHandler &) final;
+private:
+    const std::vector<FullEntry *> & find_cell(int x, int y) const;
 
+    EntryMapView m_view;
+    const GridPhysicsMap & m_grid;
+    const Vector & m_offset;
+    const Size & m_cell_size;
+};
+
+class GridPhysicsHandlerImpl final :
+    public GridPhysicsHandler, public CollisionHandler
+{
+public:
     void set_offset(Vector offset) final;
 
     void reset_grid_size(Real cell_width, Real cell_height) final;
@@ -77,8 +99,7 @@ public:
     void delete_empty_cells() final;
 
 private:
-    void set_collision_matrix_(CollisionMatrix && colmat) final
-        { m_info.set_collision_matrix_(std::move(colmat)); }
+    void prepare_iteration(CollisionWorker &, EventHandler &) final;
 
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
@@ -86,8 +107,6 @@ private:
 
     Size m_cell_size;
     Vector m_offset;
-    TdpHandlerEntryInformation m_info;
-    EventRecorder m_event_recorder;
     GridPhysicsMap m_pgrid;
 };
 

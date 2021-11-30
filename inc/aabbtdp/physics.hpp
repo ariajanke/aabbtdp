@@ -50,7 +50,8 @@ struct Entry {
     static constexpr const int k_no_layer = -1;
     static constexpr const auto k_inf = std::numeric_limits<Real>::infinity();
 
-    /// Referenced entity for this entry, which may not be null.
+    /// Referenced entity for this entry, which may not be null for
+    /// update_entry calls.
     ///
     /// This value is null only for default construction of this structure.
     EntityRef entity;
@@ -198,7 +199,7 @@ class Physics2DHandler {
 public:
     /// @returns a newly created default instance.
     ///
-    /// Presently, it returns an old implementation.
+    /// Presently, it returns a the sweep interval handler
     ///
     /// @note Just understand which will be "implementation defined", and may
     ///       change as the library evolves.
@@ -266,13 +267,11 @@ protected:
 ///
 /// @note each grid cell is individually allocated, but the number of instance
 ///       creations will be limited by which cells will be occupied
-class GridPhysicsHandler : public Physics2DHandler {
+class GridPhysicsHandler : virtual public Physics2DHandler {
 public:
-    /// Since this is implementation is not finished, this function will always
-    /// throw a runtime error.
+    /// @returns untested implementation for the grid handler
     /// @warning UNFINISHED
-    /// @throws Always throws
-    [[noreturn]] static std::unique_ptr<GridPhysicsHandler> make_instance();
+    static std::unique_ptr<GridPhysicsHandler> make_instance();
 
     /// Sets the top left position of the origin grid cell.
     ///
@@ -303,7 +302,7 @@ public:
 ///
 /// By default, sweeps are done along the x-axis. It is possible for this to
 /// change.
-class SweepSwitchPhysicsHandler : public Physics2DHandler {
+class SweepSwitchPhysicsHandler : virtual public Physics2DHandler {
 public:
     /// @returns a new handler instance that uses interval sweep
     static std::unique_ptr<SweepSwitchPhysicsHandler> make_instance();
@@ -319,7 +318,7 @@ public:
 
 /// This implementation uses an AABB Tree to limit the number of entry
 /// interactions.
-class AABBTreePhysicsHandler : public Physics2DHandler {
+class AABBTreePhysicsHandler : virtual public Physics2DHandler {
 public:
     /// Since this is implementation is not finished, this function will always
     /// throw a runtime error.
@@ -336,7 +335,7 @@ public:
 /// O(n^2) time.
 ///
 /// This exists mostly for testing purposes.
-class QuadraticPhysicsHandler : public Physics2DHandler {
+class QuadraticPhysicsHandler : virtual public Physics2DHandler {
 public:
     /// @returns a new handler instance that uses a trivial quadratic algorithm
     static std::unique_ptr<Physics2DHandler> make_instance();

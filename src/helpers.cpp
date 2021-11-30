@@ -34,70 +34,11 @@ using namespace cul::exceptions_abbr;
 using cul::is_real, cul::magnitude, cul::normalize;
 using tdp::Rectangle, tdp::Vector;
 
-[[nodiscard]] static auto guard(bool & b) {
-    struct A {
-        A(bool & b_): b(b_) { b = true; }
-        ~A() { b = false; }
-        bool & b;
-    };
-    return A{b};
-}
-
 } // end of <anonymous> namespace
 
 namespace tdp {
 
 namespace detail {
-
-// ------------------------------ SpEntryFactory ------------------------------
-
-SpEntryFactory::MapBase & SpEntryFactory::
-    choose_map_for(SetElIterator beg, SetElIterator end, int depth)
-{
-    auto choice = choose_map_for_iterators<Element, FullEntryHorzGetters, FullEntryVertGetters>
-        (beg, end, depth);
-    switch (choice) {
-    case k_should_split_horz: return ensure_horz_map(get_division_for<Element>(beg, end, FullEntryHorzGetters{}));
-    case k_should_split_vert: return ensure_vert_map(get_division_for<Element>(beg, end, FullEntryVertGetters{}));
-    case k_should_use_flat  : return m_flat;
-    }
-    throw std::runtime_error("bad branch");
-#   if 0
-    if (depth > k_depth_max || end - beg <= k_few_enough_for_flat)
-        return m_flat;
-
-    auto hdiv = get_division_for<Element>(beg, end, FullEntryHorzGetters{});
-    auto vdiv = get_division_for<Element>(beg, end, FullEntryVertGetters{});
-    auto hcounts = get_counts<Element, FullEntryHorzGetters>(hdiv, beg, end);
-    auto vcounts = get_counts<Element, FullEntryVertGetters>(vdiv, beg, end);
-    if (hcounts.shared < vcounts.shared) {
-        if (too_many_shared(hcounts)) return m_flat;
-        return ensure_horz_map(hdiv);
-    }
-    if (too_many_shared(vcounts)) return m_flat;
-    return ensure_vert_map(vdiv);
-#   endif
-}
-
-/* static */ bool SpEntryFactory::too_many_shared
-    (const SpatialMapCounts & counts)
-    { return counts.shared > (sum_counts(counts)*3) / 4; }
-
-/* private */ SpEntryFactory::HorzMap & SpEntryFactory::ensure_horz_map
-    (Real division)
-{
-    if (!m_horz) m_horz = std::make_unique<HorzMap>();
-    m_horz->set_division(division);
-    return *m_horz;
-}
-
-/* private */ SpEntryFactory::VertMap & SpEntryFactory::ensure_vert_map
-    (Real division)
-{
-    if (!m_vert) m_vert = std::make_unique<VertMap>();
-    m_vert->set_division(division);
-    return *m_vert;
-}
 
 // ------------------------------ CollisionEvent ------------------------------
 
@@ -162,24 +103,39 @@ void EventRecorder::send_events(EventHandler & handler) {
     m_new_events.clear();
 }
 
-// ----------------------------- SpatialMapFront ------------------------------
+// -------------------------------- FullEntry ---------------------------------
 
-View<SpatialMapFront::PointerIterator> SpatialMapFront::view_of
-    (const Rectangle & rectangle)
-{
-    if (m_nest_guard) {
-        throw RtError("SpatialMapFront::view_of: nested calls not allowed");
-    }
-    auto g = guard(m_nest_guard);
-    occupy_with_view_of(rectangle, m_recycled_cont);
+void update_broad_boundries(FullEntry & entry) {
+    static constexpr const Real k_adjust_amount = 0.;
 
-    return View{m_recycled_cont.begin(), m_recycled_cont.end()};
+    static const auto low_x = [](const FullEntry & fe) {
+        auto dx = fe.displacement.x + fe.nudge.x;
+        return fe.bounds.left + ((dx < 0) ? dx : 0) - k_adjust_amount;
+    };
+
+    static const auto high_x = [](const FullEntry & fe) {
+        auto dx = fe.displacement.x + fe.nudge.x;
+        return right_of(fe.bounds) + ((dx > 0) ? dx : 0) + k_adjust_amount;
+    };
+
+    static const auto low_y = [](const FullEntry & fe) {
+        auto dy = fe.displacement.y + fe.nudge.y;
+        return fe.bounds.top + ((dy < 0) ? dy : 0) - k_adjust_amount;
+    };
+
+    static const auto high_y = [](const FullEntry & fe) {
+        auto dy = fe.displacement.y + fe.nudge.y;
+        return bottom_of(fe.bounds) + ((dy > 0) ? dy : 0) + k_adjust_amount;
+    };
+    entry.low_x  = low_x (entry);
+    entry.low_y  = low_y (entry);
+    entry.high_x = high_x(entry);
+    entry.high_y = high_y(entry);
 }
 
-void SpatialMapFront::occupy_with_view_of(const Rectangle & rect, PointerContainer & cont) const {
-    EntrySpatialRef probe;
-    probe.bounds = rect;
-    cont = m_spatial_map.collect_candidates(probe, std::move(cont));
+void absorb_nudge(FullEntry & entry) {
+    entry.displacement += entry.nudge;
+    entry.nudge         = Vector{};
 }
 
 // -------------------------- Helper Implementations --------------------------
@@ -438,7 +394,3 @@ HitSide values_from_displacement(const Vector & r)
 } // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace
-
-namespace {
-
-}  // end of <anonymous> namespace

@@ -27,31 +27,31 @@
 #pragma once
 
 #include "helpers.hpp"
-
-#include "detail.hpp"
+#include "CollisionHandler.hpp"
 
 namespace tdp {
 
 namespace detail {
 
-class Quadratic2DPhysicsImpl final : public QuadraticPhysicsHandler {
+class QuadraticIteration final : public  IterationBase {
 public:
-    void run(EventHandler &) final;
+    QuadraticIteration(EntryMapView && emv): m_view(std::move(emv)) {}
 
-    const CollisionMatrix & collision_matrix() const final
-        { return m_info.collision_matrix(); }
-
-    void update_entry(const Entry & entry) final
-        { m_info.update_entry(entry); }
+    void for_each_sequence(SequenceInterface & intf) final;
 
 private:
-    void set_collision_matrix_(CollisionMatrix && colmat) final
-        { m_info.set_collision_matrix_(std::move(colmat)); }
+    EntryMapView m_view;
+};
 
+// ----------------------------------------------------------------------------
+
+class Quadratic2DPhysicsImpl final :
+    public QuadraticPhysicsHandler,
+    public CollisionHandler
+{
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
-    EventRecorder m_event_recorder;
-    TdpHandlerEntryInformation m_info;
+    void prepare_iteration(CollisionWorker &, EventHandler &) final;
 };
 
 } // end of detail namespace -> into ::tdp

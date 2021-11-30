@@ -573,6 +573,41 @@ template <typename ValueTypeT, typename MapFactoryT>
     return inst;
 }
 
+// --- "shoved" down here ---
+
+template <typename ValueType, typename ObjIntf>
+std::enable_if_t<kt_is_sp_element_getters<ObjIntf, ValueType>, Real>
+    get_division_for(SpIterator<ValueType> beg, SpIterator<ValueType> end, ObjIntf)
+{
+    // beg to end need not be sorted here
+    if (end == beg) return 0;
+
+    Real avg = 0;
+    for (auto itr = beg; itr != end; ++itr) {
+        avg += (ObjIntf{}.get_high(**itr) + ObjIntf{}.get_low(**itr)) / 2;
+    }
+    avg /= Real(end - beg);
+
+    auto mcounts = get_counts<ValueType, ObjIntf>(avg, beg, end);
+
+    //pivot_sort_around<ValueType, ObjIntf>(beg, end, avg);
+
+    auto mid = beg + (end - beg) / 2;
+    auto mid_low  = ObjIntf{}.get_low (**mid);
+    auto mid_high = ObjIntf{}.get_high(**mid);
+    auto late_div  = mid_high + (mid_high - mid_low)*0.005;
+    auto early_div = mid_low  - (mid_high - mid_low)*0.005;
+    auto lcounts = get_counts<ValueType, ObjIntf>(late_div , beg, end);
+    auto hcounts = get_counts<ValueType, ObjIntf>(early_div, beg, end);
+
+    // at least five iterations... yuck!
+    if (prefer_lhs_counts(mcounts, lcounts) && prefer_lhs_counts(mcounts, hcounts)) {
+        return avg;
+    }
+    return (prefer_lhs_counts(lcounts, hcounts)) ? mid_low : mid_high;
+}
+
+
 } // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

@@ -27,9 +27,9 @@
 #include "demo.hpp"
 
 #define MACRO_AABBTDP_SHOW_DETAILS_HELPERS
-#include "../src/detail.hpp"
-#include "../src/sight-detail.hpp"
 
+#include "../src/sight-detail.hpp"
+#include "../src/CollisionHandler.hpp"
 #include "../src/SpatialMap.hpp"
 
 #include <common/TestSuite.hpp>

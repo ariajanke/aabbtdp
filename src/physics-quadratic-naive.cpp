@@ -30,24 +30,61 @@ namespace {
 
 using tdp::detail::IterationBase, tdp::detail::EntryMapView;
 
-class QuadraticIteration final : public  IterationBase {
-public:
-    QuadraticIteration(EntryMapView && emv): m_view(std::move(emv)) {}
+#if 0 // move this to an online post? (don't forget the lax copyright license!)
 
-    void for_each_sequence(SequenceInterface & intf) final {
-        for (auto & pair : m_view) {
-            intf.prestep(pair.second);
-            for (auto & other_pair : m_view) {
-                if (pair.first == other_pair.first) continue;
-                intf.step(pair.second, other_pair.second);
-            }
-            intf.poststep(pair.second);
+void must_be_called(void *);
+void prework(void *);
+void postwork(void *);
+void setup_for_a(void *);
+void setup_for_b(void *);
+
+struct SBase {
+    virtual ~SBase() {}
+
+    class MustBeCalled final {
+    public:
+        MustBeCalled(bool & b): m_was_called(b) {}
+        MustBeCalled(const MustBeCalled & rhs): m_was_called(rhs.m_was_called) {}
+        MustBeCalled(MustBeCalled && rhs): m_was_called(rhs.m_was_called) {}
+        ~MustBeCalled() {}
+
+        MustBeCalled & operator = (const MustBeCalled &) = delete;// { throw ""; }
+        MustBeCalled & operator = (MustBeCalled &&) = delete; //{ throw ""; }
+
+        void operator () (void * ptr) {
+            must_be_called(ptr);
+            m_was_called = true;
         }
+
+    private:
+        bool & m_was_called;
+    };
+
+    void do_something(void * ptr) {
+        prework(ptr);
+        bool was_called = false;
+        setup_something(MustBeCalled{was_called}, ptr);
+        postwork(ptr);
     }
 
-private:
-    EntryMapView m_view;
+    virtual void setup_something(MustBeCalled &&, void * ptr) = 0;
 };
+
+struct A final : public SBase {
+    void setup_something(MustBeCalled && callme, void * ptr) final {
+        setup_for_a(ptr);
+        callme(ptr);
+    }
+};
+
+struct B final : public SBase {
+    void setup_something(MustBeCalled && callme, void * ptr) final {
+        setup_for_b(ptr);
+        callme(ptr);
+    }
+};
+
+#endif
 
 } // end of <anonymous> namespace
 
@@ -55,25 +92,33 @@ namespace tdp {
 
 namespace detail {
 
-void Quadratic2DPhysicsImpl::run(EventHandler & event_handler) {
-    m_info.clean_up_containers();
-
-    QuadraticIteration qi{m_info.entries_view()};
-
-    // still quite a few dupelications...
-
-    do_collision_work(event_handler, qi, collision_matrix(), m_event_recorder, m_info);
-
-    m_event_recorder.send_events(event_handler);
+void QuadraticIteration::for_each_sequence(SequenceInterface & intf) {
+    for (auto & pair : m_view) {
+        intf.prestep(pair.second);
+        for (auto & other_pair : m_view) {
+            if (pair.first == other_pair.first) continue;
+            intf.step(pair.second, other_pair.second);
+        }
+        intf.poststep(pair.second);
+    }
 }
+
+// ----------------------------------------------------------------------------
 
 /* private */ void Quadratic2DPhysicsImpl::find_overlaps_
     (const Rectangle & rect, const OverlapInquiry & inq) const
 {
-    for (const auto & pair : m_info.entries_view()) {
+    for (const auto & pair : entries_view()) {
         if (cul::find_rectangle_intersection(rect, pair.second.bounds).width > 0)
             inq(pair.second);
     }
+}
+
+/* private */ void Quadratic2DPhysicsImpl::prepare_iteration
+    (CollisionWorker & do_collision_work, EventHandler & event_handler)
+{
+    QuadraticIteration qi{entries_view()};
+    do_collision_work(event_handler, qi);
 }
 
 } // end of detail namespace -> into ::tdp
