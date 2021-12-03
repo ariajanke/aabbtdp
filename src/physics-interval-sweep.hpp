@@ -31,8 +31,6 @@
 
 namespace tdp {
 
-namespace detail {
-
 // another exciting implementation may use a bit-matrix
 // and we select pairs that way...
 class SweepContainer final : public IterationBase {
@@ -95,8 +93,7 @@ private:
 // ----------------------------------------------------------------------------
 
 class IntervalSweepHandler final :
-    public SweepSwitchPhysicsHandler,
-    public CollisionHandler
+    public SweepSwitchPhysicsHandler, public CollisionHandler
 {
 public:
     void check_to_switch_axis() final {}
@@ -108,7 +105,5 @@ private:
 
     SweepContainer m_workspace;
 };
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

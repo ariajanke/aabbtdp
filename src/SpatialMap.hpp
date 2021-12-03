@@ -32,8 +32,6 @@
 
 namespace tdp {
 
-namespace detail {
-
 template <typename ValueTypeT>
 using SpElementContainer = std::vector<ValueTypeT *>;
 
@@ -606,8 +604,5 @@ std::enable_if_t<kt_is_sp_element_getters<ObjIntf, ValueType>, Real>
     }
     return (prefer_lhs_counts(lcounts, hcounts)) ? mid_low : mid_high;
 }
-
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

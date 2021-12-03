@@ -28,15 +28,8 @@
 
 namespace tdp {
 
-namespace detail {
-
 void SweepContainer::for_each_sequence(SequenceInterface & intf) {
     update_broad_boundries(m_reorder.begin(), m_reorder.end());
-
-    for (auto & feptr : m_reorder) {
-        assert(feptr);
-        intf.prestep(*feptr);
-    }
 
     //thread_local static int i = 0;
     //auto fptr = i++ % 2 == 0 ? &SweepContainer::sweep_x_wise : &SweepContainer::sweep_y_wise;
@@ -51,6 +44,7 @@ void SweepContainer::for_each_sequence(SequenceInterface & intf) {
         // we now have two sequences
         // the intersection is our interest
 
+        intf.prestep(**itr);
         auto itr_end = itr;
         for (auto in_range_x = make_in_range_x(itr); in_range_x(itr_end); ++itr_end) {}
 
@@ -78,6 +72,7 @@ void SweepContainer::for_each_sequence(SequenceInterface & intf) {
         // we now have two sequences
         // the intersection is our interest
 
+        intf.prestep(**itr);
         auto itr_end = itr;
         for (auto in_range_y = make_in_range_y(itr); in_range_y(itr_end); ++itr_end) {}
 
@@ -115,7 +110,5 @@ void SweepContainer::for_each_sequence(SequenceInterface & intf) {
             inq(pair.second);
     }
 }
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

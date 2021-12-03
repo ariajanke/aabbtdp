@@ -28,23 +28,21 @@
 
 namespace {
 
-using std::get, tdp::detail::FullEntry,
-      tdp::detail::Tuple, cul::right_of, cul::bottom_of, std::floor, cul::is_real;
+using std::get, tdp::FullEntry, cul::convert_to,
+      tdp::Tuple, cul::right_of, cul::bottom_of, std::floor, cul::is_real;
 using namespace cul::exceptions_abbr;
 
 } // end of <anonymous> namespace
 
 namespace tdp {
 
-namespace detail {
-
 VectorI find_rectangle_start
     (Real low_x, Real low_y, const Size & cell_size, const Vector & offset)
 {
     assert(is_real(cell_size) && is_real(offset));
     assert(is_real(low_x) && is_real(low_y));
-    return VectorI{int(floor(low_x - offset.x / cell_size.width )),
-                   int(floor(low_y - offset.y / cell_size.height))};
+    return VectorI{int(floor((low_x - offset.x) / cell_size.width )),
+                   int(floor((low_y - offset.y) / cell_size.height))};
 }
 
 RectangleI find_rectangle_range
@@ -54,17 +52,17 @@ RectangleI find_rectangle_range
     assert(cell_size.width >= 0 && cell_size.height >= 0);
     assert(is_real(cell_size) && is_real(offset));
     assert(is_real(low_x) && is_real(low_y) && is_real(high_x) && is_real(high_y));
+    assert(high_x >= low_x && high_y >= low_y);
 
     if (cell_size.width == 0 || cell_size.height == 0) return RectangleI{};
 
     auto start = find_rectangle_start(low_x, low_y, cell_size, offset);
-    return RectangleI{
-        start, SizeI{
-            int(floor(high_x - offset.x / cell_size.width )) + 1 - start.x,
-            int(floor(high_y - offset.y / cell_size.height)) + 1 - start.y
-        }
-    };
+    auto end   = VectorI{int(floor((high_x - offset.x) / cell_size.width )) + 1,
+                         int(floor((high_y - offset.y) / cell_size.height)) + 1};
+    return RectangleI{start, convert_to<SizeI>(end - start)};
 }
+
+// ----------------------------------------------------------------------------
 
 void GridIteration::for_each_sequence(SequenceInterface & seq_intf) {
     // It maybe possible to layer sweep container on top of this...
@@ -75,13 +73,10 @@ void GridIteration::for_each_sequence(SequenceInterface & seq_intf) {
         seq_intf.prestep(pair.second);
         for (int y = range.top ; y != bottom_of(range); ++y) {
         for (int x = range.left; x != right_of (range); ++x) {
-
             for (auto * other_ptr : find_cell(x, y)) {
                 if (other_ptr == &pair.second) continue;
+                // important note: it's totally okay to send dupelicate events!
                 assert(other_ptr);
-                auto other_start = find_rectangle_start(*other_ptr, m_cell_size, m_offset);
-                // how I'm skipping dupelicates
-                if (other_start != VectorI{x, y}) continue;
                 seq_intf.step(pair.second, *other_ptr);
             }
         }}
@@ -95,6 +90,8 @@ const std::vector<FullEntry *> & GridIteration::find_cell(int x, int y) const {
     throw RtError("GridIteration::find_cell: grid was not properly updated. "
                   "(Entry exists in a cell not yet created.)");
 }
+
+// ----------------------------------------------------------------------------
 
 void GridPhysicsHandlerImpl::set_offset(Vector offset) {
     if (!is_real(offset)) {
@@ -143,11 +140,16 @@ void GridPhysicsHandlerImpl::delete_empty_cells() {
     // with grid there's a non-zero chance for dupelicates
     // that is two seperate cells may share the same interaction pair
 
+    if (m_occu_grid) {
+        for (auto & pair : m_pgrid) {
+            (*m_occu_grid)[pair.first] = int(pair.second.size());
+        }
+    }
+
     // post finalization
     for (auto & pair : m_pgrid) {
         pair.second.clear();
     }
-    repopulate();
 }
 
 /* private */ void GridPhysicsHandlerImpl::find_overlaps_
@@ -161,6 +163,7 @@ void GridPhysicsHandlerImpl::delete_empty_cells() {
 
 /* private */ void GridPhysicsHandlerImpl::repopulate() {
     for (auto & pair : entries_view()) {
+        update_broad_boundries(pair.second);
         auto range = find_rectangle_range(pair.second, m_cell_size, m_offset);
         for (int y = range.top ; y != bottom_of(range); ++y) {
         for (int x = range.left; x != right_of (range); ++x) {
@@ -168,7 +171,5 @@ void GridPhysicsHandlerImpl::delete_empty_cells() {
         }}
     }
 }
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

@@ -32,23 +32,25 @@ namespace {
 
 using namespace cul::exceptions_abbr;
 using cul::is_real, cul::magnitude, cul::normalize;
-using tdp::Rectangle, tdp::Vector;
+using tdp::Rectangle, tdp::Vector, tdp::CollisionEvent;
 
 } // end of <anonymous> namespace
 
 namespace tdp {
 
-namespace detail {
-
 // ------------------------------ CollisionEvent ------------------------------
 
-CollisionEvent::CollisionEvent(EntityRef a, EntityRef b, bool is_push):
-    m_first(a), m_second(b), m_is_push(is_push)
+CollisionEvent::CollisionEvent(EntityRef a, EntityRef b, Type type):
+    m_first(a), m_second(b), m_type(type)
 {
     assert(m_first != m_second);
     if (m_first.hash() < m_second.hash()) {
         // highest must come first
         std::swap(m_first, m_second);
+    }
+    if (type != k_rigid && !bool(second())) {
+        throw InvArg("CollisionEvent::CollisionEvent: push or rigid types must "
+                     "have a both entities be non null.");
     }
 }
 
@@ -58,49 +60,69 @@ CollisionEvent::CollisionEvent(EntityRef a, EntityRef b, bool is_push):
     return lhs.compare(rhs) < 0;
 }
 
+void CollisionEvent::send_to(EventHandler & handler) const {
+    switch (type()) {
+    case k_rigid: case k_push:
+        handler.on_collision(first(), second(), type() == k_push);
+        break;
+    case k_trespass:
+        handler.on_trespass(first(), second());
+        break;
+    }
+}
+
 /* private static */ int CollisionEvent::compare
     (const CollisionEvent & lhs, const CollisionEvent & rhs)
-{
-    return lhs.compare(rhs);
-}
+{ return lhs.compare(rhs); }
 
 /* private */ int CollisionEvent::compare(const CollisionEvent & rhs) const {
     if (first ().hash() < rhs.first ().hash()) return -1;
     if (first ().hash() > rhs.first ().hash()) return  1;
     if (second().hash() < rhs.second().hash()) return -1;
     if (second().hash() > rhs.second().hash()) return  1;
-    return int(is_pushed()) - int(rhs.is_pushed());
+    return int(type()) - int(type());
 }
 
 
 // ------------------------------ EventRecorder -------------------------------
 
 void EventRecorder::send_events(EventHandler & handler) {
-    std::sort(m_new_events.begin(), m_new_events.end(), CollisionEvent::is_less_than);
-    assert(std::is_sorted(m_new_events.begin(), m_new_events.end(), CollisionEvent::is_less_than));
-    auto old_itr = m_old_events.begin();
-    auto new_itr = m_new_events.begin();
-    auto old_end = m_old_events.end();
-    auto new_end = m_new_events.end();
-    while (old_itr != old_end && new_itr != new_end) {
-        if (*old_itr == *new_itr) {
-            ++old_itr;
-            ++new_itr;
-            continue;
+    using std::get;
+    // there's some reliance on implementation of HashMap knowledge :c
+    for (auto itr = m_events.begin(); itr != m_events.end(); ++itr) {
+        auto & age = get<EventAge>(itr->second);
+        if (age == k_new) {
+            CollisionEvent{get<0>(itr->first), get<1>(itr->first),
+                           get<CollisionType>(itr->second)}
+            .send_to(handler);
         }
-        if (*old_itr < *new_itr) {
-            ++old_itr;
-            continue;
+        if (age == k_old) {
+            m_events.erase(itr);
+        } else {
+            age = k_old;
         }
-        assert(*old_itr > *new_itr);
-        new_itr->send_to(handler);
-        ++new_itr;
     }
-    for (; new_itr != new_end; ++new_itr) {
-        new_itr->send_to(handler);
+}
+
+std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
+    static constexpr const auto k_half = 8*sizeof(size_t) / 2;
+    using std::get;
+    return (  get<1>(key).hash() << k_half
+            | get<1>(key).hash() >> k_half) ^ get<0>(key).hash();
+}
+
+/* private */ void EventRecorder::push_event(const CollisionEvent & col_event) {
+    using std::make_tuple, std::make_pair, std::get;
+    auto key = make_tuple(col_event.first(), col_event.second());
+    auto itr = m_events.find(key);
+    if (itr != m_events.end()) {
+        // if it's already present, then it's "updated"
+        // if the type has changed, then it's considered a new event
+        get<EventAge>(itr->second) =
+            get<CollisionType>(itr->second) == col_event.type() ? k_updated : k_new;
+    } else {
+        (void)m_events.insert(make_pair(key, make_tuple(col_event.type(), k_new)));
     }
-    m_old_events.swap(m_new_events);
-    m_new_events.clear();
 }
 
 // -------------------------------- FullEntry ---------------------------------
@@ -390,7 +412,5 @@ Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier) {
 
 HitSide values_from_displacement(const Vector & r)
     { return HitSide(r.x > 0 ? k_right : k_left, r.y > 0 ? k_down : k_up); }
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

@@ -1,3 +1,29 @@
+/****************************************************************************
+
+    MIT License
+
+    Copyright (c) 2021 Aria Janke
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+*****************************************************************************/
+
 #include <common/TestSuite.hpp>
 #include <common/Vector2Util.hpp>
 
@@ -12,14 +38,14 @@ namespace {
 
 // essentially the whole namespace
 using cul::ts::TestSuite, cul::ts::test, cul::ts::Unit,
-      tdp::detail::sum_counts, tdp::detail::only_on_high,
-      tdp::detail::only_on_low, tdp::detail::SpatialMapElementGetters,
-      tdp::detail::SpatialMapFactory, tdp::detail::PartitionedSpatialMap,
-      tdp::detail::get_counts, tdp::detail::FlatSpatialMap,
-      tdp::detail::SpatialMapCounts, tdp::detail::SpatialMap,
-      tdp::detail::pivot_sort_around, tdp::detail::pivot_sort, tdp::Real,
+      tdp::sum_counts, tdp::only_on_high,
+      tdp::only_on_low, tdp::SpatialMapElementGetters,
+      tdp::SpatialMapFactory, tdp::PartitionedSpatialMap,
+      tdp::get_counts, tdp::FlatSpatialMap,
+      tdp::SpatialMapCounts, tdp::SpatialMap,
+      tdp::pivot_sort_around, tdp::pivot_sort, tdp::Real,
       tdp::Rectangle, tdp::Vector,// tdp::detail::AngleGetters,
-      tdp::detail::PolarVector, tdp::detail::ImageEntry;
+      tdp::PolarVector, tdp::ImageEntry;
 
 struct UniDimRecord {
     UniDimRecord() {}

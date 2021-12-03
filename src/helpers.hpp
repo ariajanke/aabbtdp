@@ -30,9 +30,9 @@
 
 #include <common/Vector2Util.hpp>
 
-namespace tdp {
+#include <rigtorp/HashMap.h>
 
-namespace detail {
+namespace tdp {
 
 template <typename IterType>
 class View {
@@ -52,14 +52,17 @@ using Tuple = std::tuple<Types...>;
 
 // ----------------------------------------------------------------------------
 
-class CollisionEvent {
+class CollisionEvent final {
 public:
+    enum Type { k_push, k_rigid, k_trespass };
+
     CollisionEvent() {}
-    CollisionEvent(EntityRef, EntityRef, bool is_push);
+    CollisionEvent(EntityRef, EntityRef, Type);
 
     EntityRef first() const { return m_first; }
     EntityRef second() const { return m_second; }
-    bool is_pushed() const { return m_is_push; }
+
+    Type type() const { return m_type; }
 
     // !I need tests!
     static bool is_less_than(const CollisionEvent &, const CollisionEvent &);
@@ -71,24 +74,29 @@ public:
     bool operator != (const CollisionEvent & r) const { return compare(r) != 0; }
     bool operator == (const CollisionEvent & r) const { return compare(r) == 0; }
 
-    void send_to(EventHandler & handler) const
-        { handler.on_collision(m_first, m_second, m_is_push); }
+    void send_to(EventHandler & handler) const;
 
 private:
     static int compare(const CollisionEvent &, const CollisionEvent &);
+
     int compare(const CollisionEvent &) const;
+
     EntityRef m_first, m_second;
-    bool m_is_push = false;
+    Type m_type;
 };
 
 // ------------------------------ EventRecorder -------------------------------
 
-/// EventRecorder's task is not just record events but also prevent old
+/// EventRecorder's task is not just record events but also prevent old and
 /// dupelicate events from reaching the event handler
+///
+/// If an event is missing for one frame, and is then back. That event will be
+/// sent twice, one when it initially occured, and then again when the gap is
+/// closed.
+///
+/// This version contains and sends also trespass events.
 class EventRecorder final {
 public:
-    using CollisionEvents = std::vector<CollisionEvent>;
-
     /// Sends all new events to the handler (old events are filtered out)
     ///
     /// This function rotates out old events for new ones. This is also a side
@@ -97,12 +105,30 @@ public:
     void send_events(EventHandler & handler);
 
     template <typename ... Types>
-    void emplace_event(Types ... args)
-        { m_new_events.emplace_back(std::forward<Types>(args)...); }
-
+    void emplace_event(Types ... args) {
+        CollisionEvent col_event(std::forward<Types>(args)...);
+        push_event(col_event);
+    }
 private:
-    CollisionEvents m_old_events;
-    CollisionEvents m_new_events;
+    enum EventAge { k_old, k_updated, k_new };
+    using CollisionType = CollisionEvent::Type;
+    using EventKey      = Tuple<EntityRef, EntityRef>;
+    using EventValue    = Tuple<CollisionType, EventAge>;
+
+    struct EventHasher final {
+        std::size_t operator () (const EventKey &);
+    };
+
+    void push_event(const CollisionEvent & col_event);
+
+    using EventContainer = rigtorp::HashMap<EventKey, EventValue, EventHasher>;
+
+    // thank you Erik Rigtorp for saving me the trouble of trying to implement one
+    // myself, and for writing such a fast implementation too!
+    //
+    // There's a problem: I ended up with an iterator with idx == 1 on a
+    // container that only had one element :/
+    EventContainer m_events = EventContainer{8, std::make_tuple(EntityRef{}, EntityRef{})};
 };
 
 // -------------------------------- FullEntry ---------------------------------
@@ -222,7 +248,5 @@ HitSide trim_small_displacement
 HitSide values_from_displacement(const Vector &);
 
 #endif
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

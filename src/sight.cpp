@@ -8,13 +8,13 @@
 
 namespace { // ----------------------------------------------------------------
 
-using tdp::detail::SightingComplete, tdp::detail::ImageEntry,
-      tdp::detail::PolarVector, tdp::Sighting, tdp::Real, tdp::Vector,
-      tdp::Rectangle, tdp::detail::QuadraticSightingComplete,
-      tdp::detail::Tuple;
+using tdp::SightingComplete, tdp::ImageEntry,
+      tdp::PolarVector, tdp::Sighting, tdp::Real, tdp::Vector,
+      tdp::Rectangle, tdp::QuadraticSightingComplete,
+      tdp::Tuple;
 using Percept = SightingComplete::Percept;
 using Entry = SightingComplete::Entry;
-using UnitTestFunctions = tdp::detail::SightingUnitTestFunctions;
+using UnitTestFunctions = tdp::SightingUnitTestFunctions;
 using VectorPairs = SightingComplete::VectorPairs;
 
 template <typename T>
@@ -50,23 +50,26 @@ bool images_overlap(Real low, Real high, const ImageEntry & other);
 
 bool images_overlap(const ImageEntry &, const ImageEntry &);
 
-// left off here...
-auto make_in_range_of(Varray<ImageEntry> & container, ImageVarrayIter itr) {
+auto make_in_range_of(ImageVarrayIter beg, ImageVarrayIter end, ImageVarrayIter itr) {
     // starting at image, do not go beyond this image's end point
-    assert(itr >= container.begin() && itr <= container.end());
+    assert(itr >= beg && itr <= end);
     Real high_angle = PolarVector{itr->anchor_high}.theta;
     Real low_angle  = PolarVector{itr->anchor_low }.theta;
     // low to high not always describes the image bounds
     return [=](ImageVarrayIter jtr) {
-        if (jtr == container.end()) return false;
+        if (jtr == end) return false;
+        assert(jtr >= beg && jtr <= end);
         return images_overlap(low_angle, high_angle, *jtr);
     };
 }
 
-auto make_get_next(Varray<ImageEntry> & container) {
-    auto end_ = container.end();
-    auto beg_ = container.begin();
-    return [end_, beg_] (decltype(end_) itr) { return itr == end_ ? beg_ : itr + 1; };
+auto make_get_next(ImageVarrayIter beg, ImageVarrayIter end) {
+    return [end, beg] (decltype(end) itr) {
+        assert(itr >= beg && itr <= end);
+        auto rv = itr == end ? beg : itr + 1;
+        assert(rv >= beg && rv <= end);
+        return rv;
+    };
 }
 
 Percept to_percept(Vector source, const ImageEntry &);
@@ -138,8 +141,8 @@ VectorPairs SightingComplete::make_image_lines
     std::sort(m_entries.begin(), m_entries.end(), order_images);
     // have to process all of them
     for (auto itr = m_entries.begin(); itr != m_entries.end(); ++itr) {
-        auto in_range   = make_in_range_of(m_entries, itr);
-        auto get_next   = make_get_next(m_entries);
+        auto in_range   = make_in_range_of(m_entries.begin(), m_entries.end(), itr);
+        auto get_next   = make_get_next(m_entries.begin(), m_entries.end());
         auto image_copy = *itr;
         for (auto jtr = get_next(itr); in_range(jtr); jtr = get_next(jtr)) {
             assert(jtr != itr);
@@ -260,6 +263,7 @@ Real find_portion_overlapped
     { return min(obj_beg.r, obj_last.r) > max(sub_beg.r, sub_last.r); };
 
     static auto assert_correct_rv = [](Real rv) {
+        return std::min(Real(1), std::max(Real(0), rv));
         assert(rv >= 0 && rv <= 1);
         return rv;
     };

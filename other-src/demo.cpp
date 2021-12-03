@@ -31,6 +31,7 @@
 #include "../src/helpers.hpp"
 
 #include "../src/physics-interval-sweep.hpp"
+#include "../src/physics-grid.hpp"
 
 #include <aabbtdp/sight.hpp>
 //#include "../src/PartitionBoxMap.hpp"
@@ -330,7 +331,7 @@ private:
         return rhs.priority < lhs.priority;
     }
 #   endif
-    struct HorzGetters final : public tdp::detail::SpatialMapElementGetters<Rectangle> {
+    struct HorzGetters final : public tdp::SpatialMapElementGetters<Rectangle> {
         Real get_low(const Rectangle & entry) const final { return entry.left; }
 
         Real get_high(const Rectangle & entry) const final { return cul::right_of(entry); }
@@ -355,7 +356,7 @@ private:
         }
     };
 
-    struct VertGetters final : public tdp::detail::SpatialMapElementGetters<Rectangle> {
+    struct VertGetters final : public tdp::SpatialMapElementGetters<Rectangle> {
         Real get_low(const Rectangle & entry) const final { return entry.top; }
 
         Real get_high(const Rectangle & entry) const final { return cul::bottom_of(entry); }
@@ -614,7 +615,7 @@ private:
     }
 
     ecs::EntityRef m_player_ref;
-    std::unique_ptr<tdp::detail::IntervalSweepHandler> swp_ptr = std::make_unique<tdp::detail::IntervalSweepHandler>();
+    std::unique_ptr<tdp::IntervalSweepHandler> swp_ptr = std::make_unique<tdp::IntervalSweepHandler>();
     sf::RenderTarget & target;
 };
 
@@ -730,7 +731,11 @@ private:
         static constexpr int k_size = 40;
         rect.set_size(k_size, k_size);
         for (const auto & tar : e.get<Targeting>().targets) {
-            rect.set_position(tar.loc.x - k_size / 2, tar.loc.y - k_size / 2);
+            RdEntity target_ent{e.get<Targeting>().target_candidates[&tar - &e.get<Targeting>().targets.front()]};
+            //rect.set_position(tar.loc.x - k_size / 2, tar.loc.y - k_size / 2);
+            const auto & ent_rect = target_ent.get<Rectangle>();
+            rect.set_position(float(ent_rect.left), float(ent_rect.top));
+            rect.set_size(float(ent_rect.width), float(ent_rect.height));
             rect.set_color(sf::Color(200, 200, 0, uint8_t((tar.visibility)*255)));
             target.draw(rect);
         }
@@ -750,11 +755,59 @@ private:
     sf::RenderTarget & target;
 };
 
+class GridDisplay final : public sf::Drawable {
+public:
+    void assign_to_handler(tdp::GridPhysicsHandlerImpl & gridhandler) {
+        gridhandler.assign_occupancy_grid(m_occu_grid);
+        m_offset = gridhandler.offset();
+        m_cell_size = gridhandler.cell_size();
+    }
+
+private:
+    void draw(sf::RenderTarget & target, sf::RenderStates states) const final {
+        using namespace cul;
+        const auto & view = target.getView();
+        ::Rectangle rect(convert_to<Vector>(view.getCenter() - view.getSize()*0.5f),
+                         convert_to<::Size2 >(view.getSize()));
+
+        auto range = tdp::find_rectangle_range(rect.left, rect.top, right_of(rect), bottom_of(rect), m_cell_size, m_offset);
+        DrawText brush;
+        brush.load_builtin_font(cul::BitmapFont::k_8x16_highlighted_font);
+        for (int x = range.left; x != right_of (range); ++x) {
+        for (int y = range.top ; y != bottom_of(range); ++y) {
+            int count = 0;
+            auto itr = m_occu_grid.find(Vector2<int>(x, y));
+            if (itr != m_occu_grid.end()) {
+                count = itr->second;
+            }
+            auto center = m_offset + ::Vector(x*m_cell_size.width, y*m_cell_size.height) + Vector(m_cell_size.width, m_cell_size.height)*0.5;
+            brush.set_text_center(convert_to<sf::Vector2f>(center), std::to_string(count));
+            target.draw(brush, states);
+        }}
+#       if 0
+        brush.set_text_center(convert_to<sf::Vector2f>(center_of(rect)),
+                              std::to_string(range.left) + " " + std::to_string(range.top) + ":" +
+                              std::to_string(range.width) + " " + std::to_string(range.height));
+        target.draw(brush, states);
+#       endif
+    }
+
+    Vector m_offset;
+    Size2  m_cell_size;
+    tdp::OccupancyGrid m_occu_grid;
+};
+
 class RdColSystem final : public RdSystem {
 public:
-    RdColSystem() {
+    RdColSystem(GridDisplay & grid_display) {
         m_handle->set_collision_matrix(make_collision_matrix());
+#       if 0
+        static constexpr const int k_grid_size = 100;
+        m_handle->reset_grid_size(k_grid_size, k_grid_size);
+        grid_display.assign_to_handler(*m_handle);
+#       endif
     }
+
 private:
 
     class DefaultEventHandler final : public tdp::EventHandler {
@@ -919,9 +972,12 @@ private:
 #   if 0
     std::unique_ptr<tdp::Physics2DHandler> m_handle =
         tdp::QuadraticPhysicsHandler::make_instance();
+#   elif 1
+    std::unique_ptr<tdp::IntervalSweepHandler> m_handle =
+        std::make_unique<tdp::IntervalSweepHandler>();
 #   else
-    std::unique_ptr<tdp::detail::IntervalSweepHandler> m_handle =
-        std::make_unique<tdp::detail::IntervalSweepHandler>();
+    std::unique_ptr<tdp::GridPhysicsHandlerImpl> m_handle =
+        std::make_unique<tdp::GridPhysicsHandlerImpl>();
 #   endif
 };
 
@@ -1421,7 +1477,8 @@ void run_demo() {
         e.add<Layer        >() = layers::k_block;
     }));
 
-    RdColSystem col_sys;
+    GridDisplay grid_display;
+    RdColSystem col_sys(grid_display);
     sf::RenderWindow window(sf::VideoMode(k_window_width, k_window_height), " ");
     {
         auto view = window.getView();
@@ -1514,6 +1571,8 @@ void run_demo() {
                 std::tie(col_sys, pplds, tar_sys)));
             //run_systems(ent_mana, std::tie(spdisplay));
             ent_mana.process_deletion_requests();
+
+            window.draw(grid_display);
         }
         [&window, &fps_counter, &fps_text, &clock] {
             auto view = window.getView();

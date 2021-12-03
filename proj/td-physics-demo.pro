@@ -25,6 +25,7 @@ SOURCES += \
     ../other-src/main.cpp \
     ../other-src/spatial-map-unit-tests.cpp \
     ../other-src/spatial-map-unit-tests-n.cpp \
+    ../other-src/helpers-unit-tests.cpp \
     ../src/physics.cpp \
     ../src/helpers.cpp \
     ../src/physics-interval-sweep.cpp \
@@ -58,4 +59,5 @@ HEADERS += \
 INCLUDEPATH += \
     ../lib/cul/inc  \
     ../lib/ecs/inc  \
-    ../inc
+    ../inc \
+    ../lib/HashMap/include

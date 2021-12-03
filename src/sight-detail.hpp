@@ -32,9 +32,7 @@
 
 namespace tdp {
 
-namespace detail {
-
-struct PolarVector {
+struct PolarVector final {
     PolarVector() {}
     PolarVector(Real r_, Real th_):
         r(r_), theta(th_) {}
@@ -48,7 +46,7 @@ struct PolarVector {
 inline Vector to_cartesian(const PolarVector & v)
     { return Vector{v.r*std::cos(v.theta), v.r*std::sin(v.theta)}; }
 
-struct ImageEntry {
+struct ImageEntry final {
     EntityRef entity;
     Real visibility = 1;
     // will affect percepts overall visiblity
@@ -139,7 +137,5 @@ struct SightingUnitTestFunctions {
     // I don't have tests yet :c
     bool (*images_overlap)(const ImageEntry &, const ImageEntry &) = nullptr;
 };
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

@@ -41,8 +41,6 @@
 
 namespace tdp {
 
-namespace detail {
-
 // --------------------------------- Helpers ----------------------------------
 
 /// This defines a way to iterate and interact entries.
@@ -141,7 +139,5 @@ void IterationBase::for_each(OnPairWise && do_pair_wise) {
     Impl impl(std::move(do_pair_wise));
     for_each_sequence(impl);
 }
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

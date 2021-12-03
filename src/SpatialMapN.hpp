@@ -33,7 +33,7 @@
 namespace abpn {
 
 template <typename IterType>
-using View = tdp::detail::View<IterType>;
+using View = tdp::View<IterType>;
 
 template <typename ValueT>
 struct SpatialMapInquiry {

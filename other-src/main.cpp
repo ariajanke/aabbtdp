@@ -48,7 +48,7 @@ using EntityA = ecs::Entity<
 using EntityManagerA = EntityA::ManagerType;
 using Rng = std::default_random_engine;
 using cul::ts::TestSuite, cul::ts::test, cul::ts::set_context, cul::ts::Unit,
-      cul::Grid, tdp::detail::CollisionEvent;
+      cul::Grid, tdp::CollisionEvent;
 
 void do_helper_tests          (TestSuite &);
 void do_collision_matrix_tests(TestSuite &);
@@ -137,7 +137,7 @@ private:
     void update(const ContainerView & view) final;
 
     std::function<void(EntityA, EntityA)> m_on_trespass_f = [](EntityA, EntityA) {};
-    tdp::TdpHandlerPtr m_handle = make_tdp_handler();
+    tdp::P2dHandlerPtr m_handle = make_tdp_handler();
 };
 
 template <typename Iter>
@@ -245,7 +245,7 @@ void do_helper_tests(TestSuite & suite) {
     // n pixels
     // test push with large y value
     set_context(suite, [](TestSuite & suite, Unit & unit) {
-        using namespace tdp::detail;
+        using namespace tdp;
         using std::get;
         Rectangle pusher(0 , 0, 10, 10);
         Rectangle pushee(11, 0, 10, 10);
@@ -271,7 +271,7 @@ void do_helper_tests(TestSuite & suite) {
     });
     // repeat going in the negative y direction
     set_context(suite, [](TestSuite & suite, Unit & unit) {
-        using namespace tdp::detail;
+        using namespace tdp;
         using std::get;
         Rectangle pusher(0,   0, 10, 10);
         Rectangle pushee(0, -11, 10, 10);
@@ -322,7 +322,7 @@ void do_helper_tests(TestSuite & suite) {
     // x-ways, non-real y
     // x-ways and y-ways
     set_context(suite, [](TestSuite & suite, Unit & unit) {
-        using namespace tdp::detail;
+        using namespace tdp;
         Rectangle trect{0, 0, 10, 10};
         Vector displacement{8, -5};
         unit.start(mark(suite), [&] {
@@ -348,7 +348,7 @@ void do_helper_tests(TestSuite & suite) {
         });
     });
     mark(suite).test([] {
-        using std::pow, tdp::detail::trim_displacement_for_barriers;
+        using std::pow, tdp::trim_displacement_for_barriers;
         for (int i = 0; true; ++i) {
             // max out at the resolution of the ones place
             // if addition here does not change the value of the floating
@@ -751,7 +751,7 @@ void ColSystem::update(const ContainerView & view) {
 
 template <typename Iter>
 CollisionEvent random_col_event(Iter ent_beg, Iter ent_end, Rng & rng) {
-    if (ent_beg == ent_end) return tdp::detail::CollisionEvent();
+    if (ent_beg == ent_end) return tdp::CollisionEvent();
 
     using IntDistri = std::uniform_int_distribution<int>;
     auto sel_a = ent_beg + IntDistri(0, ent_end - ent_beg - 1)(rng);

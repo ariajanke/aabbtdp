@@ -28,7 +28,7 @@
 
 namespace {
 
-using tdp::detail::IterationBase, tdp::detail::EntryMapView;
+using tdp::IterationBase, tdp::EntryMapView;
 
 #if 0 // move this to an online post? (don't forget the lax copyright license!)
 
@@ -90,8 +90,6 @@ struct B final : public SBase {
 
 namespace tdp {
 
-namespace detail {
-
 void QuadraticIteration::for_each_sequence(SequenceInterface & intf) {
     for (auto & pair : m_view) {
         intf.prestep(pair.second);
@@ -120,7 +118,5 @@ void QuadraticIteration::for_each_sequence(SequenceInterface & intf) {
     QuadraticIteration qi{entries_view()};
     do_collision_work(event_handler, qi);
 }
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

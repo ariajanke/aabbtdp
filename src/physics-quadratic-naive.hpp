@@ -31,8 +31,6 @@
 
 namespace tdp {
 
-namespace detail {
-
 class QuadraticIteration final : public  IterationBase {
 public:
     QuadraticIteration(EntryMapView && emv): m_view(std::move(emv)) {}
@@ -53,7 +51,5 @@ class Quadratic2DPhysicsImpl final :
 
     void prepare_iteration(CollisionWorker &, EventHandler &) final;
 };
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace

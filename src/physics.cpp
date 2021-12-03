@@ -39,8 +39,8 @@ using std::make_unique;
 
 namespace tdp {
 
-/* static */ TdpHandlerPtr Physics2DHandler::make_default_instance()
-    { return make_unique<tdp::detail::IntervalSweepHandler>(); }
+/* static */ P2dHandlerPtr Physics2DHandler::make_default_instance()
+    { return make_unique<tdp::IntervalSweepHandler>(); }
 
 void Physics2DHandler::set_collision_matrix(CollisionMatrix && matrix)
     { set_collision_matrix_(std::move(matrix)); }
@@ -52,11 +52,11 @@ void Physics2DHandler::set_collision_matrix(const CollisionMatrix & matrix) {
 
 /* static */ std::unique_ptr<GridPhysicsHandler>
     GridPhysicsHandler::make_instance()
-{ return make_unique<tdp::detail::GridPhysicsHandlerImpl>(); }
+{ return make_unique<tdp::GridPhysicsHandlerImpl>(); }
 
 /* static */ std::unique_ptr<SweepSwitchPhysicsHandler>
     SweepSwitchPhysicsHandler::make_instance()
-{ return make_unique<tdp::detail::IntervalSweepHandler>(); }
+{ return make_unique<tdp::IntervalSweepHandler>(); }
 
 /* static */ [[noreturn]] std::unique_ptr<AABBTreePhysicsHandler>
     AABBTreePhysicsHandler::make_instance()
@@ -65,8 +65,8 @@ void Physics2DHandler::set_collision_matrix(const CollisionMatrix & matrix) {
                   "is not finished.");
 }
 
-/* static */ TdpHandlerPtr QuadraticPhysicsHandler::make_instance()
-    { return make_unique<tdp::detail::Quadratic2DPhysicsImpl>(); }
+/* static */ P2dHandlerPtr QuadraticPhysicsHandler::make_instance()
+    { return make_unique<tdp::Quadratic2DPhysicsImpl>(); }
 
 } // end of tdp namespace
 

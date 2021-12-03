@@ -34,18 +34,16 @@
 namespace {
 
 using namespace cul::exceptions_abbr;
-using tdp::Vector, tdp::detail::HitSide, tdp::Rectangle, tdp::detail::FullEntry,
-      tdp::detail::EntryEntityRefMap, cul::is_real,
+using tdp::Vector, tdp::HitSide, tdp::Rectangle, tdp::FullEntry,
+      tdp::EntryEntityRefMap, cul::is_real,
       cul::bottom_of, cul::right_of, cul::normalize, cul::magnitude,
-      cul::set_top_left_of, cul::top_left_of, tdp::detail::Tuple;
+      cul::set_top_left_of, cul::top_left_of, tdp::Tuple;
 
 bool is_real(const Rectangle &);
 
 } // end of <anonymous> namespace
 
 namespace tdp {
-
-namespace detail {
 
 void do_collision_work
     (EventHandler &, IterationBase &, const CollisionMatrix &,
@@ -222,7 +220,7 @@ void do_collision_work
             other_entry.priority  = iteration + 1;
             other_entry.nudge    += get<Vector>(gv);
             should_check_more     = true;
-            event_recorder.emplace_event(other_entry.entity, entry.entity, true);
+            event_recorder.emplace_event(other_entry.entity, entry.entity, CollisionEvent::k_push);
         });
     }
 
@@ -252,7 +250,7 @@ void ColWorkImpl::prestep(FullEntry & entry) {
     Vector barrier = find_barrier_for_displacement
         (entry.displacement, entry.positive_barrier, entry.negative_barrier);
     if (trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement) != HitSide()) {
-        m_event_recorder.emplace_event(entry.entity, EntityRef(), false);
+        m_event_recorder.emplace_event(entry.entity, EntityRef{}, CollisionEvent::k_rigid);
     }
 }
 
@@ -264,7 +262,7 @@ void ColWorkImpl::step(FullEntry & entry, FullEntry & other_entry) {
     case k_as_solid: {
         auto gv = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
         if (gv == HitSide()) return;
-        m_event_recorder.emplace_event(entry.entity, other_entry.entity, false);
+        m_event_recorder.emplace_event(entry.entity, other_entry.entity, CollisionEvent::k_rigid);
         break;
     }
     case k_as_trespass: {
@@ -272,7 +270,7 @@ void ColWorkImpl::step(FullEntry & entry, FullEntry & other_entry) {
         bool regular_trespass         = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
         if (!first_appearance_overlap && !regular_trespass) return;
         // this is an "uh-oh" moment if we're reusing containers
-        m_event_handler.on_trespass(entry.entity, other_entry.entity);
+        m_event_recorder.emplace_event(entry.entity, other_entry.entity, CollisionEvent::k_trespass);
         break;
     }
     default: break;
@@ -288,10 +286,10 @@ void ColWorkImpl::poststep(FullEntry & entry) {
     }
     // this is fine here, not reusing containers at this point, unlike
     // while being in the for loop above
+    //
+    // how does entity become invalid?
     m_event_handler.finalize_entry(entry.entity, entry.bounds);
 }
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace
 
@@ -304,7 +302,6 @@ bool is_real(const Rectangle & rect) {
 }
 
 } // end of <anonymous> namespace
-
 
 // there are plans for a more accurate "trespass" detection
 // which would involve ideas expressed here

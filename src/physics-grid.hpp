@@ -27,12 +27,11 @@
 #pragma once
 
 #include <aabbtdp/physics.hpp>
+
 #include "helpers.hpp"
 #include "CollisionHandler.hpp"
 
 namespace tdp {
-
-namespace detail {
 
 using VectorI    = cul::Vector2  <int>;
 using RectangleI = cul::Rectangle<int>;
@@ -65,10 +64,10 @@ struct VectorIHasher {
 
 using GridPhysicsMapElement = std::vector<FullEntry *>;
 using GridPhysicsMap = std::unordered_map<VectorI, GridPhysicsMapElement, VectorIHasher>;
+using OccupancyGrid = std::unordered_map<VectorI, int, VectorIHasher>;
 
-// if entry's not new then
-//     remove from old places
-// end
+// key into by entry pair, including one nullptr for wall hits
+// extra data is: is_push, { is_trespass | is_solid }
 
 class GridIteration final : public IterationBase {
 public:
@@ -98,6 +97,14 @@ public:
 
     void delete_empty_cells() final;
 
+    Vector offset() const { return m_offset; }
+
+    Size cell_size() const { return m_cell_size; }
+
+    void assign_occupancy_grid(OccupancyGrid & og) {
+        m_occu_grid = &og;
+    }
+
 private:
     void prepare_iteration(CollisionWorker &, EventHandler &) final;
 
@@ -108,8 +115,8 @@ private:
     Size m_cell_size;
     Vector m_offset;
     GridPhysicsMap m_pgrid;
-};
 
-} // end of detail namespace -> into ::tdp
+    OccupancyGrid * m_occu_grid = nullptr;
+};
 
 } // end of tdp namespace

@@ -38,7 +38,7 @@ namespace tdp {
 
 using ecs::EntityRef;
 class Physics2DHandler;
-using TdpHandlerPtr = std::unique_ptr<Physics2DHandler>;
+using P2dHandlerPtr = std::unique_ptr<Physics2DHandler>;
 
 /// This structure is meant to represent a physical state related to some
 /// entity.
@@ -203,7 +203,7 @@ public:
     ///
     /// @note Just understand which will be "implementation defined", and may
     ///       change as the library evolves.
-    static TdpHandlerPtr make_default_instance();
+    static P2dHandlerPtr make_default_instance();
 
     virtual ~Physics2DHandler() {}
 

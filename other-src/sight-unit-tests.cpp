@@ -1,3 +1,29 @@
+/****************************************************************************
+
+    MIT License
+
+    Copyright (c) 2021 Aria Janke
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+*****************************************************************************/
+
 #include "../src/sight-detail.hpp"
 
 #include <common/TestSuite.hpp>
@@ -10,23 +36,19 @@
 
 namespace tdp {
 
-namespace detail {
-
 PolarVector operator + (const PolarVector & lhs, const PolarVector & rhs)
     { return PolarVector{lhs.r + rhs.r, lhs.theta + rhs.theta}; }
-
-} // end of detail namespace -> into ::tdp
 
 } // end of tdp namespace
 
 namespace {
 
 using cul::ts::TestSuite, cul::ts::test, cul::magnitude;
-using UnitTestFunctions = tdp::detail::SightingUnitTestFunctions;
+using UnitTestFunctions = tdp::SightingUnitTestFunctions;
 using Entry = tdp::Sighting::Entry;
-using tdp::Real, tdp::Rectangle, tdp::Vector, tdp::detail::ImageEntry,
-      tdp::detail::PolarVector, tdp::detail::to_cartesian,
-      tdp::detail::completely_overlaps_source;
+using tdp::Real, tdp::Rectangle, tdp::Vector, tdp::ImageEntry,
+      tdp::PolarVector, tdp::to_cartesian,
+      tdp::completely_overlaps_source;
 
 Entry make_entry(const Rectangle & rect) {
     Entry e;
@@ -46,7 +68,7 @@ void print_image(const ImageEntry & image) {
 }
 #endif
 bool has_valid_positions(const ImageEntry & image) {
-    if (tdp::detail::completely_overlaps_source(image)) return true;
+    if (tdp::completely_overlaps_source(image)) return true;
     return PolarVector{image.anchor_low}.theta < PolarVector{image.anchor_high}.theta;
 }
 
@@ -62,7 +84,7 @@ void do_sight_unit_tests(TestSuite & suite) {
     suite.start_series("sight - make_image");
     mark(suite).test([] {
         auto image = make_image(Vector{5, 5}, make_entry(Rectangle{ 0, 0, 10, 10 }));
-        return test(tdp::detail::completely_overlaps_source(image));
+        return test(tdp::completely_overlaps_source(image));
     });
     // values depend on anchor
     // so if there are new failures, and the anchor value has changed, that
@@ -123,7 +145,7 @@ void do_sight_unit_tests(TestSuite & suite) {
 
     suite.start_series("sight - find_portion_overlapped");
     static const auto find_portion_overlapped = inst.find_portion_overlapped;
-    using PolVec = tdp::detail::PolarVector;
+    using PolVec = tdp::PolarVector;
     mark(suite).test([] {
         // object is behind the subject (must have no effect)
         return test(find_portion_overlapped(PolVec{2, 1.2}, PolVec{2, 1.5},

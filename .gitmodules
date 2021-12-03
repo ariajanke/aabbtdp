@@ -4,3 +4,6 @@
 [submodule "lib/ecs"]
 	path = lib/ecs
 	url = git@github.com:ariajanke/ecs.git
+[submodule "lib/HashMap"]
+	path = lib/HashMap
+	url = git@github.com:rigtorp/HashMap.git
