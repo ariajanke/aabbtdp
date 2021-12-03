@@ -161,8 +161,8 @@ void do_helper_tests(TestSuite & suite) {
         auto b = eman.make_entity();
         auto c = eman.make_entity();
         bool c_ahead_b = c.hash() > b.hash();
-        CollisionEvent a_b(a, b, true);
-        CollisionEvent a_c(a, c, true);
+        CollisionEvent a_b(a, b, CollisionEvent::k_push);
+        CollisionEvent a_c(a, c, CollisionEvent::k_push);
         bool ab_lt_ac = CollisionEvent::is_less_than(a_b, a_c);
         if (c_ahead_b) {
             return test(ab_lt_ac);
@@ -173,7 +173,7 @@ void do_helper_tests(TestSuite & suite) {
         EntityManagerA eman;
         auto a = eman.make_entity();
         auto b = eman.make_entity();
-        CollisionEvent a_b(a, b, true);
+        CollisionEvent a_b(a, b, CollisionEvent::k_push);
         return test(a_b.first().hash() > a_b.second().hash());
     });
 
@@ -190,9 +190,9 @@ void do_helper_tests(TestSuite & suite) {
         auto a = entities[0];
         auto b = entities[1];
         auto c = entities[2];
-        CollisionEvent a_b(a, b, true);
-        CollisionEvent a_c(a, c, true);
-        CollisionEvent b_c(b, c, true);
+        CollisionEvent a_b(a, b, CollisionEvent::k_push);
+        CollisionEvent a_c(a, c, CollisionEvent::k_push);
+        CollisionEvent b_c(b, c, CollisionEvent::k_push);
         unit.start(mark(suite), [&] {
             bool ab_ac = CollisionEvent::is_less_than(a_b, a_c);
             bool ac_bc = CollisionEvent::is_less_than(a_c, b_c);
@@ -231,8 +231,8 @@ void do_helper_tests(TestSuite & suite) {
             if (!std::is_sorted(col.begin(), col.end(), CollisionEvent::is_less_than)) {
                 auto idx = std::is_sorted_until(col.begin(), col.end(), CollisionEvent::is_less_than) - col.begin();
                 std::cout << std::boolalpha;
-                std::cout << col[idx - 1].first().hash() << " " << col[idx - 1].second().hash() << " " << col[idx - 1].is_pushed() << std::endl;
-                std::cout << col[idx].first().hash() << " " << col[idx].second().hash() << " " << col[idx].is_pushed() << std::endl;
+                std::cout << col[idx - 1].first().hash() << " " << col[idx - 1].second().hash() << " " << (col[idx - 1].type() == CollisionEvent::k_push) << std::endl;
+                std::cout << col[idx].first().hash() << " " << col[idx].second().hash() << " " << (col[idx].type() == CollisionEvent::k_push) << std::endl;
                 return test(false);
             }
         }
@@ -763,7 +763,7 @@ CollisionEvent random_col_event(Iter ent_beg, Iter ent_end, Rng & rng) {
     return CollisionEvent(
         *sel_a,
         sel_a == sel_b ? ecs::EntityRef() : *sel_b,
-        is_push);
+        is_push ? CollisionEvent::k_push : CollisionEvent::k_rigid);
 }
 
 bool are_very_close(const Rectangle & a, const Rectangle & b) {
