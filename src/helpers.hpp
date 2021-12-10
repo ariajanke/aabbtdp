@@ -57,10 +57,10 @@ public:
     enum Type { k_push, k_rigid, k_trespass };
 
     CollisionEvent() {}
-    CollisionEvent(EntityRef, EntityRef, Type);
+    CollisionEvent(Entity, Entity, Type);
 
-    EntityRef first() const { return m_first; }
-    EntityRef second() const { return m_second; }
+    Entity first() const { return m_first; }
+    Entity second() const { return m_second; }
 
     Type type() const { return m_type; }
 
@@ -81,7 +81,7 @@ private:
 
     int compare(const CollisionEvent &) const;
 
-    EntityRef m_first, m_second;
+    Entity m_first, m_second;
     Type m_type;
 };
 
@@ -109,10 +109,11 @@ public:
         CollisionEvent col_event(std::forward<Types>(args)...);
         push_event(col_event);
     }
+
 private:
     enum EventAge { k_old, k_updated, k_new };
     using CollisionType = CollisionEvent::Type;
-    using EventKey      = Tuple<EntityRef, EntityRef>;
+    using EventKey      = Tuple<Entity, Entity>;
     using EventValue    = Tuple<CollisionType, EventAge>;
 
     struct EventHasher final {
@@ -128,7 +129,7 @@ private:
     //
     // There's a problem: I ended up with an iterator with idx == 1 on a
     // container that only had one element :/
-    EventContainer m_events = EventContainer{8, std::make_tuple(EntityRef{}, EntityRef{})};
+    EventContainer m_events = EventContainer{8, std::make_tuple(Entity{}, Entity{})};
 };
 
 // -------------------------------- FullEntry ---------------------------------
@@ -148,7 +149,14 @@ struct FullEntry final : public tdp::Entry {
     Real low_x, low_y, high_x, high_y;
 };
 
-using EntryEntityRefMap = std::unordered_map<EntityRef, FullEntry, ecs::EntityHasher>;
+using EntityHasher =
+#ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+    ecs::EntityHasher;
+#else
+    std::hash<Entity>;
+#endif
+
+using EntryEntityRefMap = std::unordered_map<Entity, FullEntry, EntityHasher>;
 using EntryMapView      = View<EntryEntityRefMap::iterator>;
 
 void update_broad_boundries(FullEntry &);
@@ -240,7 +248,7 @@ int large_displacement_step_count
 std::tuple<Vector, HitSide> find_min_push_displacement_small
     (const Rectangle &, const Rectangle & other, const Vector & displc);
 
-HitSide trim_small_displacement
+HitSide trim_displacement_small
     (const Rectangle &, const Rectangle & other, Vector & displc);
 
 // ----------------------------- level 2 helpers ------------------------------

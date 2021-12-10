@@ -29,6 +29,9 @@
 #include "physics-interval-sweep.hpp"
 #include "physics-quadratic-naive.hpp"
 #include "physics-grid.hpp"
+#ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+#   include <ecs/ecs.hpp>
+#endif
 
 namespace {
 

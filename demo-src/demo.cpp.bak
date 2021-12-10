@@ -494,7 +494,7 @@ class RdFadeSystem final : public RdSystem {
             }
             using U8Lims = std::numeric_limits<uint8_t>;
             auto alpha = uint8_t(std::round(U8Lims::max()
-                *std::min(1., (fade.remaining / (fade.original*fade.thershold)) )
+                *std::min(Real(1.), (fade.remaining / (fade.original*fade.thershold)) )
                 ));
             if (auto * drect = e.ptr<DrawRectangle>()) {
                 auto clr = drect->color();
@@ -780,7 +780,7 @@ private:
             if (itr != m_occu_grid.end()) {
                 count = itr->second;
             }
-            auto center = m_offset + ::Vector(x*m_cell_size.width, y*m_cell_size.height) + Vector(m_cell_size.width, m_cell_size.height)*0.5;
+            auto center = m_offset + ::Vector(x*m_cell_size.width, y*m_cell_size.height) + Vector(m_cell_size.width, m_cell_size.height)*Real(0.5);
             brush.set_text_center(convert_to<sf::Vector2f>(center), std::to_string(count));
             target.draw(brush, states);
         }}
@@ -887,7 +887,7 @@ private:
                     ++m_counter;
                 } else {
                     spawn_point = (  center_of(ae.get<Rectangle>())
-                                   + center_of(be.get<Rectangle>()))*0.5;
+                                   + center_of(be.get<Rectangle>()))*Real(0.5);
                 }
             } else {
                 static const std::string k_hit = "HIT WALL!";
@@ -950,7 +950,7 @@ private:
                 if (tar->facing == Vector{}) continue;
                 auto maj = cul::normalize(magnitude(tar->facing.x) > magnitude(tar->facing.y) ? Vector{tar->facing.x, 0} : Vector{0, tar->facing.y});
                 Rectangle rect{Vector{}, Size2{180. + magnitude(maj.x)*200., 180. + magnitude(maj.y)*200.}};
-                auto loc = cul::center_of(e.get<Rectangle>()) + maj*25.;
+                auto loc = cul::center_of(e.get<Rectangle>()) + maj*Real(25.);
                 if (tar->facing.x > 0) {
                     set_location_at_portion(rect, Vector{0, 0.5}, loc);
                 } else if (tar->facing.x < 0) {
@@ -1413,7 +1413,7 @@ void run_demo() {
             e.add<Rectangle>() = make_rect_from_center(k_center
                 + Vector(r.x*k_size.width, r.y*k_size.height), k_size);
             e.add<DrawRectangle>().set_color(sf::Color(90, 90, 190));
-            e.add<Velocity>() = Vector(-cul::normalize(r.x), 0)*30.;
+            e.add<Velocity>() = Vector(-cul::normalize(r.x), 0)*Real(30.);
         }
     }));
 #   endif

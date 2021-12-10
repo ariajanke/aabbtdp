@@ -1,5 +1,34 @@
+/****************************************************************************
+
+    MIT License
+
+    Copyright (c) 2021 Aria Janke
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+*****************************************************************************/
+
 #include "sight-detail.hpp"
 #include "helpers.hpp"
+#ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+#   include <ecs/ecs.hpp>
+#endif
 
 #include <numeric>
 #include <functional>
@@ -245,7 +274,7 @@ Percept to_percept(Vector source, const ImageEntry & image) {
     Percept percept;
     percept.entity     = image.entity;
     percept.visibility = image.visibility*image.opactity;
-    percept.target     = (image.anchor_low + image.anchor_high)*0.5 + source;
+    percept.target     = (image.anchor_low + image.anchor_high)*Real(0.5) + source;
     return percept;
 }
 
@@ -294,7 +323,7 @@ Real find_portion_overlapped
 }
 
 // ----------------------------------------------------------------------------
-
+#if 0
 template <typename T>
 cul::Vector2<T> top_right_of(const cul::Rectangle<T> &);
 
@@ -303,7 +332,7 @@ cul::Vector2<T> bottom_right_of(const cul::Rectangle<T> &);
 
 template <typename T>
 cul::Vector2<T> bottom_left_of(const cul::Rectangle<T> &);
-
+#endif
 Real directed_angle_between_(const Vector & a, const Vector & b);
 
 auto bind_lesser_angle_from(Vector r) {
@@ -411,7 +440,7 @@ Real portion_infront(const PolarVector & obj_beg, const PolarVector & obj_last,
 }
 
 // ----------------------------------------------------------------------------
-
+#if 0
 template <typename T>
 cul::Vector2<T> top_right_of(const cul::Rectangle<T> & rect)
     { return cul::Vector2<T>(rect.left + rect.width, rect.top); }
@@ -423,7 +452,7 @@ cul::Vector2<T> bottom_right_of(const cul::Rectangle<T> & rect)
 template <typename T>
 cul::Vector2<T> bottom_left_of(const cul::Rectangle<T> & rect)
     { return cul::Vector2<T>(rect.left, rect.top + rect.height); }
-
+#endif
 Real directed_angle_between_(const Vector & a, const Vector & b) {
     auto rv = directed_angle_between(a, b);
     /**/ if (rv < -k_pi) rv += 2*k_pi;

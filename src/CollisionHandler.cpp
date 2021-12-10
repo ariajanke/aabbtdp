@@ -25,6 +25,9 @@
 *****************************************************************************/
 
 #include "CollisionHandler.hpp"
+#ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+#   include <ecs/ecs.hpp>
+#endif
 
 #include <iostream>
 #include <thread>
@@ -250,7 +253,7 @@ void ColWorkImpl::prestep(FullEntry & entry) {
     Vector barrier = find_barrier_for_displacement
         (entry.displacement, entry.positive_barrier, entry.negative_barrier);
     if (trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement) != HitSide()) {
-        m_event_recorder.emplace_event(entry.entity, EntityRef{}, CollisionEvent::k_rigid);
+        m_event_recorder.emplace_event(entry.entity, Entity{}, CollisionEvent::k_rigid);
     }
 }
 

@@ -103,7 +103,7 @@ public:
 
     // ---------------- methods used for illustrative purposes ----------------
 
-    const int * get_push_level_for(EntityRef eref) const {
+    const int * get_push_level_for(Entity eref) const {
         auto itr = m_entries.find(eref);
         return itr == m_entries.end() ? nullptr : &itr->second.priority;
     }

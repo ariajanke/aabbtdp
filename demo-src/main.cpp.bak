@@ -60,9 +60,9 @@ void do_td_physics_tests      (TestSuite &);
 
 } // end of <anonymous> namespace
 
-void do_sight_unit_tests(TestSuite &);
-void do_spatial_map_unit_tests(TestSuite &);
-void do_spatial_map_unit_tests_n(TestSuite &);
+//void do_sight_unit_tests(TestSuite &);
+//void do_spatial_map_unit_tests(TestSuite &);
+//void do_spatial_map_unit_tests_n(TestSuite &);
 
 int main() {
 
@@ -78,10 +78,11 @@ int main() {
     do_helper_tests(suite);
     do_collision_matrix_tests(suite);
     do_td_physics_tests(suite);
+#   if 0
     do_spatial_map_unit_tests(suite);
     do_sight_unit_tests(suite);
     do_spatial_map_unit_tests_n(suite);
-
+#   endif
 #   ifdef MACRO_BUILD_DEMO
     run_demo();
 #   endif
@@ -356,9 +357,10 @@ void do_helper_tests(TestSuite & suite) {
             // this should break around i == 53 (on my machine anyhow)
             if (pow(2, i) + 1 == pow(2, i)) break;
 
-            Rectangle trect{0, 0, pow(2, i), pow(2, i)};
-            Vector displacement{pow(2, i) + 2, -2};
-            Vector barrier     {pow(2, i) + 1, -1};
+            Rectangle trect{0, 0, Real(pow(2, i)), Real(pow(2, i))};
+            // used narrowed constructors, have to cast explicitly
+            Vector displacement{Real(pow(2, i) + 2), Real(-2)};
+            Vector barrier     {Real(pow(2, i) + 1), Real(-1)};
             trim_displacement_for_barriers(trect, barrier, displacement);
         }
         // passes if no assertions fire
@@ -581,7 +583,7 @@ void do_td_physics_tests(TestSuite & suite) {
             target.add<Rectangle>() = Rectangle{15, -5, 20, 20};
             target.add<Layer    >() = layers::k_floor_mat;
             target.add<Name     >() = "target";
-            return cul::center_of(target.get<Rectangle>()) - cul::center_of(proj_rect) - Vector{proj_rect.width, proj_rect.height}*0.5;
+            return cul::center_of(target.get<Rectangle>()) - cul::center_of(proj_rect) - Vector{proj_rect.width, proj_rect.height}*Real(0.5);
         } (eman.make_entity());
         eman.process_deletion_requests();
 
@@ -606,7 +608,7 @@ void do_td_physics_tests(TestSuite & suite) {
             eman.run_system(colsys);
             // I have it failing now...
             // it's not a "first frame" issue
-            proj.get<Velocity>() = center_to_center_diff*(1. / ColSystem::k_et_value);
+            proj.get<Velocity>() = center_to_center_diff*Real(1. / ColSystem::k_et_value);
             col_count = 0;
             eman.run_system(colsys);
             return test(col_count == 1);

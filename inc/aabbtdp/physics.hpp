@@ -28,15 +28,12 @@
 
 #include <aabbtdp/defs.hpp>
 
-#include <ecs/ecs.hpp>
-
 #include <common/Grid.hpp>
 
 #include <memory>
 
 namespace tdp {
 
-using ecs::EntityRef;
 class Physics2DHandler;
 using P2dHandlerPtr = std::unique_ptr<Physics2DHandler>;
 
@@ -54,7 +51,7 @@ struct Entry {
     /// update_entry calls.
     ///
     /// This value is null only for default construction of this structure.
-    EntityRef entity;
+    Entity entity = Entity{};
 
     /// Defines the pre-update boundaries of the entity/entry
     ///
@@ -132,7 +129,7 @@ struct EventHandler {
     /// @param a an entity reference, guaranteed to not be null
     /// @param b an entity reference, guaranteed to not be null
     /// @returns true if the two given entities should interact as solids
-    virtual bool check_accept_collision(EntityRef a, EntityRef b) const = 0;
+    virtual bool check_accept_collision(Entity a, Entity b) const = 0;
 
     /// Called to everytime two entities collide, or if one entity collides
     /// against a wall.
@@ -141,19 +138,19 @@ struct EventHandler {
     /// @param b an entity reference, which is null if "a" is hitting a wall
     /// @param push_occuring true if a push is occuring, this is always false
     ///        if a wall is being hit
-    virtual void on_collision(EntityRef a, EntityRef b, bool push_occuring) = 0;
+    virtual void on_collision(Entity a, Entity b, bool push_occuring) = 0;
 
     /// Called whenever two entities begin passing over each other's bounds.
     /// @param a an entity reference, guaranteed to not be null
     /// @param b an entity reference, guaranteed to not be null
-    virtual void on_trespass(EntityRef a, EntityRef b) = 0;
+    virtual void on_trespass(Entity a, Entity b) = 0;
 
     /// Called at the end of the physics run, this is intended to update the
     /// entity's components with the new bounds.
     ///
     /// @param new_bounds the new bounds of the entry and therefore the entity
     ///
-    virtual void finalize_entry(EntityRef, Rectangle new_bounds) = 0;
+    virtual void finalize_entry(Entity, Rectangle new_bounds) = 0;
 };
 
 /// This type, indicates how any two entries are to interact.

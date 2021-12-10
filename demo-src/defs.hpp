@@ -26,38 +26,27 @@
 
 #pragma once
 
-#include <common/Vector2.hpp>
+// gonna need some things here for both demo and testing
 
-// normally I'd like to avoid preprocessors, but I wanted to allow "void*"
-// as an entity type...
-//
-// it is possible to implement with templates, but that would in part defeat
-// the whole "aggressive" hiding of library internals
-#ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
-#   include <ecs/EntityRef.hpp>
-#endif
+#include <aabbtdp/physics.hpp>
+#include <ecs/ecs.hpp>
 
-namespace tdp {
+#include <cassert>
 
-/// Real number, defined using double
-using Real = double;
+#include <common/Vector2Util.hpp>
 
-/// Rectangle defined with real numbers, used for AABBs everywhere in this
-/// library
-using Rectangle = cul::Rectangle<Real>;
+using Real      = tdp::Real;
+using Vector    = tdp::Vector;
+using Rectangle = tdp::Rectangle;
+using Size2     = tdp::Size;
+using tdp::Physics2DHandler;
+using ecs::EntityRef;
 
-/// Vector, as in 2D direction and magnitude, defined with real number type
-using Vector = cul::Vector2<Real>;
+using cul::center_of, cul::bottom_of, cul::right_of, cul::convert_to;
 
-/// Size object, used to represent a size of an AABB, defined with real number
-/// type
-using Size = cul::Size2<Real>;
+template <typename ... Types>
+using Tuple = std::tuple<Types...>;
 
-using Entity =
-#ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
-    ecs::EntityRef;
-#else
-    void *;
-#endif
-
-} // end of tdp namespace
+static constexpr const Real k_inf = std::numeric_limits<Real>::infinity();
+static constexpr const Real k_field_width  = 600;
+static constexpr const Real k_field_height = 600;

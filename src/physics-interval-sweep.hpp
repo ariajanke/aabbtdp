@@ -98,6 +98,8 @@ class IntervalSweepHandler final :
 public:
     void check_to_switch_axis() final {}
 
+    int count_sweep_along_axis(SweepContainer::Cand direction);
+
 private:
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 

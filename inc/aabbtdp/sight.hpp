@@ -28,13 +28,10 @@
 
 #include <aabbtdp/defs.hpp>
 
-#include <ecs/ecs.hpp>
-
 #include <memory>
+#include <vector>
 
 namespace tdp {
-
-using ecs::EntityRef;
 
 /// Sighting describes a set of states and their collective transformation into
 /// objects called percepts.
@@ -59,7 +56,7 @@ public:
 
     /// Each entry is a rectanglur image with a set opacity.
     struct Entry final {
-        EntityRef entity;
+        Entity    entity  = Entity{};
         Real      opacity = 1;
         Rectangle bounds;
     };
@@ -72,7 +69,7 @@ public:
     /// visibility and location.
     struct Percept final {
         /// The same entity reference used with the entry is passed back here
-        EntityRef entity;
+        Entity    entity = Entity{};
         /// target visibility within [0 1], where 0 is completely invisible or
         /// obstructed and 1 is opaquely completely visible
         Real      visibility = 0;

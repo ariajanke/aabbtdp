@@ -2,7 +2,7 @@ QT      -= core gui
 TEMPLATE = app
 CONFIG  -= c++11
 CONFIG  += c++17
-TARGET  = td-physics-demo
+TARGET  = aabb-physics-unit-tests
 
 linux {
     QMAKE_CXXFLAGS += -DMACRO_PLATFORM_LINUX
@@ -22,7 +22,12 @@ LIBS           += -lsfml-graphics -lsfml-window -lsfml-system -lcommon \
                   -pthread
 
 SOURCES += \
-    \# ../demo-src/main.cpp \
+    ../unit-tests/main.cpp \
+    ../unit-tests/spatial-map-unit-tests.cpp \
+    ../unit-tests/spatial-map-unit-tests-n.cpp \
+    ../unit-tests/helpers-unit-tests.cpp \
+    ../unit-tests/sight-unit-tests.cpp \
+    \ # Library source
     ../src/physics.cpp \
     ../src/helpers.cpp \
     ../src/physics-interval-sweep.cpp \
@@ -30,17 +35,14 @@ SOURCES += \
     ../src/physics-grid.cpp \
     ../src/physics-aabb-tree.cpp \
     ../src/CollisionHandler.cpp \
-    ../demo-src/sfmain.cpp \
-    ../demo-src/DemoDriver.cpp \
-    ../demo-src/systems.cpp
-
-QMAKE_CXXFLAGS += -DMACRO_BUILD_DEMO -DMACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
-# SOURCES        += ../demo-src/demo.cpp
-SOURCES        += ../src/sight.cpp
-# HEADERS        += ../demo-src/demo-common.hpp
+    ../src/sight.cpp
 
 HEADERS += \
-    \#../src/PartitionBoxMap.hpp.bak \
+    \ # Library Interface
+    ../inc/aabbtdp/physics.hpp \
+    ../inc/aabbtdp/sight.hpp \
+    ../inc/aabbtdp/defs.hpp \
+    \ # Library Private Headers
     ../src/SpatialMap.hpp \
     ../src/SpatialMapN.hpp \
     ../src/helpers.hpp \
@@ -48,16 +50,8 @@ HEADERS += \
     ../src/physics-quadratic-naive.hpp \
     ../src/physics-grid.hpp \
     ../src/physics-aabb-tree.hpp \
-    ../inc/aabbtdp/physics.hpp \
-    \# ../demo-src/demo.hpp \
-    ../inc/aabbtdp/sight.hpp \
-    ../inc/aabbtdp/defs.hpp \
     ../src/sight-detail.hpp \
-    ../src/CollisionHandler.hpp \
-    ../demo-src/defs.hpp \
-    ../demo-src/components.hpp \
-    ../demo-src/systems.hpp \
-    ../demo-src/DemoDriver.hpp
+    ../src/CollisionHandler.hpp
 
 INCLUDEPATH += \
     ../lib/cul/inc  \

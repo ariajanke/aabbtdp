@@ -101,6 +101,8 @@ public:
 
     Size cell_size() const { return m_cell_size; }
 
+    // there's a less intrusive way to do this without ploping a pointer check
+    // in the main part of the algorithm
     void assign_occupancy_grid(OccupancyGrid & og) {
         m_occu_grid = &og;
     }

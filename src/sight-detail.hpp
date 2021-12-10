@@ -47,7 +47,7 @@ inline Vector to_cartesian(const PolarVector & v)
     { return Vector{v.r*std::cos(v.theta), v.r*std::sin(v.theta)}; }
 
 struct ImageEntry final {
-    EntityRef entity;
+    Entity entity;
     Real visibility = 1;
     // will affect percepts overall visiblity
     // percept.visibility = image.opacity*image.visibility;

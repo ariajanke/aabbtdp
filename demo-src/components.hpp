@@ -26,18 +26,7 @@
 
 #pragma once
 
-// gonna need some things here for both demo and testing
-
-#include <aabbtdp/physics.hpp>
-
-#include <cassert>
-
-using Real      = tdp::Real;
-using Vector    = tdp::Vector;
-using Rectangle = tdp::Rectangle;
-using Size2     = tdp::Size;
-
-static constexpr const Real k_inf = std::numeric_limits<Real>::infinity();
+#include "defs.hpp"
 
 struct Velocity : public Vector {
     Velocity() = default;
@@ -49,7 +38,7 @@ struct Velocity : public Vector {
     const Vector & as_vector() const { return static_cast<const Vector &>(*this); }
 };
 
-struct MapLimits {
+struct MapLimits final {
     MapLimits() {}
     MapLimits(Real x_, Real y_, Real w_, Real h_): value(x_, y_, w_, h_) {}
 
@@ -67,7 +56,7 @@ struct Growth : public Size2 {
         { return (static_cast<Size2 &>(*this) = sz); }
 };
 
-struct Name : ecs::InlinedComponent {
+struct Name {
     Name() {}
     std::string & operator = (const char * cstr) { return (value = cstr); }
     std::string & operator = (const std::string & sstr) { return (value = sstr); }
@@ -75,13 +64,52 @@ struct Name : ecs::InlinedComponent {
     std::string value;
 };
 
-struct Pushable {};
-struct Bouncy {};
+struct Pushable final {};
 
-struct ColInfo {
-    bool hit_wall = false;
-    ecs::EntityRef other;
+struct Bouncy final {};
+
+struct HudDrawn final {};
+
+struct Color final {
+    // black by default
+    const char * string = "#000000";
+    Color & operator = (const char * cstr) { string = cstr; return *this; }
 };
+
+struct Lifetime final {
+    Lifetime() {}
+    Lifetime & operator = (Real v) { value = v; return *this; }
+    Real value = 0;
+};
+
+struct DisplayString final {
+    DisplayString() {}
+    std::string & operator = (const char * cstr) { return (value = cstr); }
+    std::string & operator = (const std::string & sstr) { return (value = sstr); }
+    bool operator == (const char * cstr) const noexcept { return value == cstr; }
+    std::string value;
+};
+
+namespace layers {
+
+constexpr const int k_block       = 0;
+constexpr const int k_floor_mat   = 1;
+constexpr const int k_passive     = 2;
+constexpr const int k_layer_count = 3;
+
+} // end of layers namespace -> into <anonymous>
+
+struct Layer final {
+    int value = layers::k_passive;
+    int & operator = (int i) { return (value = i); }
+    operator int () const { return value; }
+};
+
+using Entity = ecs::Entity<
+    Rectangle, Color, DisplayString, Layer, Name, Lifetime,
+    Pushable, Bouncy, Growth, MapLimits, Velocity, HudDrawn>;
+
+// --- helpers? --
 
 template <typename ... Types>
 const std::string * get_name_ptr(const ecs::Entity<Types...> & e) {
@@ -99,23 +127,6 @@ const std::string & force_name(const ecs::Entity<Types...> & e) {
     return a_name ? *a_name : k_anon;
 }
 
-
-#if 0
-inline tdp::CollisionMatrix make_default_col_matrix() {
-    tdp::CollisionMatrix col_matrix;
-    col_matrix.set_size(1, 1, tdp::InteractionClass::k_as_solid);
-    return col_matrix;
-}
-#endif
-namespace layers {
-
-constexpr const int k_block       = 0;
-constexpr const int k_floor_mat   = 1;
-constexpr const int k_passive     = 2;
-constexpr const int k_layer_count = 3;
-
-} // end of layers namespace -> into <anonymous>
-
 inline auto make_collision_matrix() {
     using namespace tdp::interaction_classes;
     auto rv = cul::Grid {
@@ -128,11 +139,6 @@ inline auto make_collision_matrix() {
     return rv;
 }
 
-struct Layer {
-    int value = tdp::Entry::k_no_layer;
-    int & operator = (int i) { return (value = i); }
-    operator int () const { return value; }
-};
 
 template <typename ... Types>
 tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time) {
@@ -168,9 +174,3 @@ tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time) {
         entry.collision_layer = layers::k_block;
     return entry;
 }
-
-#ifdef MACRO_BUILD_DEMO
-// using std::enable_if_t won't reduce the number of occurance for this
-// preprocessor macro, given there is only one thing to "disable"
-void run_demo();
-#endif
