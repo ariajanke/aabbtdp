@@ -192,6 +192,11 @@ void do_collision_work
     (EventHandler & event_handler, IterationBase & group_method, const CollisionMatrix & collision_matrix,
      EventRecorder & event_recorder, EntryMapView entries_view)
 {
+    for (auto & pair : entries_view) {
+        // I guess reset before the frame, because for illustration purposes?
+        pair.second.priority = k_default_priority;
+    }
+
     // note: clean up must take place before populating the group method/container
     using std::get;
     static constexpr const int k_max_iterations = 128;
@@ -239,7 +244,6 @@ void do_collision_work
 
     for (auto & pair : entries_view) {
         pair.second.first_appearance = false;
-        pair.second.priority         = k_default_priority;
     }
 }
 

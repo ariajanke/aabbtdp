@@ -1,3 +1,29 @@
+/****************************************************************************
+
+    MIT License
+
+    Copyright (c) 2021 Aria Janke
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+*****************************************************************************/
+
 // a couple of abstractions:
 // one for the driver
 // and one for the menu
@@ -69,8 +95,13 @@ public:
         m_text_brush.assign_font(m_font);
     }
 
-    void draw_string(const std::string & string, Vector center) final {
+    void draw_string_center(const std::string & string, Vector center) final {
         m_text_brush.set_text_center(convert_to<sf::Vector2f>(center), string);
+        m_target.draw(m_text_brush);
+    }
+
+    void draw_string_top_left(const std::string & string, Vector top_left) final {
+        m_text_brush.set_text_top_left(convert_to<sf::Vector2f>(top_left), string);
         m_target.draw(m_text_brush);
     }
 

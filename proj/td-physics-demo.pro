@@ -32,7 +32,8 @@ SOURCES += \
     ../src/CollisionHandler.cpp \
     ../demo-src/sfmain.cpp \
     ../demo-src/DemoDriver.cpp \
-    ../demo-src/systems.cpp
+    ../demo-src/systems.cpp \
+    ../demo-src/drawing.cpp
 
 QMAKE_CXXFLAGS += -DMACRO_BUILD_DEMO -DMACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
 # SOURCES        += ../demo-src/demo.cpp
@@ -57,7 +58,8 @@ HEADERS += \
     ../demo-src/defs.hpp \
     ../demo-src/components.hpp \
     ../demo-src/systems.hpp \
-    ../demo-src/DemoDriver.hpp
+    ../demo-src/DemoDriver.hpp \
+    ../demo-src/drawing.hpp
 
 INCLUDEPATH += \
     ../lib/cul/inc  \

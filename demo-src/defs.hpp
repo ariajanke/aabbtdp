@@ -48,5 +48,6 @@ template <typename ... Types>
 using Tuple = std::tuple<Types...>;
 
 static constexpr const Real k_inf = std::numeric_limits<Real>::infinity();
+static constexpr const Real k_hud_line_height = 16;
 static constexpr const Real k_field_width  = 600;
 static constexpr const Real k_field_height = 600;

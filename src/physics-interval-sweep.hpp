@@ -31,11 +31,12 @@
 
 namespace tdp {
 
+enum class SweepDirection { x_wise, y_wise };
+
 // another exciting implementation may use a bit-matrix
 // and we select pairs that way...
-class SweepContainer final : public IterationBase {
+class SweepContainer : public IterationBase {
 public:
-    enum Cand { k_x_wise, k_y_wise, k_both };
 
     template <typename Iter, typename IterToPointer>
     void populate(Iter beg, Iter end, IterToPointer && to_pointer) {
@@ -47,48 +48,58 @@ public:
 
     void for_each_sequence(SequenceInterface & intf) final;
 
+    // still a O(n log n)... as it sorts the population also
+    virtual int count_sweep() = 0;
+
     // something to test extensively :)
     static constexpr const int  k_use_quadratic_thershold = 20;
 
-private:
-    static constexpr const Real k_adjust_amount           = 0.;
+    static Real low_x (const FullEntry & fe) { return fe.low_x ; }
+    static Real low_y (const FullEntry & fe) { return fe.low_y ; }
+    static Real high_x(const FullEntry & fe) { return fe.high_x; }
+    static Real high_y(const FullEntry & fe) { return fe.high_y; }
 
+protected:
     using WsIter = std::vector<FullEntry *>::iterator;
 
+    WsIter begin_() { return m_reorder.begin(); }
+
+    WsIter end_() { return m_reorder.end(); }
+
+    virtual void for_each_sequence_(SequenceInterface &) = 0;
+
+private:
     // bounds should be expanded by nudge and displacement?
-
-    auto make_in_range_x(WsIter itr) {
-        assert(itr >= m_reorder.begin() && itr < m_reorder.end());
-        Real x_end = (**itr).high_x;
-        return [x_end, this] (decltype(itr) jtr) {
-            assert(jtr >= m_reorder.begin() && jtr <= m_reorder.end());
-            if (jtr == m_reorder.end()) return false;
-            return (**jtr).low_x < x_end;
-        };
-    }
-
-    auto make_in_range_y(WsIter jtr) {
-        assert(jtr >= m_reorder.begin() && jtr < m_reorder.end());
-        Real y_end = (**jtr).high_y;
-        return [y_end, this] (decltype(jtr) ktr) {
-            assert(ktr >= m_reorder.begin() && ktr <= m_reorder.end());
-            if (ktr == m_reorder.end()) return false;
-            return (**ktr).low_y < y_end;
-        };
-    }
-
-    static bool order_entries_horizontally(FullEntry * lhs, FullEntry * rhs)
-        { return lhs->low_x < rhs->low_x; }
-
-    static bool order_entries_vertically(FullEntry * lhs, FullEntry * rhs)
-        { return lhs->low_y < rhs->low_y; }
-
-    void sweep_x_wise(SequenceInterface &);
-
-    void sweep_y_wise(SequenceInterface &);
-
     std::vector<FullEntry *> m_reorder;
 };
+
+// design note: do I trade readability for templates OR
+//                         violate DRY?
+template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
+          Real(*low_j)(const FullEntry &), Real(*high_j)(const FullEntry &)>
+class SweepIJContainer final : public SweepContainer {
+public:
+    int count_sweep() final;
+
+private:
+    void for_each_sequence_(SequenceInterface & intf) final;
+
+    static bool order_entries(FullEntry * lhs, FullEntry * rhs)
+        { return low_i(*lhs) < low_i(*rhs); }
+
+    WsIter get_i_wise_end(WsIter itr);
+
+    template <typename Func>
+    void for_i_intervals(Func && f);
+};
+
+using SweepXContainer = SweepIJContainer<
+    SweepContainer::low_x, SweepContainer::high_x,
+    SweepContainer::low_y, SweepContainer::high_y>;
+
+using SweepYContainer = SweepIJContainer<
+    SweepContainer::low_y, SweepContainer::high_y,
+    SweepContainer::low_x, SweepContainer::high_x>;
 
 // ----------------------------------------------------------------------------
 
@@ -96,16 +107,95 @@ class IntervalSweepHandler final :
     public SweepSwitchPhysicsHandler, public CollisionHandler
 {
 public:
-    void check_to_switch_axis() final {}
+    void check_to_switch_axis() final;
 
-    int count_sweep_along_axis(SweepContainer::Cand direction);
+    int count_sweep_along_axis(SweepDirection direction);
 
 private:
     void find_overlaps_(const Rectangle &, const OverlapInquiry &) const final;
 
     void prepare_iteration(CollisionWorker &, EventHandler &) final;
 
-    SweepContainer m_workspace;
+    SweepContainer * choose_by_direction(SweepDirection direction);
+
+    static void populate_sweep_container(SweepContainer &, EntryMapView);
+
+    SweepXContainer m_sweep_x_cont;
+    SweepYContainer m_sweep_y_cont;
+    SweepContainer * m_workspace = &m_sweep_x_cont;
 };
+
+// ----------------------------------------------------------------------------
+
+template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
+          Real(*low_j)(const FullEntry &), Real(*high_j)(const FullEntry &)>
+int SweepIJContainer<low_i, high_i, low_j, high_j>::count_sweep() {
+    int sum = 0;
+    for_i_intervals([&sum](WsIter, WsIter jtr, WsIter jtr_end) {
+        sum += (jtr_end - jtr);
+    });
+    return sum;
+}
+
+template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
+          Real(*low_j)(const FullEntry &), Real(*high_j)(const FullEntry &)>
+/* private */ void SweepIJContainer<low_i, high_i, low_j, high_j>::for_each_sequence_
+    (SequenceInterface & intf)
+{
+    for_i_intervals([&intf](WsIter itr, WsIter jtr, WsIter jtr_end) {
+        intf.prestep(**itr);
+        for (; jtr != jtr_end; ++jtr) {
+            // anymore and I worry we're hitting brute force again
+            // second part of the overlap feature
+            if (high_j(**itr) > low_j(**jtr) && high_j(**jtr) > low_j(**itr)) {
+                intf.step(**itr, **jtr);
+                intf.step(**jtr, **itr);
+            }
+            assert(*jtr != *itr);
+        }
+        intf.poststep(**itr);
+    });
+}
+
+
+template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
+          Real(*low_j)(const FullEntry &), Real(*high_j)(const FullEntry &)>
+/* private */
+    typename SweepIJContainer<low_i, high_i, low_j, high_j>::WsIter
+    SweepIJContainer<low_i, high_i, low_j, high_j>::get_i_wise_end
+    (WsIter itr)
+{
+    auto make_in_range_i = [this](WsIter itr) {
+        assert(itr >= begin_() && itr < end_());
+        Real i_end = high_i(**itr);
+        return [i_end, this] (decltype(itr) jtr) {
+            assert(jtr >= begin_() && jtr <= end_());
+            if (jtr == end_()) return false;
+            return low_i(**jtr) < i_end;
+        };
+    };
+    auto itr_end = itr;
+    for (auto in_range_i = make_in_range_i(itr); in_range_i(itr_end); ++itr_end) {}
+    return itr_end;
+}
+
+template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
+          Real(*low_j)(const FullEntry &), Real(*high_j)(const FullEntry &)>
+template <typename Func>
+/* private */ void SweepIJContainer<low_i, high_i, low_j, high_j>::for_i_intervals
+    (Func && f)
+{
+    sort(begin_(), end_(), order_entries);
+    for (auto itr = begin_(); itr != end_(); ++itr) {
+        // seek **itr y-wise... O(log n)
+        // we now have two sequences
+        // the intersection is our interest
+
+        auto itr_end = get_i_wise_end(itr);
+
+        // we don't want itr to be changed...
+        f(itr, (itr == itr_end) ? itr : itr + 1, itr_end);
+    }
+}
 
 } // end of tdp namespace

@@ -29,82 +29,58 @@
 #   include <ecs/ecs.hpp>
 #endif
 
+namespace {
+
+using namespace cul::exceptions_abbr;
+static constexpr const auto k_x_wise = tdp::SweepDirection::x_wise;
+static constexpr const auto k_y_wise = tdp::SweepDirection::y_wise;
+
+} // end of <anonymous> namespace
+
 namespace tdp {
 
 void SweepContainer::for_each_sequence(SequenceInterface & intf) {
     update_broad_boundries(m_reorder.begin(), m_reorder.end());
-
-    //thread_local static int i = 0;
-    //auto fptr = i++ % 2 == 0 ? &SweepContainer::sweep_x_wise : &SweepContainer::sweep_y_wise;
-    //((*this).*fptr)(intf);
-    sweep_y_wise(intf);
-}
-
-/* private */ void SweepContainer::sweep_x_wise(SequenceInterface & intf) {
-    sort(m_reorder.begin(), m_reorder.end(), order_entries_horizontally);
-    for (auto itr = m_reorder.begin(); itr != m_reorder.end(); ++itr) {
-        // seek **itr y-wise... O(log n)
-        // we now have two sequences
-        // the intersection is our interest
-
-        intf.prestep(**itr);
-        auto itr_end = itr;
-        for (auto in_range_x = make_in_range_x(itr); in_range_x(itr_end); ++itr_end) {}
-
-        if (itr == itr_end) {
-            // do nothing
-        } else {
-            for (auto jtr = itr + 1; jtr != itr_end; ++jtr) {
-                // anymore and I worry we're hitting brute force again
-                // second part of the overlap feature
-                if ((**itr).high_y > (**jtr).low_y && (**jtr).high_y > (**itr).low_y) {
-                    intf.step(**itr, **jtr);
-                    intf.step(**jtr, **itr);
-                }
-                assert(*jtr != *itr);
-            }
-        }
-        intf.poststep(**itr);
-    }
-}
-
-/* private */ void SweepContainer::sweep_y_wise(SequenceInterface & intf) {
-    sort(m_reorder.begin(), m_reorder.end(), order_entries_vertically);
-    for (auto itr = m_reorder.begin(); itr != m_reorder.end(); ++itr) {
-        // seek **itr y-wise... O(log n)
-        // we now have two sequences
-        // the intersection is our interest
-
-        intf.prestep(**itr);
-        auto itr_end = itr;
-        for (auto in_range_y = make_in_range_y(itr); in_range_y(itr_end); ++itr_end) {}
-
-        if (itr == itr_end) {
-            // do nothing
-        } else {
-            for (auto jtr = itr + 1; jtr != itr_end; ++jtr) {
-                // anymore and I worry we're hitting brute force again
-                // second part of the overlap feature
-                if ((**itr).high_x > (**jtr).low_x && (**jtr).high_x > (**itr).low_x) {
-                    intf.step(**itr, **jtr);
-                    intf.step(**jtr, **itr);
-                }
-                assert(*jtr != *itr);
-            }
-        }
-        intf.poststep(**itr);
-    }
+    for_each_sequence_(intf);
 }
 
 // ----------------------------------------------------------------------------
 
+void IntervalSweepHandler::check_to_switch_axis() {
+    auto x_is_less = count_sweep_along_axis(k_x_wise) < count_sweep_along_axis(k_y_wise);
+    m_workspace = choose_by_direction(x_is_less ? k_x_wise : k_y_wise);
+}
+
+int IntervalSweepHandler::count_sweep_along_axis(SweepDirection direction) {
+    auto sweep_cont = choose_by_direction(direction);
+    populate_sweep_container(*sweep_cont, entries_view());
+    return sweep_cont->count_sweep();
+}
+
 /* private */ void IntervalSweepHandler::prepare_iteration
     (CollisionWorker & do_collision_work, EventHandler & event_handler)
 {
+    populate_sweep_container(*m_workspace, entries_view());
+    do_collision_work(event_handler, *m_workspace);
+}
+
+/* private */ SweepContainer * IntervalSweepHandler::choose_by_direction
+    (SweepDirection direction)
+{
+    switch (direction) {
+    case k_x_wise: return &m_sweep_x_cont;
+    case k_y_wise: return &m_sweep_y_cont;
+    default: throw InvArg("IntervalSweepHandler::choose_by_direction: "
+                          "direction has an invalid value (corrupt data?).");
+    }
+}
+
+/* private static */ void IntervalSweepHandler::populate_sweep_container
+    (SweepContainer & sweep_container, EntryMapView entries_view)
+{
     using PairType = EntryEntityRefMap::value_type;
-    m_workspace.populate(entries_view().begin(), entries_view().end(),
-                         [](PairType & pt) { return &pt.second; });
-    do_collision_work(event_handler, m_workspace);
+    sweep_container.populate(entries_view.begin(), entries_view.end(),
+                             [](PairType & pt) { return &pt.second; });
 }
 
 /* private */ void IntervalSweepHandler::find_overlaps_(const Rectangle & rect, const OverlapInquiry & inq) const {

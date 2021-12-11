@@ -1,3 +1,29 @@
+/****************************************************************************
+
+    MIT License
+
+    Copyright (c) 2021 Aria Janke
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+*****************************************************************************/
+
 #include "DemoDriver.hpp"
 
 namespace {
@@ -10,7 +36,80 @@ Entity make_player_for_any_scene(EntityManager & entity_manager);
 // make rect from field center
 Rectangle make_rect_from_center(Vector, Size2);
 
+template <typename Func>
+std::unique_ptr<GenericDrawSystem> make_as_draw_system(Func && f) {
+    class Impl final : public GenericDrawSystem {
+    public:
+        Impl(Func && f): m_f(std::move(f)) {}
+        void update(const ContainerView &) final {
+            m_f(draw_interface());
+        }
+    private:
+        Func m_f;
+    };
+    return std::make_unique<Impl>(std::move(f));
+}
+
+std::unique_ptr<GenericDrawSystem> make_composite_system
+    (std::vector<std::unique_ptr<GenericDrawSystem>> && systems)
+{
+    class Impl final : public GenericDrawSystem {
+    public:
+        Impl(std::vector<std::unique_ptr<GenericDrawSystem>> && syss):
+            m_syss(std::move(syss)) {}
+
+        void update(const ContainerView & view) final {
+            // yuck... have to assign and set...
+            for (auto & sys_ptr : m_syss) {
+                sys_ptr->assign_interface(draw_interface());
+                sys_ptr->set_visible_size(draw_interface().draw_area());
+
+                sys_ptr->update(view);
+            }
+        }
+
+    private:
+        std::vector<std::unique_ptr<GenericDrawSystem>> m_syss;
+    };
+    return std::make_unique<Impl>(std::move(systems));
+}
+
 } // end of <anonymous> namespace
+
+Tuple<std::unique_ptr<GenericDrawSystem>, std::unique_ptr<Physics2DHandler>>
+    make_from_scene_options(const SceneOptions & scene_options)
+{
+    std::vector<std::unique_ptr<GenericDrawSystem>> extra_systems;
+    std::unique_ptr<Physics2DHandler> handler;
+    switch (scene_options.algorithm) {
+    case SceneOptions::k_quadratic:
+        handler = tdp::QuadraticPhysicsHandler::make_instance();
+        break;
+    case SceneOptions::k_sweep: {
+        auto sweep_handler = std::make_unique<tdp::IntervalSweepHandler>();
+        if (scene_options.illustrated) {
+            auto sys = make_as_draw_system(make_sweep_drawer(*sweep_handler, 0));
+
+            extra_systems.emplace_back(std::move(sys));
+        }
+        handler = std::move(sweep_handler);
+        }
+        break;
+    case SceneOptions::k_grid:
+        break;
+    }
+
+    {
+    auto names_sys = std::make_unique<NameDrawSystem>();
+    if (scene_options.show_push_level) {
+        names_sys->assign_collision_handler(dynamic_cast<tdp::CollisionHandler &>(*handler));
+    }
+    extra_systems.emplace_back(std::move(names_sys));
+    }
+
+    return std::make_tuple(make_composite_system(std::move(extra_systems)),
+                           std::move(handler));
+}
 
 void SceneDriver::prepare_scenes() {
     using Loader = Scene::Loader;
@@ -303,17 +402,7 @@ void DemoDriver::on_update() {
         cul::for_all_of_base<System>(m_always_present_systems, [this](System & sys) {
             m_ent_manager.run_system(sys);
         });
-#       if 0
-        cul::for_all_of_base<DrawAware>(m_draw_systems, [this](DrawAware & sys) {
-            sys.set_camera_center(cul::center_of(m_player.get<Rectangle>()));
-        });
-#       endif
     }
-#   if 0
-    cul::for_all_of_base<System>(m_draw_systems, [this](System & sys) {
-        m_ent_manager.run_system(sys);
-    });
-#   endif
     if (!m_paused && m_player) {
         bool left_xor_right = m_controls[k_left_idx] ^ m_controls[k_right_idx];
         bool up_xor_down    = m_controls[k_up_idx  ] ^ m_controls[k_down_idx ];
@@ -333,9 +422,10 @@ void DemoDriver::on_update() {
     m_ent_manager.process_deletion_requests();
 }
 
+// you see... there's a redundent "draw_interface" here...
 void DemoDriver::on_draw(DrawInterface & draw_interface) {
     DrawSystems draw_systems;
-    BottomLayerDrawSystem::draw_backround(draw_interface, center_of(m_player.get<Rectangle>()), draw_interface.draw_area());
+    draw_backround(draw_interface, center_of(m_player.get<Rectangle>()), draw_interface.draw_area());
     cul::for_all_of_base<DrawAware>(draw_systems, [&draw_interface](DrawAware & draw_aware) {
         draw_aware.assign_interface(draw_interface);
 #       if 0
@@ -343,16 +433,24 @@ void DemoDriver::on_draw(DrawInterface & draw_interface) {
 #       endif
         draw_aware.set_visible_size(draw_interface.draw_area());
     });
+
     cul::for_all_of_base<System>(draw_systems, [this](System & sys) {
         m_ent_manager.run_system(sys);
     });
+
+    m_extra_drawing->assign_interface(draw_interface);
+    m_extra_drawing->set_visible_size(draw_interface.draw_area());
+    m_ent_manager.run_system(*m_extra_drawing);
 }
 
-void DemoDriver::load_scene(const SceneOptions &, int scene_choice) {
+void DemoDriver::load_scene
+    (const SceneOptions & scene_options, int scene_choice)
+{
     // the scene options determine which additional systems are loaded...
     m_scene_driver.load_scene(scene_choice, m_ent_manager, m_player);
     m_ent_manager.process_deletion_requests();
-    m_physics_handler = tdp::Physics2DHandler::make_default_instance();
+
+    std::tie(m_extra_drawing, m_physics_handler) = make_from_scene_options(scene_options);
     m_physics_handler->set_collision_matrix(make_collision_matrix());
     std::get<CollisionSystem>(m_always_present_systems).assign_handler(*m_physics_handler);
 }

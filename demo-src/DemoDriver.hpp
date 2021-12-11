@@ -1,7 +1,34 @@
+/****************************************************************************
+
+    MIT License
+
+    Copyright (c) 2021 Aria Janke
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+*****************************************************************************/
+
 #pragma once
 
 #include "defs.hpp"
 #include "systems.hpp"
+#include "drawing.hpp"
 
 #include <cmath>
 
@@ -81,13 +108,23 @@ struct SceneOptions final {
         k_quadratic, k_sweep, k_grid
     };
     enum SightOption {
-        k_no_sight, k_sight, k_sigh_with_outline
+        k_no_special_sight, k_sight, k_sight_with_outline
     };
-    AlgorithmOption algorithm = k_quadratic;
-    bool illustrated = false;
-    bool show_push_level = false;
-    SightOption sight = k_no_sight;
+
+    AlgorithmOption algorithm = k_sweep;
+    // true -> illustrate the chosen algorithm (quadratic draws nothing)
+    bool illustrated = true;
+    // true -> draws push level if greater than 0 (will exclude name)
+    bool show_push_level = true;
+    // k_no_special_sight   -> see all entities normally
+    // k_sight              -> see only entities according to visibility
+    // k_sight_with_outline -> see entities with visibility, but with an
+    //                         outline on all
+    SightOption sight = k_no_special_sight;
 };
+
+Tuple<std::unique_ptr<GenericDrawSystem>, std::unique_ptr<Physics2DHandler>>
+    make_from_scene_options(const SceneOptions &);
 
 class EntityMakerBase {
 public:
@@ -189,7 +226,7 @@ public:
 
 private:
     using AlwaysPresentSystems = Tuple<CollisionSystem, LifetimeSystem>;
-    using DrawSystems = Tuple<BottomLayerDrawSystem>;
+    using DrawSystems = Tuple<DrawHudEntitiesSystem, DrawEntitiesSystem>;
 
     static int to_key_idx(Key k);
 
@@ -214,6 +251,7 @@ private:
 
     SceneDriver m_scene_driver;
     std::unique_ptr<Physics2DHandler> m_physics_handler;
+    std::unique_ptr<GenericDrawSystem> m_extra_drawing;
 };
 
 
