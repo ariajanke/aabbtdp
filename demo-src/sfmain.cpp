@@ -53,6 +53,9 @@ constexpr const auto k_down_key = sf::Keyboard::S;
 constexpr const auto k_right_key = sf::Keyboard::D;
 constexpr const auto k_pause_key = sf::Keyboard::Return;
 
+sf::Vertex to_vertex(Vector r, sf::Color color)
+    { return sf::Vertex{ convert_to<sf::Vector2f>(r), color }; }
+
 Key to_impl_key(sf::Keyboard::Key k) {
     switch (k) {
     case k_up_key   : return Key::up;
@@ -69,19 +72,34 @@ uint8_t read_color_byte(const char * cstr);
 
 sf::Color to_sf_color(const char * cstring) {
     assert(cstring);
-    if (*cstring != '#') {
-        throw std::invalid_argument("Cannot convert to color");
-    }
-    ++cstring;
-    switch (::strlen(cstring)) {
-    case 3:
+
+    static auto verify_hash = [](const char * cstring) {
+        if (*cstring != '#') {
+            throw std::invalid_argument("Cannot convert to color");
+        }
+        return cstring + 1;
+    };
+
+    static auto case_3 = [](const char * cstring) {
         return sf::Color(read_color_nibble(cstring + 0),
                          read_color_nibble(cstring + 1),
                          read_color_nibble(cstring + 2));
-    case 6:
+    };
+
+    static auto case_6 = [](const char * cstring) {
         return sf::Color(read_color_byte(cstring + 0),
-                         read_color_byte(cstring + 1),
-                         read_color_byte(cstring + 2));
+                         read_color_byte(cstring + 2),
+                         read_color_byte(cstring + 4));
+    };
+
+    static auto with_alpha = [](sf::Color color, uint8_t alpha)
+        { return sf::Color(color.r, color.g, color.b, alpha); };
+
+    switch (::strlen(cstring = verify_hash(cstring))) {
+    case 3: return case_3(cstring);
+    case 4: return with_alpha(case_3(cstring), read_color_nibble(cstring + 3));
+    case 6: return case_6(cstring);
+    case 8: return with_alpha(case_6(cstring), read_color_byte(cstring + 6));
     default:
         throw std::invalid_argument("");
     }
@@ -110,6 +128,27 @@ public:
         m_target.draw(drect);
     }
 
+    void draw_cone_
+        (const Vector & source, const Vector & facing, Real distance, Real spread_angle) final
+    {
+        int segments = int(std::floor(spread_angle*distance / 40)) + 1;
+
+        Real angl_delta = spread_angle / segments;
+        Real t = -spread_angle;
+        for (int i = 0; i != segments*2; ++i) {
+            auto color = sf::Color(180, 0, 0, 200);
+            auto next_t = std::min(t + angl_delta, spread_angle);
+            std::array<sf::Vertex, 3> triangle = {
+                to_vertex(source, color),
+                to_vertex(source + find_cone_point(facing, distance,      t), color),
+                to_vertex(source + find_cone_point(facing, distance, next_t), color)
+            };
+            t = next_t;
+            m_target.draw(triangle.data(), triangle.size(), sf::PrimitiveType::Triangles);
+
+        }
+    }
+
     Size2 draw_area() const final
         { return convert_to<Size2>(m_target.getView().getSize()); }
 
@@ -122,10 +161,10 @@ private:
 int main() {
     DemoDriver driver;
     driver.prepare_scenes();
-    driver.set_draw_area(k_field_width, k_field_height);
+
     {
     SceneOptions options;
-    driver.load_scene(options, /* first-scene */ 3);
+    driver.load_scene(options, /* first-scene */ 2);
     }
 
     sf::RenderWindow window(sf::VideoMode(k_window_width, k_window_height), " ");
@@ -157,13 +196,18 @@ int main() {
         }
         window.clear();
         driver.on_update();
-        DrawInterfaceImpl draw_intf{window};
         {
+            DrawInterfaceImpl draw_intf{window};
             auto view = window.getView();
             view.setCenter(convert_to<sf::Vector2f>(driver.camera_center()));
             window.setView(view);
+
+            driver.on_draw_field(draw_intf);
+            view.setCenter(view.getSize().x / 2, view.getSize().y / 2);
+            window.setView(view);
+            driver.on_draw_hud(draw_intf);
         }
-        driver.on_draw(draw_intf);
+
         window.display();
         sf::sleep(sf::microseconds(std::int64_t(std::round(1'000'000.0 * k_frame_time))));
     }

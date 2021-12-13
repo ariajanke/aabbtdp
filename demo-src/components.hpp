@@ -105,8 +105,14 @@ struct Layer final {
     operator int () const { return value; }
 };
 
+struct Sight final {
+    Vector facing = Vector(0, 1);
+    Real spread_angle = k_pi * (1. / 12.);
+    Real distance = 200;
+};
+
 using Entity = ecs::Entity<
-    Rectangle, Color, DisplayString, Layer, Name, Lifetime,
+    Rectangle, Color, DisplayString, Layer, Name, Lifetime, Sight,
     Pushable, Bouncy, Growth, MapLimits, Velocity, HudDrawn>;
 
 // --- helpers? --

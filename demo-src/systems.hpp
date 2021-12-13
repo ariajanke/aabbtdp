@@ -48,6 +48,9 @@ public:
         m_handler->run(EventHandlerImpl::instance());
     }
 
+    static bool is_pentry(const Entity & e)
+        { return bool(to_pentry(e).entity); }
+
 private:
     class EventHandlerImpl final : public tdp::EventHandler {
     public:
@@ -87,4 +90,18 @@ public:
 
 private:
     static void update(Entity &);
+};
+
+class SightFacingUpdateSystem final : public System {
+public:
+    void update(const ContainerView & view) {
+        for (auto & e : view) update(e);
+    }
+
+private:
+    static void update(Entity & e) {
+        if (!e.has_all<Sight, Velocity>()) return;
+        if (cul::magnitude(e.get<Velocity>().as_vector()) < 1) return;
+        e.get<Sight>().facing = e.get<Velocity>().as_vector();
+    }
 };

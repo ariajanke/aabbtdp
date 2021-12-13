@@ -32,6 +32,8 @@
 
 #include <rigtorp/HashMap.h>
 
+#include <unordered_map>
+
 namespace tdp {
 
 template <typename IterType>

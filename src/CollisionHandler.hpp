@@ -99,6 +99,8 @@ public:
 
     void update_entry(const Entry & entry) final;
 
+    void remove_entry(const Entity &) final;
+
     void set_collision_matrix_(CollisionMatrix &&) final;
 
     // ---------------- methods used for illustrative purposes ----------------

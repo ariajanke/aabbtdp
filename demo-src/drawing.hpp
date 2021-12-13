@@ -28,10 +28,13 @@
 
 #include "systems.hpp"
 
+#include <aabbtdp/sight.hpp>
+
 // includes some private library headers...
 
 #include "../src/CollisionHandler.hpp"
 #include "../src/physics-interval-sweep.hpp"
+#include "../src/physics-grid.hpp"
 
 class DrawInterface {
 public:
@@ -43,25 +46,41 @@ public:
 
     virtual void draw_string_top_left(const std::string &, Vector top_left) = 0;
 
+    void draw_cone(const Vector & source, const Vector & facing, Real distance, Real spread_angle) {
+        // move some checks here...
+        assert(spread_angle >= 0 && spread_angle <= k_pi*2);
+        assert(facing != Vector{});
+        if (spread_angle < k_pi*0.005 || distance < 1) return;
+        draw_cone_(source, facing, distance, spread_angle);
+    }
+
     virtual Size2 draw_area() const = 0;
-};
-
-class DrawAware {
-public:
-
-    void assign_interface(DrawInterface & intf) { m_intf = &intf; }
-
-    // usually set once
-    void set_visible_size(Size2 sz) { m_visible_area = sz; }
 
 protected:
+    virtual void draw_cone_(const Vector & source, const Vector & facing, Real distance, Real spread_angle) = 0;
 
+    static Vector find_cone_point(const Vector & facing, Real distance, Real angular_pos)
+        { return rotate_vector(normalize(facing)*distance, angular_pos); }
+};
+
+
+class GenericDrawSystem : public System {
+public:
+    virtual void assign_interface(DrawInterface &) = 0;
+
+    virtual void set_player(Entity)
+        { /* by default has no business with player */ }
+};
+
+class DrawSystemWithInterface : public GenericDrawSystem {
+public:
+    void assign_interface(DrawInterface & intf) final { m_intf = &intf; }
+
+protected:
     DrawInterface & draw_interface() const {
         assert(m_intf);
         return *m_intf;
     }
-
-    Size2 visible_area() const { return m_visible_area; }
 
     void do_individual(const Entity & e) const {
         if (!e.has<Rectangle>()) return;
@@ -77,12 +96,8 @@ protected:
 
 private:
     DrawInterface * m_intf = nullptr;
-
-    Size2 m_visible_area;
-    Vector m_camera_center;
 };
 
-class GenericDrawSystem : public DrawAware, public System {};
 
 void draw_backround(DrawInterface & draw_interface, Vector camera_center, Size2 visible_area);
 
@@ -94,7 +109,7 @@ void draw_backround(DrawInterface & draw_interface, Vector camera_center, Size2 
 //
 // rendering is still special, OpenGL demands all operations from the main
 // thread
-class DrawEntitiesSystem final : public System, public DrawAware {
+class DrawEntitiesSystem final : public DrawSystemWithInterface {
 public:
     void update(const ContainerView & view) final {
         for (auto & e : view) {
@@ -103,7 +118,58 @@ public:
     }
 };
 
-class DrawHudEntitiesSystem final : public System, public DrawAware {
+class DrawSightSystem final : public DrawSystemWithInterface {
+public:
+    void set_player(Entity player) final { m_player = player; }
+
+    void update(const ContainerView & view) final {
+        auto center = center_of(m_player.get<Rectangle>());
+        const auto & sight = m_player.get<Sight>();
+        draw_interface().draw_cone(center, sight.facing, sight.distance, sight.spread_angle);
+
+        for (auto & e : view) {
+            if (e == m_player || !CollisionSystem::is_pentry(e)) continue;
+            if (!within_sights_of(e, m_player)) continue;
+            m_player_sight->add_entry(to_sight_entry(e));
+        }
+        for (const auto & percept : m_player_sight->run(center)) {
+            auto rect = Entity{percept.entity}.get<Rectangle>();
+            int alpha_val = int(std::floor(percept.visibility * 16));
+            alpha_val = std::min(alpha_val, 15);
+            assert(alpha_val >= 0 && alpha_val < 16);
+            std::array color_string = { '#', 'F', '7', 'F', 'F', '\0' };
+            color_string[4] = (alpha_val > 9) ? ((alpha_val - 10) + 'A') : (alpha_val + '0');
+            draw_interface().draw_rectangle(rect, color_string.data());
+        }
+
+        do_individual(m_player);
+    }
+
+private:
+    using Entry = tdp::Sighting::Entry;
+    static bool within_sights_of(const Entity & e, const Entity & player) {
+        auto r = center_of(e.get<Rectangle>()) - center_of(player.get<Rectangle>());
+        const auto & sight = player.get<Sight>();
+        static constexpr const Real k_too_close = 0.0005;
+        if (   r.x*r.x + r.y*r.y > sight.distance*sight.distance
+            || r.x*r.x + r.y*r.y < k_too_close*k_too_close) return false;
+
+        return cul::angle_between(r, sight.facing) <= sight.spread_angle;
+    }
+
+    static Entry to_sight_entry(const Entity & e) {
+        Entry rv;
+        rv.bounds  = e.get<Rectangle>();
+        rv.opacity = 1;
+        rv.entity  = e;
+        return rv;
+    }
+
+    Entity m_player;
+    std::unique_ptr<tdp::Sighting> m_player_sight = tdp::Sighting::make_instance();
+};
+
+class DrawHudEntitiesSystem final : public DrawSystemWithInterface {
 public:
     void update(const ContainerView & view) {
         for (auto & e : view) {
@@ -112,7 +178,7 @@ public:
     }
 };
 
-class NameDrawSystem final : public GenericDrawSystem {
+class NameDrawSystem final : public DrawSystemWithInterface {
 public:
     using CollisionHandler = tdp::CollisionHandler;
 
@@ -145,6 +211,21 @@ public:
 private:
     CollisionHandler * m_handler = nullptr;
 };
+
+inline auto make_grid_tally_drawer(tdp::GridPhysicsHandlerImpl & handler) {
+    using VecI = tdp::VectorI;
+    auto handler_ptr = &handler;
+    return [handler_ptr] (DrawInterface & intf) {
+        auto cell_size = handler_ptr->cell_size();
+        auto offset    = handler_ptr->offset();
+        handler_ptr->count_each_cell([&](VecI r, int i) {
+            if (i == 0) return;
+            auto pt = offset + convert_to<Vector>(cell_size)*0.5
+                    + Vector{cell_size.width*r.x, cell_size.height*r.y};
+            intf.draw_string_center(std::to_string(i), pt);
+        });
+    };
+}
 
 inline auto make_sweep_drawer(tdp::IntervalSweepHandler & handler, int hud_line) {
     auto handler_ptr = &handler;

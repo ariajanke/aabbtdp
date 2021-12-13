@@ -122,6 +122,9 @@ void CollisionHandler::update_entry(const Entry & entry) {
     static_cast<tdp::Entry &>(m_entries[entry.entity]) = entry;
 }
 
+void CollisionHandler::remove_entry(const Entity & entity)
+    { (void)m_entries.erase(entity); }
+
 void CollisionHandler::set_collision_matrix_(CollisionMatrix && matrix) {
     using VecI = CollisionMatrix::Vector;
     using namespace interaction_classes;

@@ -125,9 +125,6 @@ void GridPhysicsHandlerImpl::delete_empty_cells() {
 /* private */ void GridPhysicsHandlerImpl::prepare_iteration
     (CollisionWorker & do_collision_work, EventHandler & event_handler)
 {
-    if (m_cell_size == Size{}) {
-        throw RtError("GridPhysicsHandlerImpl::run: cell size must be set.");
-    }
     // there seems to be pretty significant overhead here
     // I have to old/new/delete them, otherwise impossible pairs will creep
     // to the narrow phase
@@ -140,19 +137,8 @@ void GridPhysicsHandlerImpl::delete_empty_cells() {
     GridIteration grid_iteration{entries_view(), m_pgrid, m_offset, m_cell_size};
     do_collision_work(event_handler, grid_iteration);
 
-    // with grid there's a non-zero chance for dupelicates
-    // that is two seperate cells may share the same interaction pair
-
-    if (m_occu_grid) {
-        for (auto & pair : m_pgrid) {
-            (*m_occu_grid)[pair.first] = int(pair.second.size());
-        }
-    }
-
     // post finalization
-    for (auto & pair : m_pgrid) {
-        pair.second.clear();
-    }
+    clear_all_cells();
 }
 
 /* private */ void GridPhysicsHandlerImpl::find_overlaps_
@@ -165,6 +151,9 @@ void GridPhysicsHandlerImpl::delete_empty_cells() {
 }
 
 /* private */ void GridPhysicsHandlerImpl::repopulate() {
+    if (m_cell_size == Size{}) {
+        throw RtError("GridPhysicsHandlerImpl::repopulate: cell size must be set.");
+    }
     for (auto & pair : entries_view()) {
         update_broad_boundries(pair.second);
         auto range = find_rectangle_range(pair.second, m_cell_size, m_offset);
@@ -172,6 +161,12 @@ void GridPhysicsHandlerImpl::delete_empty_cells() {
         for (int x = range.left; x != right_of (range); ++x) {
             m_pgrid[VectorI{x, y}].push_back(&pair.second);
         }}
+    }
+}
+
+/* private */ void GridPhysicsHandlerImpl::clear_all_cells() {
+    for (auto & pair : m_pgrid) {
+        pair.second.clear();
     }
 }
 

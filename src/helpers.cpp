@@ -135,26 +135,24 @@ std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
 // -------------------------------- FullEntry ---------------------------------
 
 void update_broad_boundries(FullEntry & entry) {
-    static constexpr const Real k_adjust_amount = 0.;
-
     static const auto low_x = [](const FullEntry & fe) {
         auto dx = fe.displacement.x + fe.nudge.x;
-        return fe.bounds.left + ((dx < 0) ? dx : 0) - k_adjust_amount;
+        return fe.bounds.left + ((dx < 0) ? dx : 0);
     };
 
     static const auto high_x = [](const FullEntry & fe) {
         auto dx = fe.displacement.x + fe.nudge.x;
-        return right_of(fe.bounds) + ((dx > 0) ? dx : 0) + k_adjust_amount;
+        return right_of(fe.bounds) + ((dx > 0) ? dx : 0);
     };
 
     static const auto low_y = [](const FullEntry & fe) {
         auto dy = fe.displacement.y + fe.nudge.y;
-        return fe.bounds.top + ((dy < 0) ? dy : 0) - k_adjust_amount;
+        return fe.bounds.top + ((dy < 0) ? dy : 0);
     };
 
     static const auto high_y = [](const FullEntry & fe) {
         auto dy = fe.displacement.y + fe.nudge.y;
-        return bottom_of(fe.bounds) + ((dy > 0) ? dy : 0) + k_adjust_amount;
+        return bottom_of(fe.bounds) + ((dy > 0) ? dy : 0);
     };
     entry.low_x  = low_x (entry);
     entry.low_y  = low_y (entry);

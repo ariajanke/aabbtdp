@@ -95,6 +95,7 @@ enum class Key {
 
 constexpr const Real k_player_speed = 200;
 constexpr const Real k_frame_time   = 1. / 60.;
+constexpr const Real k_grid_size    = 100;
 
 // scene loading?
 // options...?
@@ -120,11 +121,27 @@ struct SceneOptions final {
     // k_sight              -> see only entities according to visibility
     // k_sight_with_outline -> see entities with visibility, but with an
     //                         outline on all
-    SightOption sight = k_no_special_sight;
+    SightOption sight = k_sight;
 };
 
-Tuple<std::unique_ptr<GenericDrawSystem>, std::unique_ptr<Physics2DHandler>>
-    make_from_scene_options(const SceneOptions &);
+struct SceneOptionItems final {
+    SceneOptionItems() {}
+
+    SceneOptionItems(
+        std::unique_ptr<GenericDrawSystem> && hud_system_,
+        std::unique_ptr<GenericDrawSystem> && field_system_,
+        std::unique_ptr<Physics2DHandler>  && physics_handler_):
+        hud_system(std::move(hud_system_)),
+        field_system(std::move(field_system_)),
+        physics_handler(std::move(physics_handler_))
+    {}
+
+    std::unique_ptr<GenericDrawSystem> hud_system;
+    std::unique_ptr<GenericDrawSystem> field_system;
+    std::unique_ptr<Physics2DHandler>  physics_handler;
+};
+
+SceneOptionItems make_from_scene_options(const SceneOptions &);
 
 class EntityMakerBase {
 public:
@@ -154,6 +171,8 @@ public:
 
 class Scene {
 public:
+    virtual ~Scene() {}
+
     void load_scene(EntityManager & ent_mana, Entity & player)
         { load_scene_(Loader(ent_mana, m_entities, player)); }
 
@@ -177,6 +196,10 @@ private:
 
 class SceneDriver final {
 public:
+    SceneDriver() {
+        m_current_scene = m_scenes.end();
+    }
+
     void prepare_scenes();
 
     void load_scene(int scene_choice, EntityManager &, Entity & player);
@@ -194,7 +217,7 @@ private:
     }
 
     using SceneContainer = std::vector<std::unique_ptr<Scene>>;
-    SceneContainer::iterator m_current_scene = m_scenes.end();
+    SceneContainer::iterator m_current_scene;
     SceneContainer m_scenes;
 };
 
@@ -204,20 +227,17 @@ public:
 
     void prepare_scenes();
 
-    void set_draw_area(Real width, Real height);
-
     void on_press(Key k);
 
     void on_release(Key k);
 
     void on_update();
 
-    void on_draw(DrawInterface &); // const not possible?
+    void on_draw_field(DrawInterface &); // const not possible?
+
+    void on_draw_hud(DrawInterface &);
 
     void load_scene(const SceneOptions &, int scene_choice);
-#   if 0
-    void assign_draw_interface(DrawInterface & draw_intf);
-#   endif
 
     Vector camera_center() const {
         if (m_player) return center_of(m_player.get<Rectangle>());
@@ -225,8 +245,7 @@ public:
     }
 
 private:
-    using AlwaysPresentSystems = Tuple<CollisionSystem, LifetimeSystem>;
-    using DrawSystems = Tuple<DrawHudEntitiesSystem, DrawEntitiesSystem>;
+    using AlwaysPresentSystems = Tuple<CollisionSystem, LifetimeSystem, SightFacingUpdateSystem>;
 
     static int to_key_idx(Key k);
 
@@ -237,21 +256,19 @@ private:
     static constexpr const auto k_direction_count = 4;
     
     std::array<bool, k_direction_count> m_controls;
-#   if 0
-    DrawInterface * m_draw_intf = nullptr;
-#   endif
+    bool m_paused = false;
+
     // you see, now I'm putting myself in trouble design wise...
     AlwaysPresentSystems m_always_present_systems;
-#   if 0
-    DrawSystems m_draw_systems;
-#   endif
+
     EntityManager m_ent_manager;
-    bool m_paused = false;
     Entity m_player;
 
     SceneDriver m_scene_driver;
     std::unique_ptr<Physics2DHandler> m_physics_handler;
-    std::unique_ptr<GenericDrawSystem> m_extra_drawing;
+
+    std::unique_ptr<GenericDrawSystem> m_draw_field_systems;
+    std::unique_ptr<GenericDrawSystem> m_draw_hud_systems;
 };
 
 

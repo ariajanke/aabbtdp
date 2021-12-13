@@ -63,8 +63,7 @@ struct VectorIHasher {
 };
 
 using GridPhysicsMapElement = std::vector<FullEntry *>;
-using GridPhysicsMap = std::unordered_map<VectorI, GridPhysicsMapElement, VectorIHasher>;
-using OccupancyGrid = std::unordered_map<VectorI, int, VectorIHasher>;
+using GridPhysicsMap        = std::unordered_map<VectorI, GridPhysicsMapElement, VectorIHasher>;
 
 // key into by entry pair, including one nullptr for wall hits
 // extra data is: is_push, { is_trespass | is_solid }
@@ -101,10 +100,12 @@ public:
 
     Size cell_size() const { return m_cell_size; }
 
-    // there's a less intrusive way to do this without ploping a pointer check
-    // in the main part of the algorithm
-    void assign_occupancy_grid(OccupancyGrid & og) {
-        m_occu_grid = &og;
+    template <typename Func>
+    void count_each_cell(Func && f) {
+        repopulate();
+        for (auto & pair : m_pgrid)
+            { f(pair.first, int(pair.second.size())); }
+        clear_all_cells();
     }
 
 private:
@@ -114,11 +115,11 @@ private:
 
     void repopulate();
 
+    void clear_all_cells();
+
     Size m_cell_size;
     Vector m_offset;
     GridPhysicsMap m_pgrid;
-
-    OccupancyGrid * m_occu_grid = nullptr;
 };
 
 } // end of tdp namespace

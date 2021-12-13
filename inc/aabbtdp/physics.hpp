@@ -232,6 +232,14 @@ public:
     /// @throws if the entry does not have a set entity or collision layer
     virtual void update_entry(const Entry &) = 0;
 
+    /// Removes an entry by its entity value.
+    ///
+    /// If the entity is either null, or is not present than nothing is done.
+    ///
+    /// This function was added to allow entity types, where it's not possible
+    /// to tell off hand if they've expired or not.
+    virtual void remove_entry(const Entity &) = 0;
+
     /// Runs all physics updates, accepting an event handler as a set of
     /// callbacks.
     ///

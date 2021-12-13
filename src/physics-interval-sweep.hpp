@@ -187,10 +187,6 @@ template <typename Func>
 {
     sort(begin_(), end_(), order_entries);
     for (auto itr = begin_(); itr != end_(); ++itr) {
-        // seek **itr y-wise... O(log n)
-        // we now have two sequences
-        // the intersection is our interest
-
         auto itr_end = get_i_wise_end(itr);
 
         // we don't want itr to be changed...
