@@ -1,0 +1,260 @@
+#include <emscripten.h>
+
+#include "../demo-src/DemoDriver.hpp"
+
+// in firefox this:
+// privacy.file_unique_origin
+// will need to be changed to false in order to run local files, otherwise I'll
+// get a CORS error
+
+namespace {
+
+using std::round;
+
+class CanvasDrawer final : public DrawInterface {
+public:
+    static CanvasDrawer & instance() {
+        static CanvasDrawer inst;
+        return inst;
+    }
+    
+    void draw_string_center(const std::string &, Vector center) final;
+
+    void draw_rectangle(const Rectangle &, const char * color) final;
+
+    void draw_string_top_left(const std::string &, Vector top_left) final;
+
+    Size2 draw_area() const final;
+    
+    void set_draw_area(Real width, Real height);
+    
+    void set_camera_position(Vector);
+    
+private:
+    void draw_cone_
+        (const Vector & source, const Vector & facing, Real distance, Real spread_angle) final;
+
+    CanvasDrawer() {}
+    Size2 m_canvas_size;
+    Vector m_camera_position;
+};
+
+DemoDriver & program_state() {
+    static DemoDriver inst;
+    return inst;
+}
+
+template <typename Func>
+void do_try(Func && f) noexcept;
+
+} // end of <anonymous> namespace
+
+
+// -------------------------- Calls to JavaScript ------------------------------
+
+EM_JS(void, em_js_fill_rect, (int x, int y, int w, int h), {
+    global_2d_context.fillRect(x, y, w, h);
+});
+
+EM_JS(void, em_js_set_fillStyle, (const char * fill_style), {
+    global_2d_context.fillStyle = Module.UTF8ToString(fill_style);
+});
+#if 0
+EM_JS(void, em_js_clear_rect, (), {
+    global_2d_context.clearRect(0, 0, global_2d_canvas.width, global_2d_canvas.height);
+});
+#endif
+
+EM_JS(void, em_js_set_textBaseline, (const char * style), {
+    global_2d_context.textBaseline = Module.UTF8ToString(style);
+});
+
+EM_JS(int, em_js_get_text_width, (const char * string), {
+    return Math.round(global_2d_context.measureText(Module.UTF8ToString(string)).width);
+});
+
+EM_JS(void, em_js_fillText, (const char * text, int x, int y), {
+    global_2d_context.fillText(Module.UTF8ToString(text), x, y);
+});
+
+EM_JS(void, em_js_log_to_console, (const char * text), {
+    console.log(Module.UTF8ToString(text));
+});
+#if 0
+EM_JS(void, em_js_set_line_width, (int x), {
+    global_2d_context.lineWidth = x;
+});
+#endif
+EM_JS(void, em_js_beginPath, (), {
+    global_2d_context.beginPath();
+});
+
+EM_JS(void, em_js_moveTo, (int x, int y), {
+    global_2d_context.moveTo(x, y);
+});
+
+EM_JS(void, em_js_lineTo, (int x, int y), {
+    global_2d_context.lineTo(x, y);
+});
+#if 0
+EM_JS(void, em_js_close_path, (), {
+    global_2d_context.closePath();
+});
+
+EM_JS(void, em_js_stroke, (), {
+    global_2d_context.stroke();
+});
+
+EM_JS(void, em_js_arc, (int x, int y, int radius, double start_angle, double end_angle, bool ccw), {
+    global_2d_context.arc(x, y, radius, start_angle, end_angle, ccw);
+});
+#endif
+
+EM_JS(void, em_js_arcTo, (int a_x, int a_y, int b_x, int b_y, int radius), {
+    global_2d_context.arcTo(a_x, a_y, b_x, b_y, radius);
+});
+
+EM_JS(void, em_js_fill, (), {
+    global_2d_context.fill();
+});
+
+EM_JS(void, em_js_throw, (const char * name, const char * what_str), {
+    throw { name: Module.UTF8ToString(name), message: Module.UTF8ToString(what_str) };
+});
+
+
+// --------------------------- Calls from JavaScript ---------------------------
+
+enum KeyIds { k_up, k_down, k_right, k_left };
+
+Key to_impl_key(int key_id) {
+    switch (key_id) {
+    case k_up   : return Key::up   ;
+    case k_down : return Key::down ;
+    case k_right: return Key::right;
+    case k_left : return Key::left ;
+    default     : return Key::none ;
+    }
+}
+
+extern "C" {
+
+EMSCRIPTEN_KEEPALIVE void js_glue_start() {
+    program_state().prepare_scenes();
+    
+    SceneOptions options;
+    program_state().load_scene(options, /* third-scene */ 2);
+}
+
+EMSCRIPTEN_KEEPALIVE void js_glue_on_canvas_resize(int width, int height) {
+    do_try([&] { CanvasDrawer::instance().set_draw_area(Real(width), Real(height)); });
+}
+
+EMSCRIPTEN_KEEPALIVE void js_glue_on_update(double) {
+    do_try([&] {
+        program_state().on_update();
+    });
+}
+
+EMSCRIPTEN_KEEPALIVE void js_glue_render_field() {
+    do_try([&] {
+        CanvasDrawer::instance().set_camera_position(
+            program_state().camera_center() 
+            - cul::convert_to<Vector>(CanvasDrawer::instance().draw_area()*0.5));
+        program_state().on_draw_field(CanvasDrawer::instance());
+    });
+}
+
+EMSCRIPTEN_KEEPALIVE void js_glue_render_hud() {
+    do_try([&] {
+        CanvasDrawer::instance().set_camera_position(Vector{});
+        program_state().on_draw_hud(CanvasDrawer::instance());
+    });
+}
+
+#if 0
+EMSCRIPTEN_KEEPALIVE int js_glue_get_camera_x() {
+    return int(round( program_state().camera_center().x ));
+}
+
+
+EMSCRIPTEN_KEEPALIVE int js_glue_get_camera_y() {
+    return int(round( program_state().camera_center().y ));
+}
+#endif
+
+EMSCRIPTEN_KEEPALIVE void js_glue_keydown(int key_id) {
+    do_try([&]{ program_state().on_press(to_impl_key(key_id)); });
+}
+
+EMSCRIPTEN_KEEPALIVE void js_glue_keyup(int key_id) {
+    do_try([&]{ program_state().on_release(to_impl_key(key_id)); });
+}
+
+} // end of extern "C"
+
+namespace {
+
+void CanvasDrawer::draw_string_center(const std::string & str, Vector center) {
+    em_js_set_fillStyle("#FFF");
+    em_js_set_textBaseline("middle");
+    int width = em_js_get_text_width(str.c_str());
+    em_js_fillText(str.c_str(), int(round(center.x)) - width / 2, int(round(center.y)));
+}
+
+void CanvasDrawer::draw_rectangle(const Rectangle & rect, const char * color) {
+    em_js_set_fillStyle(color);
+    em_js_fill_rect(
+        int(round( m_camera_position.x + rect.left )),
+        int(round( m_camera_position.y + rect.top  )),
+        int(round( rect.width  )),
+        int(round( rect.height )));
+}
+
+void CanvasDrawer::draw_string_top_left(const std::string & str, Vector top_left) {
+    em_js_set_fillStyle("#FFF");
+    em_js_set_textBaseline("top");
+    em_js_fillText(str.c_str(), int(round(top_left.x)), int(round(top_left.y)));
+}
+
+Size2 CanvasDrawer::draw_area() const { return m_canvas_size; }
+
+void CanvasDrawer::set_draw_area(Real width, Real height) {
+    m_canvas_size = Size2{width, height};
+}
+
+void CanvasDrawer::set_camera_position(Vector r) {
+    m_camera_position = r;
+}
+
+void CanvasDrawer::draw_cone_
+    (const Vector & source, const Vector & facing, Real distance, Real spread_angle)
+{
+    auto low_pt  = find_cone_point(facing, distance, -spread_angle);
+    auto high_pt = find_cone_point(facing, distance,  spread_angle);
+    em_js_set_fillStyle("#7008");
+    
+    em_js_beginPath();
+    em_js_moveTo(int(round(source.x )), int(round(source.y )));
+    em_js_lineTo(int(round(low_pt.x )), int(round(low_pt.y )));
+    em_js_arcTo (int(round(low_pt.x )), int(round(low_pt.y )),
+                 int(round(high_pt.x)), int(round(high_pt.y)),
+                 int(round(distance)) );
+    em_js_lineTo(int(round(source.x)), int(round(source.y)));
+    em_js_fill();
+}
+
+template <typename Func>
+void do_try(Func && f) noexcept {
+    try {
+        f();
+    } catch (std::invalid_argument & invarg) {
+        em_js_throw("invalid_argument", invarg.what());
+    } catch (std::runtime_error & rterr) {
+        em_js_throw("runtime_error", rterr.what());
+    } catch (...) {
+        em_js_throw("unknown", "");
+    }
+}
+
+} // end of <anonymous> namespace

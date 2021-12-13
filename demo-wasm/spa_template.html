@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>My SPA</title>
+    <style>
+    div.emscripten_border { border: 1px solid black; }
+    /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+    canvas.emscripten { 
+        border: 0px none; 
+        background-color: black;
+    }
+    </style>
+    <script type='text/javascript' src='program_state.js'></script>
+</head><body>
+<a id="play-pause">pause</a><br/>
+<a id="change-scene">change scene</a><br/>
+<a id="follow">follow</a><br/>
+<a id="bounce">bounce</a><br/>
+<div class="emscripten_border">
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+</div>
+<script type='text/javascript'>
+var Module = {
+    preRun: [],
+    postRun: [],
+    print: (function() {
+        var element = document.getElementById('output');
+        if (element) element.value = ''; // clear browser cache
+        return function(text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+            // These replacements are necessary if you render to raw HTML
+            //text = text.replace(/&/g, "&amp;");
+            //text = text.replace(/</g, "&lt;");
+            //text = text.replace(/>/g, "&gt;");
+            //text = text.replace('\n', '<br>', 'g');
+            console.log(text);
+            if (element) {
+                element.value += text + "\n";
+                element.scrollTop = element.scrollHeight; // focus on bottom
+            }
+        };
+    })(),
+    printErr: function(text) {
+        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+        console.error(text);
+    },
+    canvas: (function() {
+        var canvas = document.getElementById('canvas');
+
+        // As a default initial behavior, pop up an alert when webgl context is lost. To make your
+        // application robust, you may want to override this behavior before shipping!
+        // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
+        canvas.addEventListener("webglcontextlost", function(e) {
+            alert('WebGL context lost. You will need to reload the page.');
+            e.preventDefault(); }, false);
+
+        return canvas;
+    })(),
+    setStatus: function(){},
+    totalDependencies: 0,
+    monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+    }
+};
+
+Module.setStatus('Downloading...');
+(() => {
+    let ppbutton = document.getElementById('play-pause');
+    let pause = undefined;
+    let play = () => {
+        program_state.play();
+        ppbutton.innerHTML = 'pause';
+        ppbutton.onclick   = pause;
+    };
+
+    pause = () => {
+        program_state.pause();
+        ppbutton.innerHTML = 'play';
+        ppbutton.onclick = play;
+    };
+
+    ppbutton.onclick = pause;
+})();
+
+//document.getElementById('change-scene').onclick = () => program_state.change_scene('');
+//document.getElementById('follow').onclick = () => program_state.change_behavior('follow');
+//document.getElementById('bounce').onclick = () => program_state.change_behavior('bounce');
+
+// key enums are: k_up, k_down, k_right, k_left
+
+window.onerror = function() {
+    Module.setStatus('Exception thrown, see JavaScript console');
+    Module.setStatus = function(text) {
+        if (text) Module.printErr('[post-exception status] ' + text);
+    };
+};
+
+var global_2d_canvas  = document.getElementById('canvas');
+var global_2d_context = global_2d_canvas.getContext("2d");
+
+document.addEventListener('keydown', program_state.on_keydown );
+document.addEventListener('keyup'  , program_state.on_keyup   );
+
+Module['onRuntimeInitialized'] = () =>
+    program_state.setup(Module);
+    
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>
