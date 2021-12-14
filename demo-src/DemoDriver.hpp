@@ -94,7 +94,6 @@ enum class Key {
 // imple
 
 constexpr const Real k_player_speed = 200;
-constexpr const Real k_frame_time   = 1. / 60.;
 constexpr const Real k_grid_size    = 100;
 
 // scene loading?
@@ -231,7 +230,7 @@ public:
 
     void on_release(Key k);
 
-    void on_update();
+    void on_update(Real elapsed_time);
 
     void on_draw_field(DrawInterface &); // const not possible?
 

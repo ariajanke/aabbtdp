@@ -28,14 +28,14 @@
 #include "DemoDriver.hpp"
 
 /* private static */ CollisionSystem::PEntry CollisionSystem::to_pentry
-    (const Entity & entity)
+    (const Entity & entity, Real elapsed_time)
 {
     //if (!entity.has_all<Rectangle, Layer>()) return PEntry{};
     if (!entity.has<Rectangle>()) return PEntry{};
     CollisionSystem::PEntry entry;
     entry.bounds = entity.get<Rectangle>();
     if (auto * vel = entity.ptr<Velocity>())
-        entry.displacement = vel->as_vector()*k_frame_time;
+        entry.displacement = vel->as_vector()*elapsed_time;
     if (auto * lims = entity.ptr<MapLimits>()) {
         entry.negative_barrier.x = lims->value.left;
         entry.negative_barrier.y = lims->value.top ;
@@ -88,10 +88,9 @@
     Entity{e}.get<Rectangle>() = new_bounds;
 }
 
-
-/* private static */ void LifetimeSystem::update(Entity & e) {
+/* private static */ void LifetimeSystem::update(Entity & e, Real elapsed_time) {
     if (!e.has<Lifetime>()) return;
-    if ((e.get<Lifetime>().value -= k_frame_time) < 0) {
+    if ((e.get<Lifetime>().value -= elapsed_time) < 0) {
         e.request_deletion();
     }
 }

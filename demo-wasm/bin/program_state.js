@@ -5,7 +5,7 @@ let program_state = (() => {
     let me = {};
     
     // something modest for js/wasm
-    const k_frame_rate = 30;
+    const k_frame_rate = 40;
         
     let m_do_render_field;
     let m_do_render_hud;
@@ -40,6 +40,7 @@ let program_state = (() => {
     
     me.setup = (module) => {
         let canvas = global_2d_canvas;
+        
         // initialize the program state on the C++ side
         module.ccall('js_glue_start', null, null, null);
         
@@ -53,6 +54,7 @@ let program_state = (() => {
         canvas.addEventListener('resize', (_ignored_event) => {
             console.log("w: " + canvas.width + " h: " + canvas.height);
             issue_canvas_resize(canvas.width, canvas.height);
+            global_2d_context.font = 'bold 20pt Arial';
         });
         issue_canvas_resize(canvas.width, canvas.height);
 
@@ -65,8 +67,9 @@ let program_state = (() => {
         m_do_update       = module.cwrap('js_glue_on_update'   , null, ['number']);
         m_do_render_field = module.cwrap('js_glue_render_field', null, null);
         m_do_render_hud   = module.cwrap('js_glue_render_hud'  , null, null);
+        global_2d_context.font = 'bold 20pt Arial';
         me.play();
-
+        
         console.log('module started');
     };
     
@@ -80,9 +83,9 @@ let program_state = (() => {
     const translate_key_code = (() => {
         const tbl = Object.freeze({
             'w': 0,
-            'a': 1,
-            's': 2,
-            'd': 3
+            'a': 3,
+            's': 1,
+            'd': 2
         });
         return key => tbl[key];
     })();

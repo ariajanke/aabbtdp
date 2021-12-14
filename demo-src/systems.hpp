@@ -32,7 +32,20 @@
 
 using System = Entity::SystemType;
 
-class CollisionSystem final : public System {
+class TimeAware {
+public:
+    void set_elapsed_time(Real et) { m_elapsed_time = et; }
+
+protected:
+    TimeAware() {}
+
+    Real elapsed_time() const { return m_elapsed_time; }
+
+private:
+    Real m_elapsed_time = 0;
+};
+
+class CollisionSystem final : public System, public TimeAware {
 public:
     using PEntry = tdp::Entry;
 
@@ -41,7 +54,7 @@ public:
 
     void update(const ContainerView & view) {
         for (auto & e : view) {
-            auto entry = to_pentry(e);
+            auto entry = to_pentry(e, elapsed_time());
             if (!entry.entity) continue;
             m_handler->update_entry(entry);
         }
@@ -49,7 +62,7 @@ public:
     }
 
     static bool is_pentry(const Entity & e)
-        { return bool(to_pentry(e).entity); }
+        { return bool(to_pentry(e, 0).entity); }
 
 private:
     class EventHandlerImpl final : public tdp::EventHandler {
@@ -71,7 +84,7 @@ private:
             { CollisionSystem::finalize_entry(a, new_bounds); }
     };
 
-    static PEntry to_pentry(const Entity &);
+    static PEntry to_pentry(const Entity &, Real elapsed_time);
 
     static void on_collision(EntityRef a, EntityRef b, bool push_occuring);
 
@@ -82,14 +95,14 @@ private:
     Physics2DHandler * m_handler = nullptr;
 };
 
-class LifetimeSystem final : public System {
+class LifetimeSystem final : public System, public TimeAware {
 public:
     void update(const ContainerView & view) {
-        for (auto & e : view) update(e);
+        for (auto & e : view) update(e, elapsed_time());
     }
 
 private:
-    static void update(Entity &);
+    static void update(Entity &, Real elapsed_time);
 };
 
 class SightFacingUpdateSystem final : public System {

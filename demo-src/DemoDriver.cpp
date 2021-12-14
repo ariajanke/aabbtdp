@@ -172,6 +172,18 @@ void SceneDriver::prepare_scenes() {
         // player is made automatically...
     });
 
+    // few spread about
+    push_new_scene([](Loader & maker) {
+        static constexpr const int k_pushers = 25;
+        for (int i = 0; i != k_pushers; ++i) {
+            auto e = maker.make_entity();
+            e.add<Rectangle>() = Rectangle{Real(i % 5)*64 + 100,
+                                           Real(i / 5)*64 + 100, 32, 32};
+            e.add<Color, Layer, Pushable>() = make_tuple("#717", layers::k_block, Pushable{});
+            e.add<Name>() = "P" + std::to_string(i);
+        }
+    });
+
     // many close together
     push_new_scene([](Loader & maker) {
         static constexpr const int k_pushers = 100;
@@ -425,8 +437,11 @@ void DemoDriver::on_release(Key k) {
     }
 }
 
-void DemoDriver::on_update() {
+void DemoDriver::on_update(Real elapsed_time) {
     if (!m_paused) {
+        cul::for_all_of_base<TimeAware>(m_always_present_systems,
+            [elapsed_time](TimeAware & time_aware)
+            { time_aware.set_elapsed_time(elapsed_time); });
         cul::for_all_of_base<System>(m_always_present_systems, [this](System & sys) {
             m_ent_manager.run_system(sys);
         });

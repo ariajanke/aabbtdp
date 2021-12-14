@@ -46,6 +46,7 @@ using cul::convert_to, cul::BitmapFont, cul::SfBitmapFont, cul::DrawRectangle, c
 
 constexpr const int k_window_height = 700;
 constexpr const int k_window_width  = (k_window_height * 11) / 6;
+constexpr const Real k_frame_time   = 1. / 60.;
 
 constexpr const auto k_up_key = sf::Keyboard::W;
 constexpr const auto k_left_key = sf::Keyboard::A;
@@ -195,7 +196,7 @@ int main() {
         }
         }
         window.clear();
-        driver.on_update();
+        driver.on_update(k_frame_time);
         {
             DrawInterfaceImpl draw_intf{window};
             auto view = window.getView();

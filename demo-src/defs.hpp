@@ -41,6 +41,7 @@ using Rectangle = tdp::Rectangle;
 using Size2     = tdp::Size;
 using tdp::Physics2DHandler;
 using ecs::EntityRef;
+using VectorI   = cul::Vector2<int>;
 
 using cul::center_of, cul::bottom_of, cul::right_of, cul::convert_to;
 

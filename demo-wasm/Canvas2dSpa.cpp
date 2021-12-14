@@ -11,6 +11,9 @@ namespace {
 
 using std::round;
 
+VectorI round(Vector r)
+    { return VectorI{int(round(r.x)), int(round(r.y))}; } 
+
 class CanvasDrawer final : public DrawInterface {
 public:
     static CanvasDrawer & instance() {
@@ -33,6 +36,8 @@ public:
 private:
     void draw_cone_
         (const Vector & source, const Vector & facing, Real distance, Real spread_angle) final;
+
+    void draw_string(const std::string &, VectorI) const;
 
     CanvasDrawer() {}
     Size2 m_canvas_size;
@@ -59,11 +64,10 @@ EM_JS(void, em_js_fill_rect, (int x, int y, int w, int h), {
 EM_JS(void, em_js_set_fillStyle, (const char * fill_style), {
     global_2d_context.fillStyle = Module.UTF8ToString(fill_style);
 });
-#if 0
-EM_JS(void, em_js_clear_rect, (), {
-    global_2d_context.clearRect(0, 0, global_2d_canvas.width, global_2d_canvas.height);
+
+EM_JS(void, em_js_set_strokeStyle, (const char * style_), {
+    global_2d_context.strokeStyle = Module.UTF8ToString(style_);
 });
-#endif
 
 EM_JS(void, em_js_set_textBaseline, (const char * style), {
     global_2d_context.textBaseline = Module.UTF8ToString(style);
@@ -77,14 +81,14 @@ EM_JS(void, em_js_fillText, (const char * text, int x, int y), {
     global_2d_context.fillText(Module.UTF8ToString(text), x, y);
 });
 
+EM_JS(void, em_js_strokeText, (const char * text, int x, int y), {
+    global_2d_context.strokeText(Module.UTF8ToString(text), x, y);
+});
+
 EM_JS(void, em_js_log_to_console, (const char * text), {
     console.log(Module.UTF8ToString(text));
 });
-#if 0
-EM_JS(void, em_js_set_line_width, (int x), {
-    global_2d_context.lineWidth = x;
-});
-#endif
+
 EM_JS(void, em_js_beginPath, (), {
     global_2d_context.beginPath();
 });
@@ -96,19 +100,6 @@ EM_JS(void, em_js_moveTo, (int x, int y), {
 EM_JS(void, em_js_lineTo, (int x, int y), {
     global_2d_context.lineTo(x, y);
 });
-#if 0
-EM_JS(void, em_js_close_path, (), {
-    global_2d_context.closePath();
-});
-
-EM_JS(void, em_js_stroke, (), {
-    global_2d_context.stroke();
-});
-
-EM_JS(void, em_js_arc, (int x, int y, int radius, double start_angle, double end_angle, bool ccw), {
-    global_2d_context.arc(x, y, radius, start_angle, end_angle, ccw);
-});
-#endif
 
 EM_JS(void, em_js_arcTo, (int a_x, int a_y, int b_x, int b_y, int radius), {
     global_2d_context.arcTo(a_x, a_y, b_x, b_y, radius);
@@ -150,9 +141,9 @@ EMSCRIPTEN_KEEPALIVE void js_glue_on_canvas_resize(int width, int height) {
     do_try([&] { CanvasDrawer::instance().set_draw_area(Real(width), Real(height)); });
 }
 
-EMSCRIPTEN_KEEPALIVE void js_glue_on_update(double) {
+EMSCRIPTEN_KEEPALIVE void js_glue_on_update(double elapsed_time) {
     do_try([&] {
-        program_state().on_update();
+        program_state().on_update(elapsed_time);
     });
 }
 
@@ -172,17 +163,6 @@ EMSCRIPTEN_KEEPALIVE void js_glue_render_hud() {
     });
 }
 
-#if 0
-EMSCRIPTEN_KEEPALIVE int js_glue_get_camera_x() {
-    return int(round( program_state().camera_center().x ));
-}
-
-
-EMSCRIPTEN_KEEPALIVE int js_glue_get_camera_y() {
-    return int(round( program_state().camera_center().y ));
-}
-#endif
-
 EMSCRIPTEN_KEEPALIVE void js_glue_keydown(int key_id) {
     do_try([&]{ program_state().on_press(to_impl_key(key_id)); });
 }
@@ -196,25 +176,26 @@ EMSCRIPTEN_KEEPALIVE void js_glue_keyup(int key_id) {
 namespace {
 
 void CanvasDrawer::draw_string_center(const std::string & str, Vector center) {
-    em_js_set_fillStyle("#FFF");
-    em_js_set_textBaseline("middle");
     int width = em_js_get_text_width(str.c_str());
-    em_js_fillText(str.c_str(), int(round(center.x)) - width / 2, int(round(center.y)));
+    auto r = round(center - m_camera_position);
+    r.x -= width / 2;
+    
+    em_js_set_textBaseline("middle");
+    draw_string(str, r);
 }
 
 void CanvasDrawer::draw_rectangle(const Rectangle & rect, const char * color) {
     em_js_set_fillStyle(color);
     em_js_fill_rect(
-        int(round( m_camera_position.x + rect.left )),
-        int(round( m_camera_position.y + rect.top  )),
+        int(round( -m_camera_position.x + rect.left )),
+        int(round( -m_camera_position.y + rect.top  )),
         int(round( rect.width  )),
         int(round( rect.height )));
 }
 
 void CanvasDrawer::draw_string_top_left(const std::string & str, Vector top_left) {
-    em_js_set_fillStyle("#FFF");
     em_js_set_textBaseline("top");
-    em_js_fillText(str.c_str(), int(round(top_left.x)), int(round(top_left.y)));
+    draw_string(str, round(top_left - m_camera_position));
 }
 
 Size2 CanvasDrawer::draw_area() const { return m_canvas_size; }
@@ -242,6 +223,13 @@ void CanvasDrawer::draw_cone_
                  int(round(distance)) );
     em_js_lineTo(int(round(source.x)), int(round(source.y)));
     em_js_fill();
+}
+
+/* private */ void CanvasDrawer::draw_string(const std::string & str, VectorI r) const {
+    em_js_set_fillStyle  ("#FFF");
+    em_js_fillText       (str.c_str(), r.x, r.y);
+    em_js_set_strokeStyle("#000");
+    em_js_strokeText     (str.c_str(), r.x, r.y);
 }
 
 template <typename Func>
