@@ -125,7 +125,7 @@ std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
     if (itr != m_events.end()) {
         // if it's already present, then it's "updated"
         // if the type has changed, then it's considered a new event
-        get<EventAge>(itr->second) =
+        get<EventAge>(itr->second) = //k_updated;
             get<CollisionType>(itr->second) == col_event.type() ? k_updated : k_new;
     } else {
         (void)m_events.insert(make_pair(key, make_tuple(col_event.type(), k_new)));

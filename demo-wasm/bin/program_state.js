@@ -5,7 +5,7 @@ let program_state = (() => {
     let me = {};
     
     // something modest for js/wasm
-    const k_frame_rate = 40;
+    const k_frame_rate = 45;
         
     let m_do_render_field;
     let m_do_render_hud;
@@ -13,6 +13,7 @@ let program_state = (() => {
     let m_do_keyup;
     let m_do_keydown;
     let m_needs_to_pause = false;
+    let m_do_inquiry;
 
     // ----------------------- hidden functions/closures -----------------------
     if (false) {
@@ -28,12 +29,34 @@ let program_state = (() => {
     };
     }
     
-    let update = () => {
+    const update = () => {
         if (m_needs_to_pause) return;
         m_do_update(1 / k_frame_rate);
         m_do_render_field();
         m_do_render_hud();
         setTimeout(update, 1000 / k_frame_rate);
+    };
+    
+    // lets try to do more functional style of programming here c:
+    const prepare_scenes_menu = (module) => {
+        const load_scene_names = (module) => {
+            const get_scene_name = module.cwrap('js_glue_get_scene_name', 'string', ['number']);
+            const get_at_index = (n, arr) => {
+                const name = get_scene_name(n);
+                if (name === '') return arr;
+                
+                return [name].concat( get_at_index(n + 1, arr) );
+            };
+            return get_at_index(0, []);
+        };
+        $('#available-scenes').html(
+            load_scene_names(module)
+            .map((name, idx) => '<a class="scene-link" href="#" scene-number="' + idx + '">' + name + '</a><br>')
+            .reduce((bulk, el) => bulk + el));
+        const load_scene = module.cwrap('js_glue_load_scene', null, ['number']);
+        $('.scene-link').click(function () {
+            load_scene(parseInt($(this).attr('scene-number')));
+        });
     };
     
     // ----------------------- exposed functions/closures ----------------------
@@ -43,7 +66,9 @@ let program_state = (() => {
         
         // initialize the program state on the C++ side
         module.ccall('js_glue_start', null, null, null);
-        
+        m_do_inquiry = module.cwrap('js_describe_components', 'string', ['string']);
+        prepare_scenes_menu(module);
+
         // init_mouse_events(module, canvas);
         
         // window resize event
@@ -82,18 +107,20 @@ let program_state = (() => {
     
     const translate_key_code = (() => {
         const tbl = Object.freeze({
-            'w': 0,
-            'a': 3,
-            's': 1,
-            'd': 2
+            'w': 1, 'a': 4, 's': 2, 'd': 3,
+            'Enter': 5, 'q': 6
         });
-        return key => tbl[key];
+        return key => {
+            return (tbl[key] || 0) - 1;
+        };
     })();
     
     
     me.on_keydown = (event) => m_do_keydown(translate_key_code(event.key));
     
     me.on_keyup = (event) => m_do_keyup(translate_key_code(event.key));
+
+    me.describe_components = (comp_name) => m_do_inquiry(comp_name);
 
     return me;
 })();

@@ -27,6 +27,7 @@ SOURCES += \
     ../unit-tests/spatial-map-unit-tests-n.cpp \
     ../unit-tests/helpers-unit-tests.cpp \
     ../unit-tests/sight-unit-tests.cpp \
+    ../unit-tests/integration-tests.cpp \
     \ # Library source
     ../src/physics.cpp \
     ../src/helpers.cpp \

@@ -52,8 +52,22 @@ DemoDriver & program_state() {
 template <typename Func>
 void do_try(Func && f) noexcept;
 
-} // end of <anonymous> namespace
+enum KeyIds { k_up, k_down, k_right, k_left, k_pause, k_frame_advance };
 
+Key to_impl_key(int key_id) {
+    switch (key_id) {
+    case k_up           : return Key::up           ;
+    case k_down         : return Key::down         ;
+    case k_right        : return Key::right        ;
+    case k_left         : return Key::left         ;
+    case k_pause        : return Key::pause        ;
+    case k_frame_advance: return Key::frame_advance;
+    default             : return Key::none         ;
+    
+    }
+}
+
+} // end of <anonymous> namespace
 
 // -------------------------- Calls to JavaScript ------------------------------
 
@@ -116,25 +130,22 @@ EM_JS(void, em_js_throw, (const char * name, const char * what_str), {
 
 // --------------------------- Calls from JavaScript ---------------------------
 
-enum KeyIds { k_up, k_down, k_right, k_left };
-
-Key to_impl_key(int key_id) {
-    switch (key_id) {
-    case k_up   : return Key::up   ;
-    case k_down : return Key::down ;
-    case k_right: return Key::right;
-    case k_left : return Key::left ;
-    default     : return Key::none ;
-    }
-}
-
 extern "C" {
 
 EMSCRIPTEN_KEEPALIVE void js_glue_start() {
-    program_state().prepare_scenes();
+    do_try([&] {
+        program_state().prepare_scenes();
     
-    SceneOptions options;
-    program_state().load_scene(options, /* third-scene */ 2);
+        SceneOptions options;
+        program_state().load_scene(options, /* third-scene */ 10);
+    });
+}
+
+EMSCRIPTEN_KEEPALIVE void js_glue_load_scene(int scene_number) {
+    do_try([&] { 
+        SceneOptions options;
+        program_state().load_scene(options, scene_number);
+    });
 }
 
 EMSCRIPTEN_KEEPALIVE void js_glue_on_canvas_resize(int width, int height) {
@@ -169,6 +180,29 @@ EMSCRIPTEN_KEEPALIVE void js_glue_keydown(int key_id) {
 
 EMSCRIPTEN_KEEPALIVE void js_glue_keyup(int key_id) {
     do_try([&]{ program_state().on_release(to_impl_key(key_id)); });
+}
+
+EMSCRIPTEN_KEEPALIVE const char * js_glue_get_scene_name(int num) {
+    const char * rv = nullptr;
+    do_try([&] {
+        if (std::size_t(num) >= program_state().scene_names().size()) {
+            rv = "";
+            return;
+        }
+        rv = program_state().scene_names()[std::size_t(num)].c_str();
+    });
+    return rv;
+}
+
+EMSCRIPTEN_KEEPALIVE const char * js_describe_components(const char * component_name) {
+    const char * rv = nullptr;
+    do_try([&] {
+        // string needs a place to live
+        static std::string str;
+        str = program_state().inquiry(component_name);
+        rv = str.c_str();
+    });
+    return rv;
 }
 
 } // end of extern "C"

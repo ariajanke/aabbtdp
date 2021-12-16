@@ -88,7 +88,7 @@ private:
 // ----------------------------------------------------------------------------
 
 enum class Key {
-    up, down, left, right, pause, none
+    up, down, left, right, pause, frame_advance, none
 };
 
 // imple
@@ -120,7 +120,7 @@ struct SceneOptions final {
     // k_sight              -> see only entities according to visibility
     // k_sight_with_outline -> see entities with visibility, but with an
     //                         outline on all
-    SightOption sight = k_sight;
+    SightOption sight = k_no_special_sight;
 };
 
 struct SceneOptionItems final {
@@ -203,21 +203,27 @@ public:
 
     void load_scene(int scene_choice, EntityManager &, Entity & player);
 
+    const std::vector<std::string> & scene_names() const
+        { return m_scene_names; }
+
 private:
     template <typename Func>
-    void push_new_scene(Func && f) {
+    void push_new_scene(const char * name, Func && f) {
         class SceneComplete final : public Scene {
         public:
             SceneComplete(Func && f): m_func(std::move(f)) {}
             void load_scene_(Loader && maker) final { m_func(maker); }
             Func m_func;
         };
+        m_scene_names.push_back(name);
         m_scenes.push_back(std::make_unique<SceneComplete>(std::move(f)));
     }
 
     using SceneContainer = std::vector<std::unique_ptr<Scene>>;
     SceneContainer::iterator m_current_scene;
     SceneContainer m_scenes;
+
+    std::vector<std::string> m_scene_names;
 };
 
 class DemoDriver final {
@@ -243,6 +249,42 @@ public:
         return Vector{};
     }
 
+    auto scene_names() const { return m_scene_driver.scene_names(); }
+
+    std::string inquiry(const char * component_name) {
+        static const auto k_name_map = [] {
+            using std::make_pair;
+            using DescribeFunc = std::string(*)(const Entity &);
+            using Df = DescribeFunc;
+            std::unordered_map<std::string, DescribeFunc> comp_types {
+                make_pair("layer", Df([](const Entity & e) -> std::string {
+                    using namespace layers;
+                    if (!e.has<Layer>()) return "no layer";
+                    switch (e.get<Layer>().value) {
+                    case k_block      : return "block";
+                    case k_floor_mat  : return "floor mat";
+                    case k_passive    : return "passive";
+                    default: return "<invalid layer value>";
+                    }
+                }))
+            };
+            return comp_types;
+        } ();
+        auto itr = k_name_map.find(component_name);
+        if (itr == k_name_map.end()) {
+            return std::string("Cannot find component type named \"")
+                   + component_name + "\".";
+        }
+        std::string product;
+        auto sys = make_singles_system([&product, itr](Entity & e) {
+            product += force_name(e) + " " + (itr->second)(e) + "\n";
+        });
+        m_ent_manager.run_system(sys);
+        product.pop_back();
+        return product;
+    }
+
+
 private:
     using AlwaysPresentSystems = Tuple<CollisionSystem, LifetimeSystem, SightFacingUpdateSystem>;
 
@@ -255,7 +297,7 @@ private:
     static constexpr const auto k_direction_count = 4;
     
     std::array<bool, k_direction_count> m_controls;
-    bool m_paused = false;
+    bool m_paused = false, m_frame_advancing = false;
 
     // you see, now I'm putting myself in trouble design wise...
     AlwaysPresentSystems m_always_present_systems;

@@ -118,3 +118,19 @@ private:
         e.get<Sight>().facing = e.get<Velocity>().as_vector();
     }
 };
+
+template <typename Func>
+auto make_singles_system(Func && f) {
+    class Impl final : public System {
+    public:
+        Impl(Func && f): m_f(std::move(f)) {}
+
+        void update(const ContainerView & view) {
+            for (auto & e : view) m_f(e);
+        }
+
+    private:
+        Func m_f;
+    };
+    return Impl(std::move(f));
+}

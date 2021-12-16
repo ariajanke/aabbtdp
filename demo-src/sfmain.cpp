@@ -48,23 +48,25 @@ constexpr const int k_window_height = 700;
 constexpr const int k_window_width  = (k_window_height * 11) / 6;
 constexpr const Real k_frame_time   = 1. / 60.;
 
-constexpr const auto k_up_key = sf::Keyboard::W;
-constexpr const auto k_left_key = sf::Keyboard::A;
-constexpr const auto k_down_key = sf::Keyboard::S;
-constexpr const auto k_right_key = sf::Keyboard::D;
-constexpr const auto k_pause_key = sf::Keyboard::Return;
+constexpr const auto k_up_key        = sf::Keyboard::W;
+constexpr const auto k_left_key      = sf::Keyboard::A;
+constexpr const auto k_down_key      = sf::Keyboard::S;
+constexpr const auto k_right_key     = sf::Keyboard::D;
+constexpr const auto k_frame_advance = sf::Keyboard::Q;
+constexpr const auto k_pause_key     = sf::Keyboard::Return;
 
 sf::Vertex to_vertex(Vector r, sf::Color color)
     { return sf::Vertex{ convert_to<sf::Vector2f>(r), color }; }
 
 Key to_impl_key(sf::Keyboard::Key k) {
     switch (k) {
-    case k_up_key   : return Key::up;
-    case k_left_key : return Key::left;
-    case k_down_key : return Key::down;
-    case k_right_key: return Key::right;
-    case k_pause_key: return Key::pause;
-    default         : return Key::none;
+    case k_up_key       : return Key::up;
+    case k_left_key     : return Key::left;
+    case k_down_key     : return Key::down;
+    case k_right_key    : return Key::right;
+    case k_pause_key    : return Key::pause;
+    case k_frame_advance: return Key::frame_advance;
+    default             : return Key::none;
     }
 }
 
@@ -165,7 +167,8 @@ int main() {
 
     {
     SceneOptions options;
-    driver.load_scene(options, /* first-scene */ 2);
+    driver.load_scene(options, /* first-scene */ 10);
+
     }
 
     sf::RenderWindow window(sf::VideoMode(k_window_width, k_window_height), " ");
@@ -184,11 +187,21 @@ int main() {
             switch (event.type) {
             case sf::Event::KeyPressed:
             case sf::Event::KeyReleased: {
-                if (   event.type == sf::Event::KeyPressed
-                    && event.key.code == sf::Keyboard::Escape)
-                { window.close(); }
                 auto fptr = event.type == sf::Event::KeyPressed ? (&DemoDriver::on_press) : (&DemoDriver::on_release);
                 (driver.*fptr)(to_impl_key(event.key.code));
+            }
+            default: break;
+            }
+            switch (event.type) {
+            case sf::Event::KeyPressed:
+                if (event.key.code == sf::Keyboard::Escape)
+                    window.close();
+                break;
+            case sf::Event::KeyReleased: {
+                if (event.key.code == sf::Keyboard::Num0) {
+                    SceneOptions options;
+                    driver.load_scene(options, 3);
+                }
                 break;
             }
             default: break;

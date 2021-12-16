@@ -26,9 +26,12 @@
 
 #include "DemoDriver.hpp"
 
+#include <random>
+
 namespace {
 
 constexpr const Rectangle k_field_rectangle{0, 0, k_field_width, k_field_height};
+constexpr const auto k_block_layer = layers::k_block;
 using std::make_tuple;
 
 Entity make_player_for_any_scene(EntityManager & entity_manager);
@@ -82,6 +85,41 @@ std::unique_ptr<GenericDrawSystem> make_composite_system
         std::vector<std::unique_ptr<GenericDrawSystem>> m_syss;
     };
     return std::make_unique<Impl>(std::move(systems));
+}
+
+using RealDistri = std::uniform_real_distribution<Real>;
+
+Entity spawn_random_rectangle
+    (const Entity & parent, EntityMakerBase & maker, const Rectangle & rect,
+     Size2 min_size, Size2 max_size, std::default_random_engine & rng)
+{
+    auto e = maker.make_entity();
+    auto w = std::round(RealDistri(min_size.width , max_size.width )(rng));
+    auto h = std::round(RealDistri(min_size.height, max_size.height)(rng));
+    auto x = std::round(RealDistri(rect.left      , rect.width  - w)(rng));
+    auto y = std::round(RealDistri(rect.top       , rect.height - h)(rng));
+    e.add<Rectangle>() = Rectangle(x, y, w, h);
+    e.add<Layer>() = k_block_layer;
+    if (auto * color = parent.ptr<Color>()) {
+        e.add<Color>() = *color;
+    } else {
+        e.add<Color>() = "#0A0";
+    }
+
+    if (auto * vel = parent.ptr<Velocity>()) {
+        e.add<Velocity>() = *vel;
+    }
+    if (parent.has<Pushable>()) e.add<Pushable>();
+    return e;
+}
+
+void spawn_random_rectangles
+    (const Entity & parent, EntityMakerBase & maker, const Rectangle & rect, int amount,
+     Size2 min_size, Size2 max_size, std::default_random_engine & rng)
+{
+    for (int i = 0; i != amount; ++i) {
+        (void)spawn_random_rectangle(parent, maker, rect, min_size, max_size, rng);
+    }
 }
 
 } // end of <anonymous> namespace
@@ -150,11 +188,11 @@ SceneOptionItems
 void SceneDriver::prepare_scenes() {
     using Loader = Scene::Loader;
     // empty scene
-    push_new_scene([](Loader &){});
+    push_new_scene("empty", [](Loader &){});
 
     // of course... scene doesn't load in new systems (*can* be added though)
     // high speed projectile
-    push_new_scene([](Loader & maker) {
+    push_new_scene("fast projectile", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(100, 100), Size2(80, 4));
         e.add<Color>() = "#B9B";
@@ -173,7 +211,7 @@ void SceneDriver::prepare_scenes() {
     });
 
     // few spread about
-    push_new_scene([](Loader & maker) {
+    push_new_scene("few spread about", [](Loader & maker) {
         static constexpr const int k_pushers = 25;
         for (int i = 0; i != k_pushers; ++i) {
             auto e = maker.make_entity();
@@ -185,7 +223,7 @@ void SceneDriver::prepare_scenes() {
     });
 
     // many close together
-    push_new_scene([](Loader & maker) {
+    push_new_scene("many close together", [](Loader & maker) {
         static constexpr const int k_pushers = 100;
         for (int i = 0; i != k_pushers; ++i) {
             auto e = maker.make_entity();
@@ -197,7 +235,7 @@ void SceneDriver::prepare_scenes() {
     });
 
     // many spread apart
-    push_new_scene([](Loader & maker) {
+    push_new_scene("many spread apart", [](Loader & maker) {
         static constexpr const int k_pushers = 100;
         for (int i = 0; i != k_pushers; ++i) {
             auto e = maker.make_entity();
@@ -208,72 +246,97 @@ void SceneDriver::prepare_scenes() {
             e.add<Name>() = "P" + std::to_string(i);
         }
     });
-#   if 0
-    scenes.push_scene(make_unique_scene(
-    [](SceneLoader & maker) {
+    push_new_scene("random blocks", [](Loader & maker) {
         std::default_random_engine rng { 0x01239ABC };
         auto e = maker.make_entity();
-        e.add<DrawRectangle>().set_color(sf::Color::Red);
-        spawn_random_rectanles(e, maker, Rectangle(100, 100, 450, 150), 5,
-                               Size2(20, 20), Size2(40, 40), rng);
+        e.add<Color>() = "#F00";
+        spawn_random_rectangles(e, maker, Rectangle(100, 100, 450, 150), 5,
+                                Size2(20, 20), Size2(40, 40), rng);
 
-        spawn_random_rectanles(e, maker, Rectangle(100, 400, 450, 200), 5,
-                               Size2(20, 20), Size2(40, 40), rng);
+        spawn_random_rectangles(e, maker, Rectangle(100, 400, 450, 200), 5,
+                                Size2(20, 20), Size2(40, 40), rng);
         e.request_deletion();
-    }
-    ))
-    ;
+    });
 
-    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
+    push_new_scene("corner blocks", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), Size2 (80, 20));
-        e.add<DrawRectangle>().set_color(sf::Color(200, 100, 100));
-        e.add<Name>().value = "BLOCK A";
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#D77", k_block_layer);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(-100, 0), Size2(20, 80));
-        e.add<DrawRectangle>().set_color(sf::Color(100, 100, 200));
-        e.add<Name>().value = "BLOCK B";
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK B", "#77D", k_block_layer);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(150, -160), Size2(20, 80));
-        e.add<DrawRectangle>().set_color(sf::Color(100, 200, 100));
-        e.add<Name>().value = "BLOCK C";
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK C", "#7D7", k_block_layer);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(150, -180), Size2(80, 20));
-        e.add<DrawRectangle>().set_color(sf::Color(200, 100, 200));
-        e.add<Name>().value = "BLOCK D";
-    }));
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK D", "#D7D", k_block_layer);
+    });
 
-    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
+    push_new_scene("head on collision", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(500, 400), Size2(30, 30));
-        e.add<DrawRectangle>().set_color(sf::Color(180, 100, 180));
-        e.add<Name>().value = "BLOCK A";
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#C7C", k_block_layer);
         e.add<Velocity>() = Vector(-100, -100);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(-500, 400), Size2(30, 30));
-        e.add<DrawRectangle>().set_color(sf::Color(100, 180, 180));
-        e.add<Name>().value = "BLOCK B";
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK B", "#7CC", k_block_layer);
         e.add<Velocity>() = Vector(100, -100);
-    }));
+    });
 
-    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
+    push_new_scene("head on collision 2", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(-200, -200), Size2(30, 30));
-        e.add<DrawRectangle>().set_color(sf::Color(100, 180, 180));
-        e.add<Name>().value = "BLOCK A";
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#7CC", k_block_layer);
         e.add<Velocity>() = Vector(100, 0.1);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(200, -200), Size2(30, 30));
-        e.add<DrawRectangle>().set_color(sf::Color(180, 180, 100));
-        e.add<Name>().value = "BLOCK B";
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK B", "#CC7", k_block_layer);
         e.add<Velocity>() = Vector(-100, -0.1);
-    }));
+    });
 
+    push_new_scene("bouncy block", [](Loader & maker) {
+        std::default_random_engine rng {std::random_device{}()};
+        auto e = maker.make_entity();
+        e.add<Bouncy>();
+        e.add<Rectangle>() = make_rect_from_center(Vector(0, 250), Size2(32, 32));
+        e.add<Name, Color, Layer>() = make_tuple("BOUNCY", "#CC7", k_block_layer);
+        e.add<Velocity>() = cul::rotate_vector(Vector(1, 0)*RealDistri{30, 150}(rng), RealDistri{0, 3.14159265*2}(rng));
+        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
+
+        e = maker.make_entity();
+        e.add<Pushable>();
+        e.add<Rectangle>() = make_rect_from_center(Vector(200, 0), Size2(32, 32));
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK P", "#C7C", k_block_layer);
+        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
+    });
+
+    push_new_scene("pushable and not", [](Loader & maker) {
+        static const Size2 k_size(30, 30);
+        auto e = maker.make_entity();
+        e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), k_size);
+        e.add<Name, Color, Layer>() = make_tuple("PUSH A", "#7D7", k_block_layer);
+        e.add<Pushable>();
+        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
+
+        e = maker.make_entity();
+        e.add<Rectangle>() = make_rect_from_center(Vector(0, 150), k_size);
+        e.add<Name, Color, Layer>() = make_tuple("PUSH B", "#7D7", k_block_layer);
+
+        e.add<Pushable>();
+        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
+
+        e = maker.make_entity();
+        e.add<Rectangle>() = make_rect_from_center(Vector(0, 200), k_size);
+        e.add<Name, Color, Layer>() = make_tuple("BLOCK", "#88D", k_block_layer);
+    });
+
+#   if 0
     scenes.push_scene(make_unique_scene(
     [](SceneLoader & maker) {
         std::default_random_engine rng {std::random_device{}()};
@@ -335,29 +398,7 @@ void SceneDriver::prepare_scenes() {
         }
     }));
 #   endif
-    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
-        static const Size2 k_size(30, 30);
-        auto e = maker.make_entity();
-        e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), k_size);
-        e.add<DrawRectangle>().set_color(sf::Color(180, 200, 180));
-        e.add<Pushable>();
-        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
-        e.add<Name>().value = "PUSH A";
-        e.add<PushLevel>();
 
-        e = maker.make_entity();
-        e.add<Rectangle>() = make_rect_from_center(Vector(0, 150), k_size);
-        e.add<DrawRectangle>().set_color(sf::Color(180, 200, 180));
-        e.add<Pushable>();
-        e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
-        e.add<Name>().value = "PUSH B";
-        e.add<PushLevel>();
-
-        e = maker.make_entity();
-        e.add<Rectangle>() = make_rect_from_center(Vector(0, 200), k_size);
-        e.add<DrawRectangle>().set_color(sf::Color(200, 180, 180));
-        e.add<Name>().value = "BLOCK";
-    }));
     scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         auto e = maker.make_entity();
         e.add<DrawRectangle>().set_color(sf::Color(100, 100, 200));
@@ -434,17 +475,20 @@ void DemoDriver::on_release(Key k) {
         m_controls[idx] = false;
     } else if (k == Key::pause) {
         m_paused = !m_paused;
+    } else if (k == Key::frame_advance) {
+        m_frame_advancing = true;
     }
 }
 
 void DemoDriver::on_update(Real elapsed_time) {
-    if (!m_paused) {
+    if (!m_paused || m_frame_advancing) {
         cul::for_all_of_base<TimeAware>(m_always_present_systems,
             [elapsed_time](TimeAware & time_aware)
             { time_aware.set_elapsed_time(elapsed_time); });
         cul::for_all_of_base<System>(m_always_present_systems, [this](System & sys) {
             m_ent_manager.run_system(sys);
         });
+        m_frame_advancing = false;
     }
     if (!m_paused && m_player) {
         bool left_xor_right = m_controls[k_left_idx] ^ m_controls[k_right_idx];
@@ -480,6 +524,8 @@ void DemoDriver::on_draw_hud(DrawInterface & draw_interface) {
 void DemoDriver::load_scene
     (const SceneOptions & scene_options, int scene_choice)
 {
+    if (m_player) m_player.request_deletion();
+
     // the scene options determine which additional systems are loaded...
     m_scene_driver.load_scene(scene_choice, m_ent_manager, m_player);
     m_ent_manager.process_deletion_requests();
@@ -523,8 +569,7 @@ Entity make_player_for_any_scene(EntityManager & entity_manager) {
 
 Rectangle make_rect_from_center(Vector r, Size2 sz) {
     static constexpr const Vector k_field_center{k_field_width*0.5, k_field_height*0.5};
-    return Rectangle{r + k_field_center,// - cul::convert_to<Vector>(sz)*0.5,
-                     sz};
+    return Rectangle{r + k_field_center, sz};
 }
 
 } // end of <anonymous> namespace

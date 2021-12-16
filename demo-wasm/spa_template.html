@@ -11,16 +11,42 @@
         border: 0px none; 
         background-color: black;
     }
+    .canvas-parent{
+        display: flex;
+        position: relative;
+    }
+    #available-scenes{
+        position: absolute;
+        width: 50%;
+        height: 50%;
+        background: aliceblue;
+        border: black solid 1px;
+        border-radius: 5px;
+        padding: 5px;
+        text-align: center;
+        vertical-align: middle;
+        overflow-y: scroll;
+        top: 25%;
+        left: 25%;
+    }
+    
     </style>
+    <script
+        src="https://code.jquery.com/jquery-3.6.0.min.js"
+        integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+        crossorigin="anonymous"></script>
     <script type='text/javascript' src='program_state.js'></script>
+    
 </head><body>
-<a id="play-pause">pause</a><br/>
-<a id="change-scene">change scene</a><br/>
-<a id="follow">follow</a><br/>
-<a id="bounce">bounce</a><br/>
-<div class="emscripten_border">
-    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+
+<div class="canvas-parent">
+    <div id="available-scenes"></div>
+    <div class="emscripten_border">
+        <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+    </div>
 </div>
+<a id="play-pause">pause</a><br/>
+
 <script type='text/javascript'>
 var Module = {
     preRun: [],

@@ -79,10 +79,6 @@ using Rng = std::default_random_engine;
 using cul::ts::TestSuite, cul::ts::test, cul::ts::set_context, cul::ts::Unit,
       cul::Grid, tdp::CollisionEvent;
 
-void do_helper_tests          (TestSuite &);
-void do_collision_matrix_tests(TestSuite &);
-void do_td_physics_tests      (TestSuite &);
-
 #define mark MACRO_MARK_POSITION_OF_CUL_TEST_SUITE
 
 } // end of <anonymous> namespace
@@ -95,6 +91,8 @@ void do_trim_displacement_for_barriers_tests(TestSuite &);
 void do_trim_displacement_tests(TestSuite &);
 void do_trespass_occuring_tests(TestSuite &);
 void do_misc_tests(TestSuite &);
+
+void do_sight_unit_tests(TestSuite &);
 
 int main() {
     TestSuite suite;
@@ -109,62 +107,12 @@ int main() {
     do_trespass_occuring_tests(suite);
     do_misc_tests(suite);
 
-#   if 0
-    do_helper_tests(suite);
-    do_collision_matrix_tests(suite);
-    do_td_physics_tests(suite);
-#   endif
+    do_sight_unit_tests(suite);
+
     return 0;
 }
 
 namespace {
 
-void do_helper_tests(TestSuite & suite) {
-#   if 0 // outmoded
-    // I don't think "prioritized_entries" really needs testing
-    // (just calls a couple of STL iterator sequence functions)
-    //
-    // ah maybe one, just to see if we get the expected output...
-    suite.start_series("detail::prioritized_entries");
-    mark(suite).test([] {
-        using tdp::detail::FullEntry;
-        EntityManagerA eman;
-        tdp::detail::EntryEntityRefMap map;
-        auto * a = &map[eman.make_entity()];
-        auto * b = &map[eman.make_entity()];
-        auto * c = &map[eman.make_entity()];
-
-        a->priority = 2;
-        b->priority = 3;
-        c->priority = 1;
-        const std::vector<FullEntry *> cor { b, a, c };
-        auto vec = tdp::detail::prioritized_entries(map, std::vector<FullEntry *>{});
-        return test(std::equal(vec.begin(), vec.end(), cor.begin(), cor.end()));
-    });
-#   endif
-
-#   if 0 // these aren't bad for testing the whole thing...
-         // but not apporpiate for testing one function
-    set_context(suite, [](TestSuite & suite, Unit & unit) {
-        EntityManagerA eman;
-        ColSystem colsys;
-        auto pusher = eman.make_entity();
-        pusher.add<Rectangle>() = Rectangle(0, 0, 10, 10);
-        pusher.add<Layer>().value = layers::k_block;
-        pusher.add<Name>() = "PUSHER";
-        auto pushee = eman.make_entity();
-
-        pushee.add<Rectangle>() = Rectangle(11, 0, 10, 10);
-        pushee.add<Layer>().value = layers::k_block;
-        pushee.add<Name>() = "PUSHEE";
-        pushee.add<Pushable>();
-        unit.start(mark(suite), [&] {
-            // do it in pixels per frame
-            pusher.add<Velocity>() = Velocity()*ColSystem::k_et_value;
-            return test(false);
-        });
-    });
-#   endif
-}
 
 } // end of <anonymous> namespace

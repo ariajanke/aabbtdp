@@ -1,4 +1,5 @@
 #!/bin/bash
+
 sources=$(find ../demo-src | grep '[.]cpp$' | grep -v 'sfmain[.]cpp')
 sources+=" Canvas2dSpa.cpp "
 sources+=$(find ../src | grep '[.]cpp$')

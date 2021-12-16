@@ -440,6 +440,7 @@ void do_find_min_push_displacement_tests(TestSuite & suite) {
         unit.start(mark(suite), [&] {
             // huge (make the machine "sweat", this should be a non-linear
             // algorithm)
+            return test(false);
             static constexpr const Real k_gap = 2;
             static constexpr const Real k_small_delta = 3;
             static auto adding_of_double_a_works = [] (Real a, Real b) {
@@ -514,6 +515,8 @@ void do_trim_displacement_for_barriers_tests(TestSuite & suite) {
 
 void do_trim_displacement_tests(TestSuite & suite) {
     suite.start_series("trim_displacement");
+    // this function and trespass_occuring will have to be rewritten both
+    // I need a quieter place...
 }
 
 void do_trespass_occuring_tests(TestSuite & suite) {
@@ -527,7 +530,7 @@ void do_misc_tests(TestSuite & suite) {
     // shrink another
     // - grow_by_displacement
     // one test case...
-    // - large_displacement_step_count
+    // - large_displacement_step_count (probably should skip this!)
     // one case: make sure it makes sense
     // this only for one/two cases per function!
 }
