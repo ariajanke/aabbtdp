@@ -333,30 +333,24 @@ void do_EventRecorder_tests(TestSuite & suite) {
             recorder.send_events(handler);
             return test(okay);
         });
-        // filter dupelicate
+
+        int how_many_events_with_a = 0;
+        auto handler = make_collision_handler([&how_many_events_with_a]
+            (Entity a, Entity b, bool)
+        {
+            how_many_events_with_a += int(   EntityMaker::get_name(a) == 'a'
+                                          || EntityMaker::get_name(b) == 'a');
+        });
+        // filter dupelicate same frame
         unit.start(mark(suite), [&] {
             recorder.emplace_event(a, b, CollisionEvent::k_push);
             recorder.emplace_event(a, b, CollisionEvent::k_push);
-            int how_many_events_with_a = 0;
-            auto handler = make_collision_handler([&how_many_events_with_a]
-                (Entity a, Entity b, bool)
-            {
-                how_many_events_with_a += int(   EntityMaker::get_name(a) == 'a'
-                                              || EntityMaker::get_name(b) == 'a');
-            });
+
             recorder.send_events(handler);
             return test(how_many_events_with_a == 1);
         });
-        // filter dupelicate over time
+        // filter dupelicate different consecutive frames
         unit.start(mark(suite), [&] {
-            int how_many_events_with_a = 0;
-            auto handler = make_collision_handler([&how_many_events_with_a]
-                (Entity a, Entity b, bool)
-            {
-                how_many_events_with_a += int(   EntityMaker::get_name(a) == 'a'
-                                              || EntityMaker::get_name(b) == 'a');
-            });
-
             recorder.emplace_event(a, b, CollisionEvent::k_push);
             recorder.send_events(handler);
             recorder.emplace_event(a, b, CollisionEvent::k_push);
@@ -366,14 +360,6 @@ void do_EventRecorder_tests(TestSuite & suite) {
         });
         // old becomes new again
         unit.start(mark(suite), [&] {
-            int how_many_events_with_a = 0;
-            auto handler = make_collision_handler([&how_many_events_with_a]
-                (Entity a, Entity b, bool)
-            {
-                how_many_events_with_a += int(   EntityMaker::get_name(a) == 'a'
-                                              || EntityMaker::get_name(b) == 'a');
-            });
-
             recorder.emplace_event(a, b, CollisionEvent::k_push);
             recorder.send_events(handler);
             // one frame *without* submitting the event
@@ -382,7 +368,6 @@ void do_EventRecorder_tests(TestSuite & suite) {
             recorder.send_events(handler);
 
             return test(how_many_events_with_a == 2);
-            return test(false);
         });
     });
 }
@@ -393,17 +378,29 @@ void do_update_broad_boundries_tests(TestSuite & suite) {
     // not sure I need more than one...
     mark(suite).test([] {
         FullEntry entry;
-        EntityMaker maker;
-        entry.entity = maker.make_entity();
+        //EntityMaker maker;
+        //entry.entity = maker.make_entity();
         entry.bounds = Rectangle(5, 5, 10, 10);
         entry.displacement = Vector(-5, 5);
         entry.nudge        = Vector( 0, 2);
         update_broad_boundries(entry);
         return test(   are_very_close(entry.low_x ,  0)
-                    && are_very_close(entry.low_y , 12)
+                    && are_very_close(entry.low_y ,  5)
                     && are_very_close(entry.high_x, 15)
                     && are_very_close(entry.high_y, 22));
     });
+    mark(suite).test([] {
+        FullEntry entry;
+        entry.bounds = Rectangle(5, 5, 10, 10);
+        entry.growth = Size(5, -2);
+        update_broad_boundries(entry);
+        // height unaffected... but must expand horizontally
+        return test(   are_very_close(entry.low_x ,  2.5)
+                    && are_very_close(entry.low_y ,  5  )
+                    && are_very_close(entry.high_x, 17.5)
+                    && are_very_close(entry.high_y, 15  ));
+    });
+
 }
 
 void do_find_min_push_displacement_tests(TestSuite & suite) {

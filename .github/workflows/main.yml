@@ -34,15 +34,15 @@ jobs:
         run: |
           git clone https://github.com/ariajanke/util-common.git cul
           git clone https://github.com/rigtorp/HashMap.git HashMap
-          git clone https://github.com/ariajanke/aabbtdp.git aabbp
-          cd aabbp/lib ; rm -rf cul ; rm -rf HashMap
-          ls ../..
-          mv ../../cul cul ; mv ../../HashMap HashMap
-          ls cul ; ls HashMap
+          cd lib ; rm -rf cul ; rm -rf HashMap
+          echo 'top level' ; ls .. 
+          mv ../cul cul ; mv ../HashMap HashMap
+          echo 'cul' ; ls cul ; echo 'HashMap' ; ls HashMap
           cd ..
 
       # Runs a set of commands using the runners shell
       - name: Build and Run tests
         run: |
+          pwd
           cd unit-tests
           ./build.sh

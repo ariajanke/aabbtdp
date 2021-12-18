@@ -96,16 +96,17 @@ void EventRecorder::send_events(EventHandler & handler) {
     using std::get;
     // there's some reliance on implementation of HashMap knowledge :c
     for (auto itr = m_events.begin(); itr != m_events.end(); ++itr) {
-        auto & age = get<EventAge>(itr->second);
-        if (age == k_new) {
+        auto & age_nfo = get<AgeInfo>(itr->second);
+        if (!age_nfo.has_been_sent) {
             CollisionEvent{get<0>(itr->first), get<1>(itr->first),
                            get<CollisionType>(itr->second)}
             .send_to(handler);
+            age_nfo.has_been_sent = true;
         }
-        if (age == k_old) {
+        if (age_nfo.frames_since_last_update != 0) {
             m_events.erase(itr);
         } else {
-            age = k_old;
+            age_nfo.frames_since_last_update = 1;
         }
     }
 }
@@ -125,39 +126,30 @@ std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
     if (itr != m_events.end()) {
         // if it's already present, then it's "updated"
         // if the type has changed, then it's considered a new event
-        get<EventAge>(itr->second) = //k_updated;
-            get<CollisionType>(itr->second) == col_event.type() ? k_updated : k_new;
+        // I need a better way of handling event age
+        if (get<CollisionType>(itr->second) == col_event.type()) {
+            // what if it's new this frame...?
+            get<AgeInfo>(itr->second).frames_since_last_update = 0;
+        } else {
+            get<AgeInfo>(itr->second) = AgeInfo{};
+        }
     } else {
-        (void)m_events.insert(make_pair(key, make_tuple(col_event.type(), k_new)));
+        (void)m_events.insert(make_pair(key, make_tuple(col_event.type(), AgeInfo{})));
     }
 }
 
 // -------------------------------- FullEntry ---------------------------------
 
 void update_broad_boundries(FullEntry & entry) {
-    static const auto low_x = [](const FullEntry & fe) {
-        auto dx = fe.displacement.x + fe.nudge.x;
-        return fe.bounds.left + ((dx < 0) ? dx : 0);
-    };
-
-    static const auto high_x = [](const FullEntry & fe) {
-        auto dx = fe.displacement.x + fe.nudge.x;
-        return right_of(fe.bounds) + ((dx > 0) ? dx : 0);
-    };
-
-    static const auto low_y = [](const FullEntry & fe) {
-        auto dy = fe.displacement.y + fe.nudge.y;
-        return fe.bounds.top + ((dy < 0) ? dy : 0);
-    };
-
-    static const auto high_y = [](const FullEntry & fe) {
-        auto dy = fe.displacement.y + fe.nudge.y;
-        return bottom_of(fe.bounds) + ((dy > 0) ? dy : 0);
-    };
-    entry.low_x  = low_x (entry);
-    entry.low_y  = low_y (entry);
-    entry.high_x = high_x(entry);
-    entry.high_y = high_y(entry);
+    using cul::top_left_of, cul::size_of, std::min, std::max, cul::right_of,
+          cul::bottom_of;
+    Rectangle future_rect = grow(Rectangle{
+        top_left_of(entry.bounds) + entry.nudge + entry.displacement,
+        size_of(entry.bounds)}, entry.growth);
+    entry.low_x  = min(entry.bounds.left, future_rect.left);
+    entry.low_y  = min(entry.bounds.top , future_rect.top );
+    entry.high_x = max(right_of (entry.bounds), right_of (future_rect));
+    entry.high_y = max(bottom_of(entry.bounds), bottom_of(future_rect));
 }
 
 void absorb_nudge(FullEntry & entry) {

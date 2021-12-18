@@ -73,8 +73,9 @@ private:
 
     int compare(const CollisionEvent &) const;
 
-    Entity m_first, m_second;
-    Type m_type;
+    Entity m_first  = Entity{};
+    Entity m_second = Entity{};
+    Type m_type     = Type  {};
 };
 
 // ------------------------------ EventRecorder -------------------------------
@@ -103,10 +104,26 @@ public:
     }
 
 private:
-    enum EventAge { k_old, k_updated, k_new };
+#   if 0
+    enum EventAge {
+        k_old    , // delete on update
+        k_updated, // mark old, move on
+        k_new      // send to handler
+    };
+#   endif
+    struct AgeInfo final {
+        AgeInfo() {}
+        AgeInfo(bool has_been_sent_, int frames_since_last_update_):
+            has_been_sent(has_been_sent_),
+            frames_since_last_update(frames_since_last_update_)
+        {}
+        bool has_been_sent = false;
+        int frames_since_last_update = 0;
+    };
+
     using CollisionType = CollisionEvent::Type;
     using EventKey      = Tuple<Entity, Entity>;
-    using EventValue    = Tuple<CollisionType, EventAge>;
+    using EventValue    = Tuple<CollisionType, AgeInfo>;
 
     struct EventHasher final {
         std::size_t operator () (const EventKey &);
