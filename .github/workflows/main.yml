@@ -24,8 +24,8 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
-      - name: Install system dependencies
-      - run: |
+        name: Install system dependencies
+        run: |
           sudo apt update
           sudo apt install make
           sudo apt install g++ -y
@@ -33,7 +33,7 @@ jobs:
           sudo apt install sfml-dev -y
       # Runs a single command using the runners shell
       - name: Prepare libraries
-      - run: |
+        run: |
           git clone https://github.com/ariajanke/util-common.git cul
           cd cul ; make ; cd ..
           git cone https://github.com/rigtorp/HashMap.git HashMap
@@ -44,6 +44,6 @@ jobs:
 
       # Runs a set of commands using the runners shell
       - name: Build and Run tests
-      - run: |
+        run: |
           cd unit-tests
           ./build.sh
