@@ -98,21 +98,23 @@ int main() {
     TestSuite suite;
     suite.hide_successes();
     // helpers
-    do_CollisionEvent_tests(suite);
-    do_EventRecorder_tests(suite);
-    do_update_broad_boundries_tests(suite);
-    do_find_min_push_displacement_tests(suite);
-    do_trim_displacement_for_barriers_tests(suite);
-    do_trim_displacement_tests(suite);
-    do_trespass_occuring_tests(suite);
-    do_misc_tests(suite);
-
-    do_sight_unit_tests(suite);
-
-    return 0;
+    // the damn flag resets for every series :/
+    auto k_test_functions = {
+        do_CollisionEvent_tests,
+        do_EventRecorder_tests,
+        do_update_broad_boundries_tests,
+        do_find_min_push_displacement_tests,
+        do_trim_displacement_for_barriers_tests,
+        do_trim_displacement_tests,
+        do_trespass_occuring_tests,
+        do_misc_tests,
+        do_sight_unit_tests
+    };
+    bool all_successes = true;
+    for (auto f : k_test_functions) {
+        f(suite);
+        if (!suite.has_successes_only())
+            all_successes = false;
+    }
+    return !all_successes;
 }
-
-namespace {
-
-
-} // end of <anonymous> namespace

@@ -225,6 +225,7 @@ void do_sight_unit_tests(TestSuite & suite) {
         auto intx = cul::find_intersection(sub_left, sub_right, obj_left, obj_right);
         assert(intx != cul::get_no_solution_sentinel<Vector>());
         auto por_part = magnitude(intx - sub_right) / magnitude(sub_left - sub_right);
+        // Is this test even correct?
         auto por = find_portion_overlapped(PolVec{sub_left}, PolVec{sub_right},
                                            PolVec{obj_left}, PolVec{obj_right});
         return test(are_very_close(por, por_part));

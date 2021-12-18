@@ -13,8 +13,18 @@
 </head><body>
 
 <div class="canvas-parent">
-    <div class="pause-overlay"><h1>Paused</h1></div>
-    <div id="available-scenes"></div>
+    <div class="pause-overlay overlay-fade-out">
+        <h1>Paused</h1>
+        <a id="open-menu" href="#">Open Menu</a>
+    </div>
+    <div id="options-menu" class="slide-out">
+        <div id="available-scenes"></div>
+    
+        <div>
+            Options
+        </div>
+        <a href="#" id="close-menu">Close Menu</a>
+    </div>
     <div class="emscripten_border">
         <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
     </div>

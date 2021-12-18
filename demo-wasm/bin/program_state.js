@@ -15,7 +15,6 @@ let program_state = (() => {
 
     // ----------------------- hidden functions/closures -----------------------
 
-    
     const prepare_scenes_menu = module => {
         // lets try to do more functional style of programming here c:
         const load_scene_names = module => {
@@ -33,11 +32,10 @@ let program_state = (() => {
             .map((name, idx) => '<a class="scene-link" href="#" scene-number="' + idx + '">' + name + '</a><br>')
             .reduce((bulk, el) => bulk + el);
         
-        // this part is not so functional
-        $('#available-scenes').html(menu_html);
-        $('.scene-link').click(function () {
+        return [menu_html, function () {
             load_scene(parseInt($(this).attr('scene-number')));
-        });
+        }];
+
     };
     
     // makes the function that starts
@@ -62,17 +60,26 @@ let program_state = (() => {
         };
     };
     
-    const make_event_methods = module => {
-        const translate_key_code = (() => {
-            const tbl = Object.freeze({
-                'w': 1, 'a': 4, 's': 2, 'd': 3,
-                'Enter': 5, 'q': 6
-            });
-            return key => (tbl[key] || 0) - 1;
-        })();
+    const make_event_methods = (module, pause_overlay) => {
         // I need to integrate menus...
         const do_keyup    = module.cwrap('js_glue_keyup'  , null, ['number']);
         const do_keydown  = module.cwrap('js_glue_keydown', null, ['number']);
+        const make_act    = (n) => (f) => f(n); 
+        const key_func_table = Object.freeze({
+            'w' : make_act(0), 'a' : make_act(3), 's' : make_act(1),
+            'd' : make_act(2), 'p' : make_act(4), 'o' : make_act(5),
+            // pausing is pretty special
+            'Enter' : state_act => {
+                if (state_act !== do_keyup) return;
+                if (pause_overlay.hasClass('overlay-fade-in')) {
+                    me.play();
+                    pause_overlay.removeClass('overlay-fade-in').addClass('overlay-fade-out');
+                } else {
+                    me.pause();
+                    pause_overlay.addClass('overlay-fade-in').removeClass('overlay-fade-out');
+                }
+            }
+        });
         
         if (false) {
             let init_mouse_events = (module, canvas) => {
@@ -88,13 +95,12 @@ let program_state = (() => {
         }
         
         return {
-            on_keyup    : event => do_keyup  (translate_key_code(event.key)),
-            on_keydown  : event => do_keydown(translate_key_code(event.key))
+            on_keyup   : event => (key_func_table[event.key] || (() => {}))(do_keyup  ),
+            on_keydown : event => (key_func_table[event.key] || (() => {}))(do_keydown)
         };
     };
     
-    const setup_play_pause_link = () => {
-        let ppbutton = $('#play-pause');
+    const setup_play_pause_link = (ppbutton) => {
         const play = () => {
             program_state.play();
             ppbutton.text('pause');
@@ -116,7 +122,11 @@ let program_state = (() => {
         // initialize the program state on the C++ side
         module.ccall('js_glue_start', null, null, null);
         m_do_inquiry = module.cwrap('js_describe_components', 'string', ['string']);
-        prepare_scenes_menu(module);
+        
+        const [menu_html, on_click_scene_link] = prepare_scenes_menu(module);
+        // this part is not so functional
+        $('#available-scenes').html(menu_html);
+        $('.scene-link').click(on_click_scene_link);
 
         // window resize event
         const issue_canvas_resize = module.cwrap('js_glue_on_canvas_resize', null, ['number', 'number']);
@@ -129,15 +139,23 @@ let program_state = (() => {
         });
         m_issue_resize();
 
-        m_events = make_event_methods(module);
+        m_events = make_event_methods(module, $('.pause-overlay'));
         
         // main loop
         m_do_update = make_update_routine(module);
         issue_canvas_resize(canvas.width = 800, canvas.height = 600);
         global_2d_context.font = 'bold 20pt Arial';
-        setup_play_pause_link();
+        setup_play_pause_link($('#play-pause'));
         me.play();
         
+        let menu_tag = $('#options-menu');
+        $('#open-menu').click(() => {
+            menu_tag.addClass('slide-in').removeClass('slide-out');
+        });
+        $('#close-menu').click(() => {
+            menu_tag.removeClass('slide-in').addClass('slide-out');
+        });
+
         console.log('module started');
     };
     

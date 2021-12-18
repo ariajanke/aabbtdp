@@ -8,7 +8,7 @@ canvas.emscripten {
     display: flex;
     position: relative;
 }
-#available-scenes{
+#options-menu{
     position: absolute;
     width: 50%;
     height: 50%;
