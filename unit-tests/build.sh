@@ -6,5 +6,5 @@ libs='-L'$(pwd)'/../lib/cul'
 echo $libs
 # if I want to use a debugger I'd do it in IDE
 # optimizations can often reveal bugs
-g++ -std=c++17 -O1 -Wall -pedantic -fno-pretty-templates -DMACRO_PLATFORM_LINUX $libs $sources $includes -lcommon -o .unit-tests
+g++ -std=c++17 -O1 -Wall -pedantic -fno-pretty-templates -DMACRO_PLATFORM_LINUX $libs $sources $includes -o .unit-tests
 ./.unit-tests

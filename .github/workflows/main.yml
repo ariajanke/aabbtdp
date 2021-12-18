@@ -29,8 +29,6 @@ jobs:
           sudo apt update
           sudo apt install make
           sudo apt install g++ -y
-          # unfortunately I can't build cul without SFML... I should make TestSuite header only or something
-          sudo apt install sfml-dev -y
       # Runs a single command using the runners shell
       - name: Prepare libraries
         run: |
