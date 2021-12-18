@@ -29,6 +29,7 @@
 #include <aabbtdp/physics.hpp>
 
 #include <common/Vector2Util.hpp>
+#include <common/Util.hpp>
 
 #include <rigtorp/HashMap.h>
 
@@ -36,18 +37,7 @@
 
 namespace tdp {
 
-template <typename IterType>
-class View {
-public:
-    View(IterType b_, IterType e_): m_beg(b_), m_end(e_) {}
-
-    IterType begin() const { return m_beg; }
-
-    IterType end() const { return m_end; }
-
-private:
-    IterType m_beg, m_end;
-};
+using cul::View;
 
 template <typename ... Types>
 using Tuple = std::tuple<Types...>;

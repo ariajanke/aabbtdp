@@ -55,7 +55,7 @@ namespace {
 
 using Rng = std::default_random_engine;
 using cul::ts::TestSuite, cul::ts::test, cul::ts::set_context, cul::ts::Unit,
-      tdp::CollisionEvent, tdp::Rectangle, tdp::Vector, tdp::Real;
+      tdp::CollisionEvent, tdp::Rectangle, tdp::Vector, tdp::Real, tdp::Size;
 
 #define mark MACRO_MARK_POSITION_OF_CUL_TEST_SUITE
 
@@ -92,6 +92,8 @@ CollisionEvent random_col_event(Iter ent_beg, Iter ent_end, Rng & rng);
 bool are_very_close(const Rectangle & a, const Rectangle & b);
 
 bool are_very_close(const Vector & a, const Vector & b);
+
+bool are_very_close(const Size & a, const Size & b);
 
 bool are_very_close(Real a, Real b);
 
@@ -514,25 +516,104 @@ void do_trim_displacement_for_barriers_tests(TestSuite & suite) {
 }
 
 void do_trim_displacement_tests(TestSuite & suite) {
+    using namespace tdp;
     suite.start_series("trim_displacement");
-    // this function and trespass_occuring will have to be rewritten both
-    // I need a quieter place...
+    set_context(suite, [](TestSuite & suite, Unit & unit) {
+        Rectangle a(0 , 0, 10, 10);
+        Rectangle b(12, 0, 10, 10);
+        unit.start(mark(suite), [&] {
+            // default
+            Vector displacement(1, 0);
+            trim_displacement(a, b, displacement);
+            return test(are_very_close(displacement, Vector{1, 0}));
+        });
+        unit.start(mark(suite), [&] {
+            // small
+            Vector displacement(4, 0);
+            trim_displacement(a, b, displacement);
+            return test(are_very_close(displacement, Vector(2, 0)));
+        });
+        unit.start(mark(suite), [&] {
+            // large (over the entire other rectangle)
+            Vector displacement(23, 0);
+            trim_displacement(a, b, displacement);
+            return test(are_very_close(displacement, Vector(2, 0)));
+        });
+        unit.start(mark(suite), [&] {
+            // huge
+            return test(false);
+            static constexpr const Real k_gap = 2;
+            static auto adding_of_double_a_works = [] (Real a, Real b) {
+                return are_very_close(std::fmod(a*2 + b, a), b);
+            };
+            Real working = 2;
+            while (adding_of_double_a_works(working, k_gap))
+                { working *= 2; }
+            Vector displacement(working, 0);
+            trim_displacement(a, b, displacement);
+            return test(are_very_close(displacement, Vector(k_gap, 0)));
+        });
+    });
 }
 
 void do_trespass_occuring_tests(TestSuite & suite) {
+    using namespace tdp;
     suite.start_series("trespass_occuring");
+    set_context(suite, [](TestSuite & suite, Unit & unit) {
+        Rectangle a(0 , 0, 10, 10);
+        Rectangle b(12, 0, 10, 10);
+        unit.start(mark(suite), [&] {
+            // default
+            return test(!trespass_occuring(a, b, Vector(1, 0)));
+        });
+        unit.start(mark(suite), [&] {
+            // small
+            return test(trespass_occuring(a, b, Vector(4, 0)));
+        });
+        unit.start(mark(suite), [&] {
+            // large (over the entire other rectangle)
+            return test(trespass_occuring(a, b, Vector(23, 0)));
+        });
+        unit.start(mark(suite), [&] {
+            // huge
+            return test(false);
+            // I guess this becomes an arbitrarily choosen value of sorts
+            static constexpr const Real k_gap = 2;
+            static auto adding_of_double_a_works = [] (Real a, Real b) {
+                return are_very_close(std::fmod(a*2 + b, a), b);
+            };
+            Real working = 2;
+            while (adding_of_double_a_works(working, k_gap))
+                { working *= 2; }
+            return test(trespass_occuring(a, b, Vector(working, 0)));
+        });
+    });
 }
 
 void do_misc_tests(TestSuite & suite) {
+    using namespace tdp;
     suite.start_series("misc Helpers");
     // - grow
     // grow one dim
+    mark(suite).test([] {
+        return test(are_very_close(
+            grow(Rectangle(0, 0, 10, 10), Size(0, 5)).height, 15
+        ));
+    });
     // shrink another
+    mark(suite).test([] {
+        return test(are_very_close(
+            grow(Rectangle(0, 0, 10, 10), Size(-3, 0)).width, 7
+        ));
+    });
     // - grow_by_displacement
     // one test case...
-    // - large_displacement_step_count (probably should skip this!)
-    // one case: make sure it makes sense
-    // this only for one/two cases per function!
+    mark(suite).test([] {
+        return test(are_very_close(
+            cul::size_of(grow_by_displacement(Rectangle(0, 0, 10, 10), Vector(-5, 2))),
+            Size(15, 12)
+        ));
+    });
 }
 
 namespace {
@@ -566,6 +647,10 @@ bool are_very_close(const Rectangle & a, const Rectangle & b) {
 }
 
 bool are_very_close(const Vector & a, const Vector & b) {
+    return cul::magnitude(a - b) < k_very_close_error;
+}
+
+bool are_very_close(const Size & a, const Size & b) {
     return cul::magnitude(a - b) < k_very_close_error;
 }
 

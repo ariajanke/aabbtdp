@@ -4,42 +4,16 @@
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>My SPA</title>
-    <style>
-    div.emscripten_border { border: 1px solid black; }
-    /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
-    canvas.emscripten { 
-        border: 0px none; 
-        background-color: black;
-    }
-    .canvas-parent{
-        display: flex;
-        position: relative;
-    }
-    #available-scenes{
-        position: absolute;
-        width: 50%;
-        height: 50%;
-        background: aliceblue;
-        border: black solid 1px;
-        border-radius: 5px;
-        padding: 5px;
-        text-align: center;
-        vertical-align: middle;
-        overflow-y: scroll;
-        top: 25%;
-        left: 25%;
-    }
-    
-    </style>
+    <link rel="stylesheet" href="styles.css">
     <script
         src="https://code.jquery.com/jquery-3.6.0.min.js"
         integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
         crossorigin="anonymous"></script>
     <script type='text/javascript' src='program_state.js'></script>
-    
 </head><body>
 
 <div class="canvas-parent">
+    <div class="pause-overlay"><h1>Paused</h1></div>
     <div id="available-scenes"></div>
     <div class="emscripten_border">
         <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
@@ -93,27 +67,6 @@ var Module = {
 };
 
 Module.setStatus('Downloading...');
-(() => {
-    let ppbutton = document.getElementById('play-pause');
-    let pause = undefined;
-    let play = () => {
-        program_state.play();
-        ppbutton.innerHTML = 'pause';
-        ppbutton.onclick   = pause;
-    };
-
-    pause = () => {
-        program_state.pause();
-        ppbutton.innerHTML = 'play';
-        ppbutton.onclick = play;
-    };
-
-    ppbutton.onclick = pause;
-})();
-
-//document.getElementById('change-scene').onclick = () => program_state.change_scene('');
-//document.getElementById('follow').onclick = () => program_state.change_behavior('follow');
-//document.getElementById('bounce').onclick = () => program_state.change_behavior('bounce');
 
 // key enums are: k_up, k_down, k_right, k_left
 
@@ -130,8 +83,7 @@ var global_2d_context = global_2d_canvas.getContext("2d");
 document.addEventListener('keydown', program_state.on_keydown );
 document.addEventListener('keyup'  , program_state.on_keyup   );
 
-Module['onRuntimeInitialized'] = () =>
-    program_state.setup(Module);
+Module['onRuntimeInitialized'] = () => program_state.setup(Module);
     
     </script>
     {{{ SCRIPT }}}

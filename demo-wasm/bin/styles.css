@@ -1,0 +1,83 @@
+div.emscripten_border { border: 1px solid black; }
+/* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+canvas.emscripten { 
+    border: 0px none; 
+    background-color: black;
+}
+.canvas-parent{
+    display: flex;
+    position: relative;
+}
+#available-scenes{
+    position: absolute;
+    width: 50%;
+    height: 50%;
+    background: aliceblue;
+    border: black solid 1px;
+    border-radius: 5px;
+    padding: 5px;
+    text-align: center;
+    vertical-align: middle;
+    overflow-y: scroll;
+    top: 25%;
+    left: 25%;
+}
+.slide-in {
+    animation-duration: 1s;
+    animation-name: menu-slide-in;
+    animation-fill-mode: forwards;
+}
+.slide-out {
+    animation-duration: 1s;
+    animation-name: menu-slide-out;
+    animation-fill-mode: forwards;
+}
+@keyframes menu-slide-in {
+    from {
+        top: -60%;
+        opacity: 0.1;
+    }
+    to {
+        top: 25%;
+        opacity: 1;
+    }
+}
+@keyframes menu-slide-out {
+    to {
+        top: -60%;
+        opacity: 0.1;
+    }
+    from {
+        top: 25%;
+        opacity: 1;
+    }
+}
+
+.overlay-fade-in {
+    animation-duration: 1s;
+    animation-name: overlay-fade-in;
+    animation-fill-mode: forwards;
+}
+.overlay-fade-out {
+    animation-duration: 1s;
+    animation-name: overlay-fade-out;
+    animation-fill-mode: forwards;
+}
+.pause-overlay {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    background: #7778;
+    text-align: center;
+}
+.pause-overlay h1 {
+    margin: 30% auto auto auto;
+}
+@keyframes overlay-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes overlay-fade-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}

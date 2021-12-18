@@ -1,3 +1,4 @@
+#if 0
 /****************************************************************************
 
     MIT License
@@ -450,3 +451,4 @@ void do_spatial_map_unit_tests(TestSuite & suite) {
         });
     });
 }
+#endif

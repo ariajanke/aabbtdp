@@ -209,9 +209,11 @@ EMSCRIPTEN_KEEPALIVE const char * js_describe_components(const char * component_
 
 namespace {
 
+constexpr const Real k_scale = 2.;
+
 void CanvasDrawer::draw_string_center(const std::string & str, Vector center) {
     int width = em_js_get_text_width(str.c_str());
-    auto r = round(center - m_camera_position);
+    auto r = round((center - m_camera_position)*k_scale);
     r.x -= width / 2;
     
     em_js_set_textBaseline("middle");
@@ -221,18 +223,18 @@ void CanvasDrawer::draw_string_center(const std::string & str, Vector center) {
 void CanvasDrawer::draw_rectangle(const Rectangle & rect, const char * color) {
     em_js_set_fillStyle(color);
     em_js_fill_rect(
-        int(round( -m_camera_position.x + rect.left )),
-        int(round( -m_camera_position.y + rect.top  )),
-        int(round( rect.width  )),
-        int(round( rect.height )));
+        int(round( (rect.left - m_camera_position.x)*k_scale )),
+        int(round( (rect.top  - m_camera_position.y)*k_scale )),
+        int(round( rect.width *k_scale )),
+        int(round( rect.height*k_scale )));
 }
 
 void CanvasDrawer::draw_string_top_left(const std::string & str, Vector top_left) {
     em_js_set_textBaseline("top");
-    draw_string(str, round(top_left - m_camera_position));
+    draw_string(str, round((top_left - m_camera_position)*k_scale));
 }
 
-Size2 CanvasDrawer::draw_area() const { return m_canvas_size; }
+Size2 CanvasDrawer::draw_area() const { return m_canvas_size / k_scale; }
 
 void CanvasDrawer::set_draw_area(Real width, Real height) {
     m_canvas_size = Size2{width, height};
