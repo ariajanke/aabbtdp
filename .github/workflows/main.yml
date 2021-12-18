@@ -36,7 +36,9 @@ jobs:
           git clone https://github.com/rigtorp/HashMap.git HashMap
           git clone https://github.com/ariajanke/aabbtdp.git aabbp
           cd aabbp/lib ; rm -rf cul ; rm -rf HashMap
+          ls ../..
           mv ../../cul cul ; mv ../../HashMap HashMap
+          ls cul ; ls HashMap
           cd ..
 
       # Runs a set of commands using the runners shell
