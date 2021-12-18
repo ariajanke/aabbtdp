@@ -33,7 +33,7 @@ jobs:
       - name: Prepare libraries
         run: |
           git clone https://github.com/ariajanke/util-common.git cul
-          git cone https://github.com/rigtorp/HashMap.git HashMap
+          git clone https://github.com/rigtorp/HashMap.git HashMap
           git clone https://github.com/ariajanke/aabbtdp.git aabbp
           cd aabbp/lib ; rm -rf cul ; rm -rf HashMap
           mv ../../cul cul ; mv ../../HashMap HashMap
