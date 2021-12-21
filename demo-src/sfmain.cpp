@@ -167,7 +167,7 @@ int main() {
 
     {
     SceneOptions options;
-    driver.load_scene(options, /* first-scene */ 10);
+    driver.load_scene(options, /* first-scene */ 3);
 
     }
 

@@ -7,6 +7,8 @@ let program_state = (() => {
     // something modest for js/wasm
     const k_frame_rate = 45;
         
+    // let's try and aim for "as functional as possible"
+    // since we can't be pure AND have interesting things happen...
     let m_do_update;
     let m_needs_to_pause = false;
     let m_events;
@@ -34,6 +36,9 @@ let program_state = (() => {
         
         return [menu_html, function () {
             load_scene(parseInt($(this).attr('scene-number')));
+            $(this).blur();
+            $('#options-menu').removeClass('slide-in').addClass('slide-out');
+            me.play();
         }];
 
     };
@@ -45,6 +50,7 @@ let program_state = (() => {
         const do_render_hud   = module.cwrap('js_glue_render_hud'  , null, null);
         
         return () => {
+            console.log('game started');
             let old_time = new Date();
             const interval = setInterval(() => {
                 if (m_needs_to_pause) {
@@ -71,13 +77,7 @@ let program_state = (() => {
             // pausing is pretty special
             'Enter' : state_act => {
                 if (state_act !== do_keyup) return;
-                if (pause_overlay.hasClass('overlay-fade-in')) {
-                    me.play();
-                    pause_overlay.removeClass('overlay-fade-in').addClass('overlay-fade-out');
-                } else {
-                    me.pause();
-                    pause_overlay.addClass('overlay-fade-in').removeClass('overlay-fade-out');
-                }
+                (pause_overlay.hasClass('overlay-fade-in') ? me.play : me.pause)();
             }
         });
         
@@ -100,77 +100,93 @@ let program_state = (() => {
         };
     };
     
-    const setup_play_pause_link = (ppbutton) => {
-        const play = () => {
-            program_state.play();
-            ppbutton.text('pause');
-            ppbutton.click(pause);
-        };
-        const pause = () => {
-            program_state.pause();
-            ppbutton.text('play');
-            ppbutton.click(play);
-        };
-        ppbutton.click(pause);
+    const begin_game_loop = module => {
+        // main loop
+        m_do_update = make_update_routine(module);
+        
+    };
+    
+    const map_events = canvas_parent => {
+        
+    };
+    
+    const change_class_for = (element, old_class, new_class) => {
+        if (element.hasClass(old_class)) {
+            element.removeClass(old_class);
+            element.addClass(new_class);
+        }
+    };
+    
+    const prepare_html = (module, canvas_parent) => {
+        const sel = (n) => canvas_parent.find(n);
+        const [menu_html, on_click_scene_link] = prepare_scenes_menu(module);
+        // this part is not so functional
+        sel('#available-scenes').html(menu_html);
+        sel('.scene-link').click(on_click_scene_link);
+        
+        let menu_tag = sel('#options-menu');
+        sel('#open-menu').click(() => {
+            menu_tag.addClass('slide-in').removeClass('slide-out');
+        });
+        sel('#close-menu').click(() => {
+            menu_tag.removeClass('slide-in').addClass('slide-out');
+        });
+        sel('#intro-begin').click(me.play);
+        
+        m_events = make_event_methods(module, sel('.pause-overlay'));
+        // all html prepared at this point...
+        begin_game_loop(module);
+        
+        m_issue_resize();
     };
     
     // ----------------------- exposed functions/closures ----------------------
     
     me.setup = (module) => {
         const canvas = global_2d_canvas;
+        $.ajax({ url: 'menus.html', type: "GET", dataType: 'text', 
+            success: (data) => prepare_html(module, $('#everything-else').html(data).parent())
+        });
         
         // initialize the program state on the C++ side
         module.ccall('js_glue_start', null, null, null);
         m_do_inquiry = module.cwrap('js_describe_components', 'string', ['string']);
         
-        const [menu_html, on_click_scene_link] = prepare_scenes_menu(module);
-        // this part is not so functional
-        $('#available-scenes').html(menu_html);
-        $('.scene-link').click(on_click_scene_link);
-
         // window resize event
         const issue_canvas_resize = module.cwrap('js_glue_on_canvas_resize', null, ['number', 'number']);
         $(window).resize(m_issue_resize = () => {
-            canvas.width  = $('.canvas-parent').width ();
-            canvas.height = $('.canvas-parent').height();
-            console.log("w: " + canvas.width + " h: " + canvas.height);
+            $('#canvas').attr('height', canvas.height = $(window).innerHeight());
+            $('#canvas').attr('width' , canvas.width  = $(window).innerWidth ());
+            console.log("resize event w: " + canvas.width + " h: " + canvas.height);
             global_2d_context.font = 'bold 20pt Arial';
             issue_canvas_resize(canvas.width, canvas.height);
         });
-        m_issue_resize();
-
-        m_events = make_event_methods(module, $('.pause-overlay'));
         
-        // main loop
-        m_do_update = make_update_routine(module);
-        issue_canvas_resize(canvas.width = 800, canvas.height = 600);
-        global_2d_context.font = 'bold 20pt Arial';
-        setup_play_pause_link($('#play-pause'));
-        me.play();
+        //issue_canvas_resize(canvas.width = 800, canvas.height = 600);
+        //global_2d_context.font = 'bold 20pt Arial';
         
-        let menu_tag = $('#options-menu');
-        $('#open-menu').click(() => {
-            menu_tag.addClass('slide-in').removeClass('slide-out');
-        });
-        $('#close-menu').click(() => {
-            menu_tag.removeClass('slide-in').addClass('slide-out');
-        });
-
-        console.log('module started');
+        
     };
     
     me.issue_resize = () => m_issue_resize();
     
     me.play = () => {
         m_needs_to_pause = false;
-        m_do_update();
+        $('#pause-overlay').removeClass('overlay-fade-in').addClass('overlay-fade-out');
+        $('.menu').removeClass('slide-in').addClass('slide-out');
+        setTimeout(m_do_update, /* this has to match the css values... should use a getter somehow */ 1000);
     };
     
-    me.pause = () => m_needs_to_pause = true;
+    me.pause = () => {
+        
+        $('#pause-overlay').addClass('overlay-fade-in').removeClass('overlay-fade-out');
+        // $('.menu').addClass('slide-in').removeClass('slide-out');
+        m_needs_to_pause = true;
+    };
     
     m_events = {};
     ['on_keydown', 'on_keyup'].forEach(el => {
-        me[el] = event => m_events[el](event);
+        me[el] = event => m_events ? m_events[el](event) : undefined;
     });
     
     me.describe_components = comp_name => m_do_inquiry(comp_name);

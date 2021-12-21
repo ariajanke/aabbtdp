@@ -1,0 +1,38 @@
+<div id="pause-overlay">
+    <h1>Paused</h1>
+    <a id="open-menu" href="#">Open Menu</a>
+</div>
+<div id="introduction" class="menu slide-in">
+<h2>WASM AABB Physics Demo SPA</h2>
+<p>Welcome to the demo SPA. Use WASD to move the player object, and 
+   &quot;Enter&quot; to pause. When you pause you'll have the option to bring 
+   up the settings and this menu.</p>
+<a href="#" >Options</a><br>
+<a href="#" id="intro-begin">Begin</a>
+</div>
+<div id="options-menu" class="menu">
+    <div id="other-stuff">
+        Algorithm Choice:<br>
+        <input type="radio" name="iteration-algorithm" value="quadratic">
+        <label for="quadratic">Quadratic</label><br>
+        <input type="radio" name="iteration-algorithm" value="interval-sweep">
+        <label for="interval-sweep">Interval Sweep</label><br>
+        <input type="radio" id="javascript" name="iteration-algorithm" value="grid">
+        <label for="grid">Grid</label>
+
+        <label class="container">Show Algorithm Information
+            <input type="checkbox" checked="checked" name="illustrated" value="true">
+            <span class="checkmark"></span>
+        </label>
+        
+        <label class="container">Show Push Level
+            <input type="checkbox" checked="checked" name="push-level" value="true">
+            <span class="checkmark"></span>
+        </label>        
+    </div>
+    <div id="available-scenes"></div>
+    <div>
+        Options
+    </div>
+    <a href="#" id="close-menu">Close Menu</a>
+</div>

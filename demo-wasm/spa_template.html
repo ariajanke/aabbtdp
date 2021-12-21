@@ -3,33 +3,22 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>My SPA</title>
+    <title>WASM AABB Physics Demo SPA</title>
     <link rel="stylesheet" href="styles.css">
     <script
         src="https://code.jquery.com/jquery-3.6.0.min.js"
         integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
         crossorigin="anonymous"></script>
+    <!--<script src=".jquery-3.6.0.min.js"></script>-->
     <script type='text/javascript' src='program_state.js'></script>
 </head><body>
 
-<div class="canvas-parent">
-    <div class="pause-overlay overlay-fade-out">
-        <h1>Paused</h1>
-        <a id="open-menu" href="#">Open Menu</a>
-    </div>
-    <div id="options-menu" class="slide-out">
-        <div id="available-scenes"></div>
-    
-        <div>
-            Options
-        </div>
-        <a href="#" id="close-menu">Close Menu</a>
-    </div>
+<div id="canvas-parent">
+    <div id="everything-else"></div>
     <div class="emscripten_border">
         <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
     </div>
 </div>
-<a id="play-pause">pause</a><br/>
 
 <script type='text/javascript'>
 var Module = {
