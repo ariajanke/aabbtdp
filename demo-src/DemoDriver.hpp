@@ -123,6 +123,8 @@ struct SceneOptions final {
     SightOption sight = k_no_special_sight;
 };
 
+SceneOptions load_options_from_string(const std::string &);
+
 struct SceneOptionItems final {
     SceneOptionItems() {}
 
@@ -226,6 +228,21 @@ private:
     std::vector<std::string> m_scene_names;
 };
 
+class MouseState final {
+public:
+    void on_mouse_press(Vector field_position);
+
+    void on_mouse_move(Vector field_position);
+
+    void on_mouse_release();
+
+    void update_player(Tuple<Velocity &, const Rectangle &> player) const;
+
+private:
+    Vector m_mouse_pos;
+    bool m_mouse_pressed = false;
+};
+
 class DemoDriver final {
 public:
     DemoDriver();
@@ -235,6 +252,12 @@ public:
     void on_press(Key k);
 
     void on_release(Key k);
+
+    void on_mouse_press(Vector field_position);
+
+    void on_mouse_move(Vector field_position);
+
+    void on_mouse_release();
 
     void on_update(Real elapsed_time);
 
@@ -298,7 +321,7 @@ private:
     
     std::array<bool, k_direction_count> m_controls;
     bool m_paused = false, m_frame_advancing = false;
-
+    MouseState m_mouse_state;
     // you see, now I'm putting myself in trouble design wise...
     AlwaysPresentSystems m_always_present_systems;
 

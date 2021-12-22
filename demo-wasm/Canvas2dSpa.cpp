@@ -124,6 +124,7 @@ EM_JS(void, em_js_fill, (), {
 });
 
 EM_JS(void, em_js_throw, (const char * name, const char * what_str), {
+    console.log('exception! ' + Module.UTF8ToString(what_str));
     throw { name: Module.UTF8ToString(name), message: Module.UTF8ToString(what_str) };
 });
 
@@ -141,9 +142,9 @@ EMSCRIPTEN_KEEPALIVE void js_glue_start() {
     });
 }
 
-EMSCRIPTEN_KEEPALIVE void js_glue_load_scene(int scene_number) {
+EMSCRIPTEN_KEEPALIVE void js_glue_load_scene(int scene_number, const char * scene_options) {
     do_try([&] { 
-        SceneOptions options;
+        SceneOptions options = load_options_from_string(scene_options);
         program_state().load_scene(options, scene_number);
     });
 }
@@ -181,6 +182,10 @@ EMSCRIPTEN_KEEPALIVE void js_glue_keydown(int key_id) {
 EMSCRIPTEN_KEEPALIVE void js_glue_keyup(int key_id) {
     do_try([&]{ program_state().on_release(to_impl_key(key_id)); });
 }
+
+EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_down(int mouse_x, int mouse_y) {}
+EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_up  (int mouse_x, int mouse_y) {}
+EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_move(int mouse_x, int mouse_y) {}
 
 EMSCRIPTEN_KEEPALIVE const char * js_glue_get_scene_name(int num) {
     const char * rv = nullptr;

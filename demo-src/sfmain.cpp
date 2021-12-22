@@ -161,18 +161,25 @@ private:
     DrawText m_text_brush;
 };
 
+Vector to_field_position(int mouse_x, int mouse_y, const sf::View &, SizeI);
+
+SizeI size_of(const sf::RenderWindow & window)
+    { return convert_to<SizeI>(window.getSize()); }
+
+sf::View view_of_player(const sf::View &, Vector camera_position);
+
 int main() {
     DemoDriver driver;
     driver.prepare_scenes();
 
     {
-    SceneOptions options;
+    SceneOptions options = load_options_from_string("quadratic,illustrate-algorithm");
     driver.load_scene(options, /* first-scene */ 3);
 
     }
 
     sf::RenderWindow window(sf::VideoMode(k_window_width, k_window_height), " ");
-
+    window.getSize();
     window.setFramerateLimit(60u);
     if (true) {
     auto view = window.getView();
@@ -197,13 +204,27 @@ int main() {
                 if (event.key.code == sf::Keyboard::Escape)
                     window.close();
                 break;
-            case sf::Event::KeyReleased: {
+            case sf::Event::KeyReleased:
                 if (event.key.code == sf::Keyboard::Num0) {
                     SceneOptions options;
                     driver.load_scene(options, 3);
                 }
+                break;            
+            case sf::Event::MouseButtonPressed:
+                driver.on_mouse_press(to_field_position(
+                    event.mouseButton.x, event.mouseButton.y,
+                    view_of_player(window.getView(), driver.camera_center()),
+                    size_of(window)));
                 break;
-            }
+            case sf::Event::MouseButtonReleased:
+                driver.on_mouse_release();
+                break;
+            case sf::Event::MouseMoved:
+                driver.on_mouse_move(to_field_position(
+                    event.mouseMove.x, event.mouseMove.y,
+                    view_of_player(window.getView(), driver.camera_center()),
+                    size_of(window)));
+                break;
             default: break;
             }
         }
@@ -212,11 +233,10 @@ int main() {
         driver.on_update(k_frame_time);
         {
             DrawInterfaceImpl draw_intf{window};
-            auto view = window.getView();
-            view.setCenter(convert_to<sf::Vector2f>(driver.camera_center()));
-            window.setView(view);
+            window.setView(view_of_player(window.getView(), driver.camera_center()));
 
             driver.on_draw_field(draw_intf);
+            auto view = window.getView();
             view.setCenter(view.getSize().x / 2, view.getSize().y / 2);
             window.setView(view);
             driver.on_draw_hud(draw_intf);
@@ -246,4 +266,23 @@ uint8_t get_val(char c) {
     else if (c >= 'a' && c <= 'f') { return (c - 'a') + 10; }
     else if (c >= 'A' && c <= 'F') { return (c - 'A') + 10; }
     else { throw std::invalid_argument(""); }
+}
+
+Vector to_field_position
+    (int mouse_x, int mouse_y, const sf::View & view,
+     SizeI window_size)
+{
+    Vector window_position(Real(mouse_x) / Real(window_size.width ),
+                           Real(mouse_y) / Real(window_size.height));
+    //assert(window_position.x >= 0 && window_position.x <= 1);
+    //assert(window_position.y >= 0 && window_position.y <= 1);
+    auto visible_field_tl = convert_to<Vector>(view.getCenter() - view.getSize()*0.5f);
+    return visible_field_tl + Vector(window_position.x*Real(view.getSize().x),
+                                     window_position.y*Real(view.getSize().y));
+}
+
+sf::View view_of_player(const sf::View & v, Vector camera_position) {
+    auto rv = v;
+    rv.setCenter(convert_to<sf::Vector2f>(camera_position));
+    return rv;
 }

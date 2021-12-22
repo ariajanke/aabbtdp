@@ -231,7 +231,7 @@ inline auto make_sweep_drawer(tdp::IntervalSweepHandler & handler, int hud_line)
     auto handler_ptr = &handler;
     auto str_ptr = std::make_shared<std::string>();
     return [handler_ptr, hud_line, str_ptr] (DrawInterface & intf) {
-        (*str_ptr) = "x wise ";
+        (*str_ptr) = "Iterations for Sweep: x wise ";
         (*str_ptr) += std::to_string(handler_ptr->count_sweep_along_axis(tdp::SweepDirection::x_wise));
         (*str_ptr) += " y wise ";
         (*str_ptr) += std::to_string(handler_ptr->count_sweep_along_axis(tdp::SweepDirection::y_wise));

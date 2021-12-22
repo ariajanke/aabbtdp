@@ -11,28 +11,35 @@
 <a href="#" id="intro-begin">Begin</a>
 </div>
 <div id="options-menu" class="menu">
-    <div id="other-stuff">
-        Algorithm Choice:<br>
-        <input type="radio" name="iteration-algorithm" value="quadratic">
-        <label for="quadratic">Quadratic</label><br>
-        <input type="radio" name="iteration-algorithm" value="interval-sweep">
-        <label for="interval-sweep">Interval Sweep</label><br>
-        <input type="radio" id="javascript" name="iteration-algorithm" value="grid">
-        <label for="grid">Grid</label>
-
-        <label class="container">Show Algorithm Information
-            <input type="checkbox" checked="checked" name="illustrated" value="true">
-            <span class="checkmark"></span>
-        </label>
-        
-        <label class="container">Show Push Level
-            <input type="checkbox" checked="checked" name="push-level" value="true">
-            <span class="checkmark"></span>
-        </label>        
+    <h2>Options</h2>
+    <div style="display: flex;
+                flex-direction: row;
+                justify-content: space-around;">
+        <div id="other-scene-options">
+            Algorithm Choice:<br>
+            <input type="radio" name="iteration-algorithm" value="quadratic">
+            <label for="quadratic">Quadratic</label><br>
+            <input type="radio" name="iteration-algorithm" value="sweep" checked>
+            <label for="sweep">Interval Sweep</label><br>
+            <input type="radio" id="javascript" name="iteration-algorithm" value="grid">
+            <label for="grid">Grid</label><br>
+            Visuals:<br>
+            <label class="container">Show Algorithm Information
+                <input type="checkbox" checked="checked" name="illustrated" value="true">
+                <span class="checkmark"></span>
+            </label><br>
+            
+            <label class="container">Show Push Level
+                <input type="checkbox" checked="checked" name="push-level" value="true">
+                <span class="checkmark"></span>
+            </label>        
+        </div>
+        <div>
+            Scenes: <br>
+            <span id="available-scenes"></span>
+        </div>
     </div>
-    <div id="available-scenes"></div>
-    <div>
-        Options
-    </div>
-    <a href="#" id="close-menu">Close Menu</a>
+    
+    <a href="#" id="close-menu">Close Menu</a> - 
+    <a href="#" >Resume</a>
 </div>

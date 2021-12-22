@@ -72,9 +72,20 @@ body {
     position: absolute;
     background: #7778;
     text-align: center;
+    
 }
 #pause-overlay h1 {
     margin: 30% auto auto auto;
+    text-shadow: -2px -2px white,
+                  2px -2px white,
+                 -2px  2px white,
+                  2px  2px white;
+}
+#pause-overlay a {
+    color: white;
+    background-color: #3339;
+    border-radius: 5px;
+    padding: 5px;
 }
 @keyframes overlay-fade-in {
     from { opacity: 0; }
@@ -83,4 +94,14 @@ body {
 @keyframes overlay-fade-out {
     from { opacity: 1; }
     to   { opacity: 0; }
+}
+#other-scene-options {
+    text-align: left;
+}
+a {
+    color:black;
+    text-decoration-style: dashed;
+}
+a:hover {
+    text-decoration-style: solid;
 }

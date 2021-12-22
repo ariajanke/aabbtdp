@@ -26,6 +26,8 @@
 
 #include "DemoDriver.hpp"
 
+#include <common/StringUtil.hpp>
+
 #include <random>
 
 namespace {
@@ -33,6 +35,8 @@ namespace {
 constexpr const Rectangle k_field_rectangle{0, 0, k_field_width, k_field_height};
 constexpr const auto k_block_layer = layers::k_block;
 using std::make_tuple;
+
+using namespace cul::exceptions_abbr;
 
 Entity make_player_for_any_scene(EntityManager & entity_manager);
 
@@ -122,7 +126,64 @@ void spawn_random_rectangles
     }
 }
 
+bool is_comma(char c) { return c == ','; }
+
 } // end of <anonymous> namespace
+
+SceneOptions load_options_from_string(const std::string & str) {
+    static const auto k_mutators = [] {
+        using Mutator = void(*)(SceneOptions &);
+        using std::make_pair;
+        return std::unordered_map<std::string, Mutator> {
+            make_pair("quadratic", [](SceneOptions & opts)
+                { opts.algorithm = SceneOptions::k_quadratic; }),
+            make_pair("sweep", [](SceneOptions & opts)
+                { opts.algorithm = SceneOptions::k_sweep; }),
+            make_pair("grid", [](SceneOptions & opts)
+                { opts.algorithm = SceneOptions::k_grid; }),
+
+            make_pair("illustrate-algorithm", [](SceneOptions & opts)
+                { opts.illustrated = true; }),
+            make_pair("show-push-level", [](SceneOptions & opts)
+                { opts.show_push_level = true; }),
+            make_pair("no-illustrate-algorithm", [](SceneOptions & opts)
+                { opts.illustrated = false; }),
+            make_pair("no-show-push-level", [](SceneOptions & opts)
+                { opts.show_push_level = false; }),
+
+            make_pair("normal-sight", [](SceneOptions & opts)
+                { opts.sight = SceneOptions::k_no_special_sight; }),
+            make_pair("special-sight", [](SceneOptions & opts)
+                { opts.sight = SceneOptions::k_sight; }),
+            make_pair("special-sight-outline", [](SceneOptions & opts)
+                { opts.sight = SceneOptions::k_sight_with_outline; }),
+        };
+    } ();
+    using StrIter = decltype(str.begin());
+    static const auto k_availables_list = [] {
+        std::string list_str;
+        for (const auto & pair : k_mutators) {
+            list_str += pair.first + ", ";
+        }
+        list_str.erase(list_str.end() - 2, list_str.end());
+        return list_str;
+    } ();
+    static auto verify_mutator_presence = [] (StrIter beg, StrIter end) {
+        auto itr = k_mutators.find(std::string(beg, end));
+        if (itr == k_mutators.end()) {
+            throw InvArg(  "load_options_from_string: \"" + std::string(beg, end)
+                         + "\" is not an available scene option, they are ("
+                         + k_availables_list + ").");
+        }
+        return itr->second;
+    };
+
+    SceneOptions options;
+    cul::for_split<is_comma>(str.begin(), str.end(),
+        [&options](StrIter beg, StrIter end)
+    { verify_mutator_presence(beg, end)(options); });
+    return options;
+}
 
 SceneOptionItems
     make_from_scene_options(const SceneOptions & scene_options)
@@ -188,11 +249,11 @@ SceneOptionItems
 void SceneDriver::prepare_scenes() {
     using Loader = Scene::Loader;
     // empty scene
-    push_new_scene("empty", [](Loader &){});
+    push_new_scene("Empty", [](Loader &){});
 
     // of course... scene doesn't load in new systems (*can* be added though)
     // high speed projectile
-    push_new_scene("fast projectile", [](Loader & maker) {
+    push_new_scene("Fast Projectile", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(100, 100), Size2(80, 4));
         e.add<Color>() = "#B9B";
@@ -210,8 +271,7 @@ void SceneDriver::prepare_scenes() {
         // player is made automatically...
     });
 
-    // few spread about
-    push_new_scene("few spread about", [](Loader & maker) {
+    push_new_scene("Few Spread About", [](Loader & maker) {
         static constexpr const int k_pushers = 25;
         for (int i = 0; i != k_pushers; ++i) {
             auto e = maker.make_entity();
@@ -222,8 +282,7 @@ void SceneDriver::prepare_scenes() {
         }
     });
 
-    // many close together
-    push_new_scene("many close together", [](Loader & maker) {
+    push_new_scene("Many Close Together", [](Loader & maker) {
         static constexpr const int k_pushers = 100;
         for (int i = 0; i != k_pushers; ++i) {
             auto e = maker.make_entity();
@@ -235,7 +294,7 @@ void SceneDriver::prepare_scenes() {
     });
 
     // many spread apart
-    push_new_scene("many spread apart", [](Loader & maker) {
+    push_new_scene("Many Spread Apart", [](Loader & maker) {
         static constexpr const int k_pushers = 100;
         for (int i = 0; i != k_pushers; ++i) {
             auto e = maker.make_entity();
@@ -246,7 +305,7 @@ void SceneDriver::prepare_scenes() {
             e.add<Name>() = "P" + std::to_string(i);
         }
     });
-    push_new_scene("random blocks", [](Loader & maker) {
+    push_new_scene("Random Blocks", [](Loader & maker) {
         std::default_random_engine rng { 0x01239ABC };
         auto e = maker.make_entity();
         e.add<Color>() = "#F00";
@@ -258,7 +317,7 @@ void SceneDriver::prepare_scenes() {
         e.request_deletion();
     });
 
-    push_new_scene("corner blocks", [](Loader & maker) {
+    push_new_scene("Corner Blocks", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), Size2 (80, 20));
         e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#D77", k_block_layer);
@@ -276,7 +335,7 @@ void SceneDriver::prepare_scenes() {
         e.add<Name, Color, Layer>() = make_tuple("BLOCK D", "#D7D", k_block_layer);
     });
 
-    push_new_scene("head on collision", [](Loader & maker) {
+    push_new_scene("Head on Collision", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(500, 400), Size2(30, 30));
         e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#C7C", k_block_layer);
@@ -288,7 +347,7 @@ void SceneDriver::prepare_scenes() {
         e.add<Velocity>() = Vector(100, -100);
     });
 
-    push_new_scene("head on collision 2", [](Loader & maker) {
+    push_new_scene("Head on Collision 2", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(-200, -200), Size2(30, 30));
         e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#7CC", k_block_layer);
@@ -300,7 +359,7 @@ void SceneDriver::prepare_scenes() {
         e.add<Velocity>() = Vector(-100, -0.1);
     });
 
-    push_new_scene("bouncy block", [](Loader & maker) {
+    push_new_scene("Bouncy Block", [](Loader & maker) {
         std::default_random_engine rng {std::random_device{}()};
         auto e = maker.make_entity();
         e.add<Bouncy>();
@@ -316,7 +375,7 @@ void SceneDriver::prepare_scenes() {
         e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
     });
 
-    push_new_scene("pushable and not", [](Loader & maker) {
+    push_new_scene("Pushable and Not", [](Loader & maker) {
         static const Size2 k_size(30, 30);
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), k_size);
@@ -452,6 +511,34 @@ void SceneDriver::load_scene(int scene_choice, EntityManager & entity_manager, E
     }
 }
 
+// ----------------------------------------------------------------------------
+
+void MouseState::on_mouse_press(Vector field_position) {
+    m_mouse_pressed = true;
+    on_mouse_move(field_position);
+}
+
+void MouseState::on_mouse_move(Vector field_position) {
+    m_mouse_pos = field_position;
+}
+
+void MouseState::on_mouse_release() {
+    m_mouse_pressed = false;
+}
+
+void MouseState::update_player
+    (Tuple<Velocity &, const Rectangle &> player) const
+{
+    if (!m_mouse_pressed) return;
+    using std::get;
+
+    auto diff = m_mouse_pos - center_of(get<const Rectangle &>(player));
+    if (cul::magnitude(diff) < 5) return;
+    get<Velocity &>(player) = cul::normalize(diff)*k_player_speed;
+}
+
+// ----------------------------------------------------------------------------
+
 DemoDriver::DemoDriver() {
     std::fill(m_controls.begin(), m_controls.end(), false);
 }
@@ -480,6 +567,15 @@ void DemoDriver::on_release(Key k) {
     }
 }
 
+void DemoDriver::on_mouse_press(Vector field_position)
+    { m_mouse_state.on_mouse_press(field_position); }
+
+void DemoDriver::on_mouse_move(Vector field_position)
+    { m_mouse_state.on_mouse_move(field_position); }
+
+void DemoDriver::on_mouse_release()
+    { m_mouse_state.on_mouse_release(); }
+
 void DemoDriver::on_update(Real elapsed_time) {
     if (!m_paused || m_frame_advancing) {
         cul::for_all_of_base<TimeAware>(m_always_present_systems,
@@ -502,7 +598,8 @@ void DemoDriver::on_update(Real elapsed_time) {
         if (left_xor_right || up_xor_down) {
             vel = cul::normalize(Vector(vel.x, vel.y))*k_player_speed;
         } else {
-            vel = Vector();
+            // if no key events follow mouse events
+            m_mouse_state.update_player(m_player.get<Velocity, Rectangle>());
         }
     }
 
