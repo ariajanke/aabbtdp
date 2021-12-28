@@ -40,6 +40,7 @@ static constexpr const auto k_y_wise = tdp::SweepDirection::y_wise;
 namespace tdp {
 
 void SweepContainer::for_each_sequence(SequenceInterface & intf) {
+    // having to call this is *slightly* redundent...
     update_broad_boundries(m_reorder.begin(), m_reorder.end());
     for_each_sequence_(intf);
 }

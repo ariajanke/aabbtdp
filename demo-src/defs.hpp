@@ -44,7 +44,8 @@ using ecs::EntityRef;
 using VectorI   = cul::Vector2<int>;
 using SizeI     = cul::Size2<int>;
 
-using cul::center_of, cul::bottom_of, cul::right_of, cul::convert_to;
+using cul::center_of, cul::bottom_of, cul::right_of, cul::convert_to,
+      cul::magnitude, cul::normalize, cul::set_top_left_of, cul::top_left_of;
 
 template <typename ... Types>
 using Tuple = std::tuple<Types...>;

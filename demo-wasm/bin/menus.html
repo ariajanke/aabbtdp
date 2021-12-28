@@ -1,14 +1,18 @@
-<div id="pause-overlay">
+<div id="pause-overlay" class="on-field">
     <h1>Paused</h1>
-    <a id="open-menu" href="#">Open Menu</a>
+    <a class="show-options" href="#">Open Menu</a>
+    <a class="resume-demo" href="#">Resume</a>
+</div>
+<div id="pause-button" class="on-field">
+    <a href="#" class="pause-demo">PAUSE</a>
 </div>
 <div id="introduction" class="menu slide-in">
-<h2>WASM AABB Physics Demo SPA</h2>
-<p>Welcome to the demo SPA. Use WASD to move the player object, and 
-   &quot;Enter&quot; to pause. When you pause you'll have the option to bring 
-   up the settings and this menu.</p>
-<a href="#" >Options</a><br>
-<a href="#" id="intro-begin">Begin</a>
+    <h2>WASM AABB Physics Demo SPA</h2>
+    <p>Welcome to the demo SPA. Use WASD to move the player object, and 
+       &quot;Enter&quot; to pause. When you pause you'll have the option to bring 
+       up the settings and this menu.</p>
+    <a href="#" class="show-options">Options</a><br>
+    <a href="#" class="resume-demo">Begin</a>
 </div>
 <div id="options-menu" class="menu">
     <h2>Options</h2>
@@ -39,7 +43,7 @@
             <span id="available-scenes"></span>
         </div>
     </div>
-    
-    <a href="#" id="close-menu">Close Menu</a> - 
-    <a href="#" >Resume</a>
+    <a href="#" class="show-intro">Back to Introduction</a> - 
+    <a href="#" class="close-menu">Close Menu</a> - 
+    <a href="#" class="resume-demo">Resume</a>
 </div>

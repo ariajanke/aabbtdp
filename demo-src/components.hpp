@@ -145,7 +145,7 @@ inline auto make_collision_matrix() {
     return rv;
 }
 
-
+#if 0
 template <typename ... Types>
 tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time) {
     tdp::Entry entry;
@@ -180,3 +180,4 @@ tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time) {
         entry.collision_layer = layers::k_block;
     return entry;
 }
+#endif

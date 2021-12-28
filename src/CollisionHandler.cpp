@@ -192,7 +192,8 @@ private:
 };
 
 void do_collision_work
-    (EventHandler & event_handler, IterationBase & group_method, const CollisionMatrix & collision_matrix,
+    (EventHandler & event_handler, IterationBase & group_method,
+     const CollisionMatrix & collision_matrix,
      EventRecorder & event_recorder, EntryMapView entries_view)
 {
     for (auto & pair : entries_view) {
@@ -229,13 +230,13 @@ void do_collision_work
 
             // The pushed entity should move with a higher priority
             other_entry.priority  = iteration + 1;
-            other_entry.nudge    += get<Vector>(gv);
+            other_entry.nudge    += get<Vector>(gv); // shoud I update board boundries here?!
             should_check_more     = true;
             event_recorder.emplace_event(other_entry.entity, entry.entity, CollisionEvent::k_push);
         });
     }
 
-    absorb_nudges(entries_view);
+    absorb_nudges(entries_view); // shoud I update board boundries here?!
 
     // start finalizing
     assert(iteration > 0);

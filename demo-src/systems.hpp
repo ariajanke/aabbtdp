@@ -55,7 +55,18 @@ public:
     void update(const ContainerView & view) {
         for (auto & e : view) {
             auto entry = to_pentry(e, elapsed_time());
-            if (!entry.entity) continue;
+            if (   entry.collision_layer == tdp::Entry::k_no_layer
+                && entry.entity) {
+                to_pentry(e, elapsed_time());
+            }
+            bool skip = !entry.entity;
+            if (skip && e.has_all<Rectangle, Velocity>()) {
+                set_top_left_of(e.get<Rectangle>(),
+                      top_left_of(e.get<Rectangle>())
+                    + e.get<Velocity>().as_vector()*elapsed_time());
+                continue;
+            }
+            if (skip) continue;
             m_handler->update_entry(entry);
         }
         m_handler->run(EventHandlerImpl::instance());

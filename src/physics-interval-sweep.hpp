@@ -54,10 +54,10 @@ public:
     // something to test extensively :)
     static constexpr const int  k_use_quadratic_thershold = 20;
 
-    static Real low_x (const FullEntry & fe) { return fe.low_x ; }
-    static Real low_y (const FullEntry & fe) { return fe.low_y ; }
-    static Real high_x(const FullEntry & fe) { return fe.high_x; }
-    static Real high_y(const FullEntry & fe) { return fe.high_y; }
+    static Real low_x (const FullEntry & fe) { return fe.board_bounds.low_x ; }
+    static Real low_y (const FullEntry & fe) { return fe.board_bounds.low_y ; }
+    static Real high_x(const FullEntry & fe) { return fe.board_bounds.high_x; }
+    static Real high_y(const FullEntry & fe) { return fe.board_bounds.high_y; }
 
 protected:
     using WsIter = std::vector<FullEntry *>::iterator;

@@ -29,10 +29,16 @@
 
 /* private static */ CollisionSystem::PEntry CollisionSystem::to_pentry
     (const Entity & entity, Real elapsed_time)
-{
-    //if (!entity.has_all<Rectangle, Layer>()) return PEntry{};
+{    
     if (!entity.has<Rectangle>()) return PEntry{};
     CollisionSystem::PEntry entry;
+    {
+    const auto * layer = entity.ptr<Layer>();
+    if (!layer) return PEntry{};
+    if (*layer == layers::k_passive) return PEntry{};
+    entry.collision_layer = layer->value;
+    }
+
     entry.bounds = entity.get<Rectangle>();
     if (auto * vel = entity.ptr<Velocity>())
         entry.displacement = vel->as_vector()*elapsed_time;
@@ -42,13 +48,9 @@
         entry.positive_barrier.x = right_of (lims->value);
         entry.positive_barrier.y = bottom_of(lims->value);
     }
-    if (auto * layer = entity.ptr<Layer>()) {
-        entry.collision_layer = layer->value;
-    } else {
-        entry.collision_layer = layers::k_passive;
-    }
+
     entry.pushable = entity.has<Pushable>();
-    entry.entity = entity;
+    entry.entity   = entity;
     return entry;
 }
 

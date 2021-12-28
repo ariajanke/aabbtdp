@@ -104,13 +104,6 @@ public:
     }
 
 private:
-#   if 0
-    enum EventAge {
-        k_old    , // delete on update
-        k_updated, // mark old, move on
-        k_new      // send to handler
-    };
-#   endif
     struct AgeInfo final {
         AgeInfo() {}
         AgeInfo(bool has_been_sent_, int frames_since_last_update_):
@@ -145,6 +138,16 @@ private:
 
 constexpr const int k_default_priority = 0;
 
+struct BoardBoundries {
+    BoardBoundries() {}
+    BoardBoundries(Real low_x_, Real low_y_, Real high_x_, Real high_y_):
+        low_x(low_x_), low_y(low_y_), high_x(high_x_), high_y(high_y_)
+    {}
+
+    // board phase boundries
+    Real low_x, low_y, high_x, high_y;
+};
+
 struct FullEntry final : public tdp::Entry {
     // record only useful during a frame
     int priority = k_default_priority;
@@ -154,8 +157,7 @@ struct FullEntry final : public tdp::Entry {
     // for swptry2
     Vector nudge;
 
-    // board phase boundries
-    Real low_x, low_y, high_x, high_y;
+    BoardBoundries board_bounds;
 };
 
 using EntityHasher =
@@ -168,15 +170,23 @@ using EntityHasher =
 using EntryEntityRefMap = std::unordered_map<Entity, FullEntry, EntityHasher>;
 using EntryMapView      = View<EntryEntityRefMap::iterator>;
 
+BoardBoundries compute_board_boundries(const FullEntry &);
+BoardBoundries compute_board_boundries
+    (const Rectangle &, const Vector & full_displacement, const Size & growth);
+#if 1
+Rectangle as_rectangle(const BoardBoundries &);
+#endif
+#if 0
 void update_broad_boundries(FullEntry &);
-
+#endif
 void absorb_nudge(FullEntry &);
 
 template <typename Iter, typename ToReference>
 void update_broad_boundries(Iter beg, Iter end, ToReference && to_ref) {
     for (auto itr = beg; itr != end; ++itr) {
         FullEntry & ref = to_ref(itr);
-        update_broad_boundries(ref);
+        ref.board_bounds = compute_board_boundries(ref);
+        //update_broad_boundries(ref);
     }
 }
 

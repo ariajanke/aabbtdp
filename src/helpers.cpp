@@ -140,6 +140,36 @@ std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
 
 // -------------------------------- FullEntry ---------------------------------
 
+BoardBoundries compute_board_boundries(const FullEntry & entry) {
+    return compute_board_boundries(entry.bounds, entry.nudge + entry.displacement,
+                                   entry.growth);
+}
+
+BoardBoundries compute_board_boundries
+    (const Rectangle & bounds, const Vector & full_displacement, const Size & growth)
+{
+    using cul::top_left_of, cul::size_of, std::min, std::max, cul::right_of,
+          cul::bottom_of;
+    const Rectangle future_rect = grow(
+        Rectangle{top_left_of(bounds) + full_displacement, size_of(bounds)},
+        growth);
+    return BoardBoundries{
+        min(bounds.left, future_rect.left),
+        min(bounds.top , future_rect.top ),
+        max(right_of (bounds), right_of (future_rect)),
+        max(bottom_of(bounds), bottom_of(future_rect))
+    };
+}
+#if 1
+Rectangle as_rectangle(const BoardBoundries & bounds) {
+    return Rectangle{
+        bounds.low_x, bounds.low_y,
+        bounds.high_x - bounds.low_x,
+        bounds.high_y - bounds.low_y
+    };
+}
+#endif
+#if 0
 void update_broad_boundries(FullEntry & entry) {
     using cul::top_left_of, cul::size_of, std::min, std::max, cul::right_of,
           cul::bottom_of;
@@ -151,7 +181,7 @@ void update_broad_boundries(FullEntry & entry) {
     entry.high_x = max(right_of (entry.bounds), right_of (future_rect));
     entry.high_y = max(bottom_of(entry.bounds), bottom_of(future_rect));
 }
-
+#endif
 void absorb_nudge(FullEntry & entry) {
     entry.displacement += entry.nudge;
     entry.nudge         = Vector{};
@@ -216,6 +246,169 @@ HitSide trim_displacement_for_barriers
     return HitSide(h_dir, v_dir);
 }
 
+class TriangleStrips {
+public:
+    using Triple = Tuple<Vector, Vector, Vector>;
+    TriangleStrips(const Triple & a, const Triple & b):
+        m_count(2),
+        m_impl({ a, b, Triple{}, Triple{} })
+    {}
+
+    TriangleStrips(const Triple & a, const Triple & b, const Triple & c, const Triple & d):
+        m_count(4),
+        m_impl({ a, b, c, d })
+    {}
+
+    auto begin() const { return m_impl.cbegin(); }
+    auto end  () const { return m_impl.cbegin() + m_count; }
+
+private:
+    int m_count;
+    std::array<Triple, 4> m_impl;
+};
+
+TriangleStrips as_strips(const Rectangle &);
+
+Tuple<Vector, Vector, Vector, Vector>
+    get_tl_tr_bl_br(const Rectangle &);
+
+TriangleStrips as_strips(const Rectangle & rect) {
+    const static auto tri = [](Vector a, Vector b, Vector c) { return std::make_tuple(a, b, c); };
+    const auto [tl, tr, bl, br] = get_tl_tr_bl_br(rect);
+    return TriangleStrips(tri(tl, tr, bl), tri(tr, bl, br));
+}
+
+Tuple<Vector, Vector, Vector, Vector>
+    get_tl_tr_bl_br(const Rectangle & rect)
+{
+    return std::make_tuple(top_left_of   (rect), top_right_of   (rect),
+                           bottom_left_of(rect), bottom_right_of(rect));
+}
+
+template <std::size_t kt_pos, std::size_t kt_count>
+TriangleStrips::Triple get_triple
+    (const std::array<Vector, kt_count> & arr)
+{
+    static_assert(kt_count > kt_pos + 2, "Must not access an invalid index in array.");
+    return std::make_tuple(arr[kt_pos + 0], arr[kt_pos + 1], arr[kt_pos + 2]);
+}
+
+std::array<Vector, 6> get_polygonal_strip
+    (const Rectangle & rect, const Vector & displc)
+{
+    // if I do it from corners.. I may find a way to reduce redundancy in my
+    // code after I write it
+    // at this point... we know both displacement values are not trivial, so
+    // it will always be from one corner to another
+    //
+    // This will be a fun thing to run through an optimizer c:
+    const auto [otl, otr, obl, obr] = get_tl_tr_bl_br(rect);
+    const auto [ntl, ntr, nbl, nbr] = get_tl_tr_bl_br(displace(rect, displc));
+    // complement directions are very similar except the middle two points
+    /*  */ if (displc.x > 0 && displc.y > 0) { // +, +
+        return { otr, ntr, otl, nbr, obl, nbl };
+    } else if (displc.x < 0 && displc.y > 0) { // -, +
+        return { otl, ntl, otr, nbl, obr, nbr };
+    } else if (displc.x > 0 && displc.y < 0) { // +, -
+        return { otl, ntl, obl, ntr, obr, nbr };
+    } else if (displc.x < 0 && displc.y < 0) { //  -, -
+        // here's a guess...
+        return { otr, ntr, obr, ntl, obl, nbl };
+    }
+    throw InvArg("get_polygonal_strip: Assumption failed: function only "
+                 "accepts non-trivial values for both components for "
+                 "displacement.");
+}
+
+TriangleStrips
+    get_strips(const Rectangle & rect, const Vector & displc)
+{
+    // I don't really want to use "error"
+    constexpr const Real k_error = 0.0005;
+    const bool tiny_x = displc.x*displc.x < k_error*k_error;
+    const bool tiny_y = displc.x*displc.x < k_error*k_error;
+    if (tiny_x && tiny_y) {
+        return as_strips(rect);
+    } else if (tiny_x || tiny_y) {
+        return as_strips(as_rectangle(compute_board_boundries(rect, displc, Size{})));
+    }
+    assert(!tiny_x && !tiny_y);
+    const auto poly_strip = get_polygonal_strip(rect, displc);
+    return TriangleStrips{
+        get_triple<0>(poly_strip), get_triple<1>(poly_strip),
+        get_triple<2>(poly_strip), get_triple<3>(poly_strip)
+    };
+}
+
+template <typename T, std::size_t kt_count_a, std::size_t kt_count_b>
+constexpr std::array<T, kt_count_a + kt_count_b> concat_arrays
+    (const std::array<T, kt_count_a> & a, const std::array<T, kt_count_b> & b)
+{
+    std::array<T, kt_count_a + kt_count_b> rv;
+    for (std::size_t i = 0; i != kt_count_a; ++i)
+        rv[i] = a[i];
+    for (std::size_t i = 0; i != kt_count_b; ++i)
+        rv[i + kt_count_a] = b[i];
+    return rv;
+}
+
+template <std::size_t kt_index = 0, typename Head, typename ... Types>
+constexpr std::array<Head, (1 + sizeof...(Types) - kt_index)>
+    to_array(const Tuple<Head, Types...> & tuple)
+{
+    auto first_as_array = std::array { std::get<kt_index>(tuple) };
+    if constexpr (kt_index == sizeof...(Types)) {
+        return first_as_array;
+    } else {
+        return concat_arrays( first_as_array,
+                              to_array<kt_index + 1, Head, Types...>(tuple) );
+    }
+
+}
+
+bool is_inside_triangle(const TriangleStrips::Triple & triangle, const Vector & pt) {
+    using cul::cross, std::get, std::all_of;
+    auto products = {
+        cross(get<0>(triangle), pt), cross(get<1>(triangle), pt),
+        cross(get<2>(triangle), pt) };
+    // reminder from geometry: zero cross product = parallel vectors
+    if (all_of(products.begin(), products.end(), [](Real x) { return x < 0; }))
+        return true;
+
+    return all_of(products.begin(), products.end(), [](Real x) { return x > 0; });
+}
+
+Real find_overlapping_portion
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{
+    const auto board_bounds = as_rectangle(compute_board_boundries(rect, displc, Size{}));
+    // fast way out
+    if (!overlaps(board_bounds, other)) return 1;
+    // long match
+    const auto other_pts = to_array(get_tl_tr_bl_br(other));
+    for (const auto & triangle : get_strips(rect, displc)) {
+        for (const auto & pt : other_pts) {
+            is_inside_triangle(triangle, pt);
+        }
+    }
+    // am I over doing this?
+    const auto strips = get_strips(rect, displc);
+    // if any one point is in any strip then
+
+    const auto [tl, tr, bl, br] = get_tl_tr_bl_br(other);
+
+    {
+    ;
+
+    }
+    throw "unimplemented";
+}
+
+#if 0
+Tuple<HitSide, Vector> trim_displacement
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{}
+#endif
 HitSide trim_displacement
     (const Rectangle & rect, const Rectangle & other, Vector & displc)
 {

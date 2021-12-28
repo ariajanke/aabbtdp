@@ -42,7 +42,7 @@ VectorI find_rectangle_start
 
 inline VectorI find_rectangle_start
     (const FullEntry & entry, const Size & cell_size, const Vector & offset)
-{ return find_rectangle_start(entry.low_x, entry.low_y, cell_size, offset); }
+{ return find_rectangle_start(entry.board_bounds.low_x, entry.board_bounds.low_y, cell_size, offset); }
 
 RectangleI find_rectangle_range
     (Real low_x, Real low_y, Real high_x, Real high_y,
@@ -51,7 +51,8 @@ RectangleI find_rectangle_range
 inline RectangleI find_rectangle_range
     (const FullEntry & entry, const Size & cell_size, const Vector & offset)
 {
-    return find_rectangle_range(entry.low_x, entry.low_y, entry.high_x, entry.high_y,
+    return find_rectangle_range(entry.board_bounds.low_x, entry.board_bounds.low_y,
+                                entry.board_bounds.high_x, entry.board_bounds.high_y,
                                 cell_size, offset);
 }
 

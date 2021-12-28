@@ -173,7 +173,7 @@ int main() {
     driver.prepare_scenes();
 
     {
-    SceneOptions options = load_options_from_string("quadratic,illustrate-algorithm");
+    SceneOptions options;
     driver.load_scene(options, /* first-scene */ 3);
 
     }

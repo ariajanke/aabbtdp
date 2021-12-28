@@ -513,28 +513,26 @@ void SceneDriver::load_scene(int scene_choice, EntityManager & entity_manager, E
 
 // ----------------------------------------------------------------------------
 
-void MouseState::on_mouse_press(Vector field_position) {
+void MouseState::on_mouse_press(Vector field_position, const Rectangle & player_bounds) {
     m_mouse_pressed = true;
-    on_mouse_move(field_position);
+    on_mouse_move(field_position, player_bounds);
 }
 
-void MouseState::on_mouse_move(Vector field_position) {
-    m_mouse_pos = field_position;
-}
-
-void MouseState::on_mouse_release() {
-    m_mouse_pressed = false;
-}
-
-void MouseState::update_player
-    (Tuple<Velocity &, const Rectangle &> player) const
-{
+void MouseState::on_mouse_move(Vector field_position, const Rectangle & player_bounds) {
     if (!m_mouse_pressed) return;
-    using std::get;
 
-    auto diff = m_mouse_pos - center_of(get<const Rectangle &>(player));
-    if (cul::magnitude(diff) < 5) return;
-    get<Velocity &>(player) = cul::normalize(diff)*k_player_speed;
+    auto diff = field_position - center_of(player_bounds);
+    if (magnitude(diff) < k_stop_thershold) return;
+    m_direction = normalize(diff);
+}
+
+void MouseState::on_mouse_release() { m_mouse_pressed = false; }
+
+void MouseState::update_player(Velocity & velocity) const {
+    using std::get;
+    if (!m_mouse_pressed) return;
+
+    velocity = m_direction*k_player_speed;
 }
 
 // ----------------------------------------------------------------------------
@@ -567,11 +565,14 @@ void DemoDriver::on_release(Key k) {
     }
 }
 
-void DemoDriver::on_mouse_press(Vector field_position)
-    { m_mouse_state.on_mouse_press(field_position); }
+void DemoDriver::on_mouse_press(Vector field_position) {
+    m_msq.get<Rectangle>() =
+        Rectangle{field_position - Vector{5, 5}, Size2{10, 10}};
+    m_mouse_state.on_mouse_press(field_position, m_player.get<Rectangle>());
+}
 
 void DemoDriver::on_mouse_move(Vector field_position)
-    { m_mouse_state.on_mouse_move(field_position); }
+    { m_mouse_state.on_mouse_move(field_position, m_player.get<Rectangle>()); }
 
 void DemoDriver::on_mouse_release()
     { m_mouse_state.on_mouse_release(); }
@@ -599,7 +600,7 @@ void DemoDriver::on_update(Real elapsed_time) {
             vel = cul::normalize(Vector(vel.x, vel.y))*k_player_speed;
         } else {
             // if no key events follow mouse events
-            m_mouse_state.update_player(m_player.get<Velocity, Rectangle>());
+            m_mouse_state.update_player(m_player.get<Velocity>());
         }
     }
 
@@ -640,6 +641,9 @@ void DemoDriver::load_scene
 
     m_physics_handler->set_collision_matrix(make_collision_matrix());
     std::get<CollisionSystem>(m_always_present_systems).assign_handler(*m_physics_handler);
+
+    m_msq = m_ent_manager.make_entity();
+    m_msq.add<Layer, Color, Rectangle>() = make_tuple(layers::k_passive, "#F00", Rectangle{0, 0, 20, 20});
 }
 
 /* private static */ int DemoDriver::to_key_idx(Key k) {

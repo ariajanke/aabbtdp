@@ -33,6 +33,8 @@ More information is available in the docs/include sources.
 # Demo
 Also, I've built a demo to show this library's capabilities.
 
+[Here](https://ariajanke.github.io/aabbtp/demo-wasm/bin/spa_out.html)
+
 # Installation
 This was tested on a fresh Ubuntu VM.
 

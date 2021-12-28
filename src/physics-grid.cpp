@@ -155,7 +155,7 @@ void GridPhysicsHandlerImpl::delete_empty_cells() {
         throw RtError("GridPhysicsHandlerImpl::repopulate: cell size must be set.");
     }
     for (auto & pair : entries_view()) {
-        update_broad_boundries(pair.second);
+        pair.second.board_bounds = compute_board_boundries(pair.second);
         auto range = find_rectangle_range(pair.second, m_cell_size, m_offset);
         for (int y = range.top ; y != bottom_of(range); ++y) {
         for (int x = range.left; x != right_of (range); ++x) {

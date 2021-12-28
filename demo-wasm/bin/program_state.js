@@ -18,7 +18,7 @@ const load_module_methods = module => Object.freeze({
     render_hud          : module.cwrap('js_glue_render_hud'      , null    , null),
     keyup               : module.cwrap('js_glue_keyup'           , null    , ['number']),
     keydown             : module.cwrap('js_glue_keydown'         , null    , ['number']),
-    mouseclick          : module.cwrap('js_glue_on_mouse_down'   , null    , ['number', 'number']),
+    mousedown           : module.cwrap('js_glue_on_mouse_down'   , null    , ['number', 'number']),
     mouseup             : module.cwrap('js_glue_on_mouse_up'     , null    , ['number', 'number']),
     mousemove           : module.cwrap('js_glue_on_mouse_move'   , null    , ['number', 'number']),
     start               : module.cwrap('js_glue_start'           , null    , null),
@@ -44,9 +44,36 @@ const change_class_for = (element, old_class, new_class) => {
 const get_scene_options = options_sel => {
     const ills = (options_sel.find('input[name=illustrated]').val() === 'true' ? '' : 'no-')
                  + 'illustrate-algorithm';
+    const pushl = (options_sel.find('input[name=push-level]').val() === 'true' ? '' : 'no-')
+                 + 'show-push-level';
     // can be used directly
     return options_sel.find('input[name=iteration-algorithm]:checked').val()
-           + ',' + ills;
+           + ',' + ills + ',' + pushl;
+};
+
+const make_update_routines = model => {
+    let interval;
+    const start_loop = () => {
+        console.log('game started');
+        let old_time = new Date();
+        interval = setInterval(() => {
+            const new_time = new Date();
+            model.time_update((new_time - old_time) / 1000);
+            old_time = new_time;
+            model.render_field();
+            model.render_hud();
+        }, 1000 / k_frame_rate);
+    };
+    const stop_loop = () => {
+        clearInterval(interval);
+        interval = undefined;
+        if (interval !== undefined) throw 'did not go undefined';
+    };
+    return Object.freeze({
+        start      : start_loop, 
+        is_stopped : () => interval === undefined, 
+        stop       : stop_loop
+    });
 };
 
 const make_program_state = () => {
@@ -55,7 +82,7 @@ const make_program_state = () => {
     // let's try and aim for "as functional as possible"
     // since we can't be pure AND have interesting things happen...
     let m_do_update;
-    let m_needs_to_pause = false;
+    let m_loop_methods;
     let m_events;
     let m_model;
     let m_issue_resize;
@@ -88,41 +115,22 @@ const make_program_state = () => {
         }];
     };
     
-    const make_update_routine = model => {
-        return () => {
-            console.log('game started');
-            let old_time = new Date();
-            const interval = setInterval(() => {
-                if (m_needs_to_pause) {
-                    clearInterval(interval);
-                    return;
-                }
-                const new_time = new Date();
-                model.time_update((new_time - old_time) / 1000);
-                old_time = new_time;
-                model.render_field();
-                model.render_hud();
-            }, 1000 / k_frame_rate);
-        };
-    };
-    
     const make_event_methods = (model, pause_overlay) => {
-        // I need to integrate menus...
-        
-        const make_act    = (n) => (f) => f(n); 
+        const make_act       = (n) => (f) => f(n); 
         const key_func_table = Object.freeze({
             'w' : make_act(0), 'a' : make_act(3), 's' : make_act(1),
-            'd' : make_act(2), 'p' : make_act(4), 'o' : make_act(5),
-            // pausing is pretty special
-            'Enter' : state_act => {
-                if (state_act !== model.keyup) return;
-                (pause_overlay.hasClass('overlay-fade-in') ? me.play : me.pause)();
-            }
+            'd' : make_act(2), 'p' : make_act(4), 'o' : make_act(5)
         });
         
         return verify_dictionary_has_events(Object.freeze({
-            on_keyup     : event => (key_func_table[event.key] || (() => {}))(model.keyup  ),
-            on_keydown   : event => (key_func_table[event.key] || (() => {}))(model.keydown),
+            on_keyup     : event => {
+                //console.log('key up ' + event.key);
+                (key_func_table[event.key] || (() => {}))(model.keyup  );
+            },
+            on_keydown   : event => {
+                //console.log('key down ' + event.key);
+                (key_func_table[event.key] || (() => {}))(model.keydown);
+            },
             on_mousedown : event => model.mousedown(event.clientX, event.clientY),
             on_mouseup   : event => model.mouseup  (event.clientX, event.clientY),
             on_mousemove : event => model.mousemove(event.clientX, event.clientY)
@@ -131,26 +139,70 @@ const make_program_state = () => {
     
     const begin_game_loop = module => {
         // main loop
-        m_do_update = make_update_routine(module);
+        m_loop_methods = make_update_routines(module);
     };
     
     const prepare_html = (model, canvas_parent) => {
-        const sel = (n) => canvas_parent.find(n);
+        const sel = (n) => { 
+            const rv = canvas_parent.find(n);
+            if (rv.length < 1) throw 'Could not find any elements from ' + n;
+            return rv;
+        };
         const [menu_html, on_click_scene_link] = prepare_scenes_menu(model);
         // this part is not so functional
         sel('#available-scenes').html(menu_html);
         sel('.scene-link').click(on_click_scene_link);
+        const close_menu = sel_str => {
+            if ($(sel_str).length < 1) {
+                throw 'could not find any elements from ' + sel_str;
+            }
+            const menu = $(sel_str).removeClass('slide-in').addClass('slide-out');
+            menu.find('a').attr('tabindex', '-1');
+            console.log('closing links ' + menu.find('a').length);
+        };
+        const open_menu = sel_str => {
+            const menu = $(sel_str).addClass('slide-in').removeClass('slide-out');
+            console.log('openning links ' + menu.find('a').length);
+            menu.find('a').removeAttr('tabindex');
+        };
         
-        let menu_tag = sel('#options-menu');
-        sel('#open-menu').click(() => {
-            menu_tag.addClass('slide-in').removeClass('slide-out');
+        // all resume links
+        sel('.resume-demo').click(function() {
+            $(this).blur();
+            me.play();
+            close_menu('#options-menu');
+            close_menu('#introduction');
+            $('#pause-button a').removeAttr('tabindex');
+            // ...but we have a "keyup" event that's gonna fire!
         });
-        sel('#close-menu').click(() => {
-            menu_tag.removeClass('slide-in').addClass('slide-out');
-        });
-        sel('#intro-begin').click(me.play);
         
-        m_events = make_event_methods(model, sel('.pause-overlay'));
+        sel('#options-menu .close-menu').click(() => {
+            close_menu('#options-menu');
+        });
+        sel('#options-menu .show-intro').click(function() {
+            $(this).blur();
+            // should be paused already
+            open_menu ('#introduction');
+            close_menu('#options-menu');
+        });
+        
+        sel('#pause-overlay .show-options').click(() => {
+            open_menu('#options-menu');
+        });
+        
+        sel('#pause-button .pause-demo').click(function() {
+            $(this).blur().find('a').attr('tabindex', '-1');
+            me.pause();
+            $('#pause-overlay').removeAttr('tabindex');
+            $('#pause-button a').first().focus();
+        });
+        
+        sel('#introduction .show-options').click(function() {
+            $(this).blur();
+            close_menu('#introduction');
+            open_menu ('#options-menu');
+        });
+        m_events = make_event_methods(model, sel('#pause-overlay'));
         // all html prepared at this point...
         begin_game_loop(model);
         
@@ -163,7 +215,7 @@ const make_program_state = () => {
         const model = load_module_methods(module);
         const canvas = global_2d_canvas;
         $.ajax({ url: 'menus.html', type: "GET", dataType: 'text', 
-            success: (data) => prepare_html(model, $('#everything-else').html(data).parent())
+            success: (data) => prepare_html(model, $('#menus').html(data).parent())
         });
         
         // initialize the program state on the C++ side
@@ -180,27 +232,34 @@ const make_program_state = () => {
             model.render_hud();            
         };
         $(window).resize(m_issue_resize);
+        $('#canvas').mouseup  (me.on_mouseup  );
+        $('#canvas').mousedown(me.on_mousedown);
+        $('#canvas').mousemove(me.on_mousemove);
         m_model = model;
     };
     
     me.issue_resize = () => m_issue_resize();
     
     me.play = () => {
-        m_needs_to_pause = false;
-        $('#pause-overlay').removeClass('overlay-fade-in').addClass('overlay-fade-out');
-        $('.menu').removeClass('slide-in').addClass('slide-out');
-        setTimeout(m_do_update, /* this has to match the css values... should use a getter somehow */ 1000);
+        $('.menu').removeClass('slide-in').addClass('slide-out').attr('tabindex', '-1');
+        $('#menus').removeClass('on-pause').addClass('on-play');
+        setTimeout(m_loop_methods.start, 
+            /* this has to match the css values... should use a getter somehow */ 1000);
     };
     
     me.pause = () => {
-        $('#pause-overlay').addClass('overlay-fade-in').removeClass('overlay-fade-out');
-        // $('.menu').addClass('slide-in').removeClass('slide-out');
-        m_needs_to_pause = true;
+        $('#menus').addClass('on-pause').removeClass('on-play');
+        m_loop_methods.stop();
+        if (!m_loop_methods.is_stopped()) throw 'failed to pause';
     };
     
     // these should not be called before 'setup'?
     k_event_types.forEach(el =>
-        me[el] = (event => m_events ? m_events[el](event) : undefined)
+        me[el] = (event => {
+            // if m_events is defined then so are m_loop_methods
+            if (m_events === undefined) return;
+            if (!m_loop_methods.is_stopped()) m_events[el](event);
+        })
     );
     verify_dictionary_has_events(me);
     

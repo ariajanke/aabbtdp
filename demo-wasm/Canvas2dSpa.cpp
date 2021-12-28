@@ -33,6 +33,8 @@ public:
     
     void set_camera_position(Vector);
     
+    Vector mouse_position_to_field(int mouse_x, int mouse_y) const;
+    
 private:
     void draw_cone_
         (const Vector & source, const Vector & facing, Real distance, Real spread_angle) final;
@@ -63,7 +65,6 @@ Key to_impl_key(int key_id) {
     case k_pause        : return Key::pause        ;
     case k_frame_advance: return Key::frame_advance;
     default             : return Key::none         ;
-    
     }
 }
 
@@ -183,9 +184,23 @@ EMSCRIPTEN_KEEPALIVE void js_glue_keyup(int key_id) {
     do_try([&]{ program_state().on_release(to_impl_key(key_id)); });
 }
 
-EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_down(int mouse_x, int mouse_y) {}
-EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_up  (int mouse_x, int mouse_y) {}
-EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_move(int mouse_x, int mouse_y) {}
+EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_down(int mouse_x, int mouse_y) {
+    do_try([=] {
+        program_state().on_mouse_press(
+            CanvasDrawer::instance().mouse_position_to_field(mouse_x, mouse_y));
+    });
+}
+
+EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_up(int, int) {
+    do_try([] { program_state().on_mouse_release(); });
+}
+
+EMSCRIPTEN_KEEPALIVE void js_glue_on_mouse_move(int mouse_x, int mouse_y) {
+    do_try([=] {
+        program_state().on_mouse_move(
+            CanvasDrawer::instance().mouse_position_to_field(mouse_x, mouse_y));
+    });
+}
 
 EMSCRIPTEN_KEEPALIVE const char * js_glue_get_scene_name(int num) {
     const char * rv = nullptr;
@@ -249,7 +264,12 @@ void CanvasDrawer::set_camera_position(Vector r) {
     m_camera_position = r;
 }
 
-void CanvasDrawer::draw_cone_
+Vector CanvasDrawer::mouse_position_to_field(int mouse_x, int mouse_y) const {
+    // canvas_size is canceled out
+    return (-m_camera_position + Vector(mouse_x, mouse_y)) / k_scale;
+}
+
+/* private */ void CanvasDrawer::draw_cone_
     (const Vector & source, const Vector & facing, Real distance, Real spread_angle)
 {
     auto low_pt  = find_cone_point(facing, distance, -spread_angle);

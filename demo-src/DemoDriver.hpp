@@ -230,16 +230,17 @@ private:
 
 class MouseState final {
 public:
-    void on_mouse_press(Vector field_position);
+    void on_mouse_press(Vector field_position, const Rectangle & player_bounds);
 
-    void on_mouse_move(Vector field_position);
+    void on_mouse_move(Vector field_position, const Rectangle & player_bounds);
 
     void on_mouse_release();
 
-    void update_player(Tuple<Velocity &, const Rectangle &> player) const;
+    void update_player(Velocity &) const;
 
 private:
-    Vector m_mouse_pos;
+    static constexpr const Real k_stop_thershold = 5;
+    Vector m_direction;
     bool m_mouse_pressed = false;
 };
 
@@ -327,6 +328,7 @@ private:
 
     EntityManager m_ent_manager;
     Entity m_player;
+    Entity m_msq;
 
     SceneDriver m_scene_driver;
     std::unique_ptr<Physics2DHandler> m_physics_handler;

@@ -383,22 +383,22 @@ void do_update_broad_boundries_tests(TestSuite & suite) {
         entry.bounds = Rectangle(5, 5, 10, 10);
         entry.displacement = Vector(-5, 5);
         entry.nudge        = Vector( 0, 2);
-        update_broad_boundries(entry);
-        return test(   are_very_close(entry.low_x ,  0)
-                    && are_very_close(entry.low_y ,  5)
-                    && are_very_close(entry.high_x, 15)
-                    && are_very_close(entry.high_y, 22));
+        const auto board_bounds = compute_board_boundries(entry);
+        return test(   are_very_close(board_bounds.low_x ,  0)
+                    && are_very_close(board_bounds.low_y ,  5)
+                    && are_very_close(board_bounds.high_x, 15)
+                    && are_very_close(board_bounds.high_y, 22));
     });
     mark(suite).test([] {
         FullEntry entry;
         entry.bounds = Rectangle(5, 5, 10, 10);
         entry.growth = Size(5, -2);
-        update_broad_boundries(entry);
+        const auto board_bounds = compute_board_boundries(entry);
         // height unaffected... but must expand horizontally
-        return test(   are_very_close(entry.low_x ,  2.5)
-                    && are_very_close(entry.low_y ,  5  )
-                    && are_very_close(entry.high_x, 17.5)
-                    && are_very_close(entry.high_y, 15  ));
+        return test(   are_very_close(board_bounds.low_x ,  2.5)
+                    && are_very_close(board_bounds.low_y ,  5  )
+                    && are_very_close(board_bounds.high_x, 17.5)
+                    && are_very_close(board_bounds.high_y, 15  ));
     });
 
 }
