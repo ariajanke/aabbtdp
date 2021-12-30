@@ -36,7 +36,9 @@ namespace {
 
 using namespace cul::exceptions_abbr;
 using cul::is_real, cul::magnitude, cul::normalize;
-using tdp::Rectangle, tdp::Vector, tdp::CollisionEvent;
+using tdp::Rectangle, tdp::Vector, tdp::CollisionEvent, tdp::Real;
+
+constexpr const Real k_inf = std::numeric_limits<Real>::infinity();
 
 } // end of <anonymous> namespace
 
@@ -188,6 +190,55 @@ void absorb_nudge(FullEntry & entry) {
 }
 
 // -------------------------- Helper Implementations --------------------------
+
+Real left_of(const Rectangle & rect) { return rect.left; }
+Real top_of (const Rectangle & rect) { return rect.top ; }
+Real get_x  (const Vector & r) { return r.x; }
+Real get_y  (const Vector & r) { return r.y; }
+
+template <Real(*get_rect_pos)(const Rectangle &), Real(*get_comp)(const Vector &)>
+Real position_on_side
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{
+    const auto dist = (get_rect_pos(object) - get_rect_pos(subject)) / get_comp(displc);
+    if (dist > 1 || dist < 0) return k_inf;
+    if (!overlaps(displace(subject, displc*dist), object)) return k_inf;
+    return dist;
+}
+
+/// Works for large displacements...
+/// @returns infinity for no solution (never overlaps)
+Real position_on_left
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{
+    // sort of reverse linear interpolation of x-ways
+    const auto x_dist = (object.left - subject.left) / displc.x;
+    // if greater than 1 or less than 0 -> no solution
+    if (x_dist > 1 || x_dist < 0) return k_inf;
+    // test overlap for the resultant rectangle
+    // if no overlap -> no solution
+    if (!overlaps(displace(subject, displc*x_dist), object)) return k_inf;
+    return x_dist;
+}
+
+Real position_on_right
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{ return position_on_side<cul::right_of, get_x>(subject, object, displc); }
+
+Real position_on_bottom
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{ return position_on_side<cul::bottom_of, get_y>(subject, object, displc); }
+
+Real position_on_top
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{ return position_on_side<top_of, get_y>(subject, object, displc); }
+
+bool is_large_displacement
+    (const BoardBoundries & board_subject, const Rectangle & object)
+{
+    return    (board_subject.low_x >= object.left && board_subject.high_x <= right_of (object))
+           || (board_subject.low_y >= object.top  && board_subject.high_y <= bottom_of(object));
+}
 
 // 0 means it is not a high displacement
 int large_displacement_step_count
