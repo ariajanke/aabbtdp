@@ -191,35 +191,96 @@ void absorb_nudge(FullEntry & entry) {
 
 // -------------------------- Helper Implementations --------------------------
 
-Real left_of(const Rectangle & rect) { return rect.left; }
-Real top_of (const Rectangle & rect) { return rect.top ; }
-Real get_x  (const Vector & r) { return r.x; }
-Real get_y  (const Vector & r) { return r.y; }
+Real left_of  (const Rectangle & rect) { return rect.left; }
+Real top_of   (const Rectangle & rect) { return rect.top ; }
+Real bottom_of(const Rectangle & rect) { return cul::bottom_of(rect); }
+Real right_of (const Rectangle & rect) { return cul::right_of(rect) ; }
+Real get_x    (const Vector & r) { return r.x; }
+Real get_y    (const Vector & r) { return r.y; }
 
-template <Real(*get_rect_pos)(const Rectangle &), Real(*get_comp)(const Vector &)>
-Real position_on_side
-    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
-{
-    const auto dist = (get_rect_pos(object) - get_rect_pos(subject)) / get_comp(displc);
-    if (dist > 1 || dist < 0) return k_inf;
-    if (!overlaps(displace(subject, displc*dist), object)) return k_inf;
-    return dist;
+enum Side { k_left_side, k_right_side, k_top_side, k_bottom_side, k_side_count };
+enum Dimension { k_horizontal, k_vertical };
+
+// C++ is a pain in the ass and can't compare functions at compile time :/
+template <Side kt_side>
+Real get_side(const Rectangle & rect) {
+    switch (kt_side) {
+    case k_left_side  : return rect.left;
+    case k_right_side : return cul::right_of(rect);
+    case k_top_side   : return rect.top;
+    case k_bottom_side: return cul::bottom_of(rect);
+    }
 }
+
+template <Dimension kt_dim>
+Real get_component(const Vector & r) {
+    switch (kt_dim) {
+    case k_horizontal: return r.x;
+    case k_vertical  : return r.y;
+    }
+}
+
+template <Dimension kt_dim>
+Real low_of(const Rectangle & rect) {
+    switch (kt_dim) {
+    case k_horizontal: return rect.left;
+    case k_vertical  : return rect.top ;
+    }
+}
+
+
+template <Dimension kt_dim>
+Real high_of(const Rectangle & rect) {
+    switch (kt_dim) {
+    case k_horizontal: return right_of (rect);
+    case k_vertical  : return bottom_of(rect);
+    }
+}
+
+template <Side kt_side>
+Real get_component(const Vector & r) {
+    switch (kt_side) {
+    case k_left_side  : case k_right_side : return r.x;
+    case k_top_side   : case k_bottom_side: return r.y;
+    }
+}
+
+template <typename GottenType>
+struct TupleLessThan {
+    template <typename ... Types>
+    bool operator()(const Tuple<Types...> & lhs, const Tuple<Types...> & rhs) const
+        { return std::get<GottenType>(lhs) < std::get<GottenType>(rhs); }
+};
+
+
 
 /// Works for large displacements...
 /// @returns infinity for no solution (never overlaps)
-Real position_on_left
+template <Side kt_side>
+Tuple<Real, Side> position_on_side
     (const Rectangle & subject, const Rectangle & object, const Vector & displc)
 {
+    const auto make_rv = [](Real x) { return std::make_tuple(x, kt_side); };
     // sort of reverse linear interpolation of x-ways
-    const auto x_dist = (object.left - subject.left) / displc.x;
+    const auto dist = (get_side<kt_side>(object) - get_side<kt_side>(subject))
+                      / get_component<kt_side>(displc);
     // if greater than 1 or less than 0 -> no solution
-    if (x_dist > 1 || x_dist < 0) return k_inf;
+    if (dist > 1 || dist < 0) return make_rv(k_inf);
     // test overlap for the resultant rectangle
     // if no overlap -> no solution
-    if (!overlaps(displace(subject, displc*x_dist), object)) return k_inf;
-    return x_dist;
+    if (!overlaps(displace(subject, displc*dist), object)) return make_rv(k_inf);
+    return make_rv(dist);
 }
+
+#if 0
+constexpr auto position_on_left   = position_on_side<k_left_side  >;
+constexpr auto position_on_right  = position_on_side<k_right_side >;
+constexpr auto position_on_bottom = position_on_side<k_bottom_side>;
+constexpr auto position_on_top    = position_on_side<k_top_side   >;
+
+Real position_on_left
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{ return position_on_side<left_of, get_x>(subject, object, displc); }
 
 Real position_on_right
     (const Rectangle & subject, const Rectangle & object, const Vector & displc)
@@ -232,30 +293,168 @@ Real position_on_bottom
 Real position_on_top
     (const Rectangle & subject, const Rectangle & object, const Vector & displc)
 { return position_on_side<top_of, get_y>(subject, object, displc); }
+#endif
+using PosFunc = Tuple<Real, Side>(*)
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc);
 
-bool is_large_displacement
-    (const BoardBoundries & board_subject, const Rectangle & object)
+using IsLargeDisplacement = bool(*)
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc);
+
+template <PosFunc low_pf, PosFunc high_pf, IsLargeDisplacement is_large_displacement>
+Tuple<Real, Side> position_on_axis
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
 {
-    return    (board_subject.low_x >= object.left && board_subject.high_x <= right_of (object))
-           || (board_subject.low_y >= object.top  && board_subject.high_y <= bottom_of(object));
+    using std::min, std::make_tuple;
+    if (!is_large_displacement(subject, object, displc))
+        return make_tuple(Real(1), k_side_count);
+    return min(low_pf(subject, object, displc), high_pf(subject, object, displc),
+               TupleLessThan<Real>{});
 }
 
+bool is_large_horizontal_displacement
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{
+    using std::min, std::max;
+    // whether left of right, the offset is essentially canceled out
+    const auto future_left = subject.left + displc.x;
+    const auto low_x       = min(subject.left, future_left);
+    const auto high_x      = max(subject.left, future_left);
+    return object.left >= low_x && object.left <= high_x;
+}
+
+bool is_large_vertical_displacement
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{
+    using std::min, std::max;
+    // whether left of right, the offset is essentially canceled out
+    const auto future_top = subject.top + displc.y;
+    const auto low_y      = min(subject.top, future_top);
+    const auto high_y     = max(subject.top, future_top);
+    return object.top >= low_y && object.top <= high_y;
+}
+
+/// finds t s.t. displacement*t is most likely to produce a future subject
+/// which overlaps the object
+Tuple<Real, Side> find_position_of_possible_overlap
+    (const Rectangle & subject, const Rectangle & object, const Vector & displc)
+{
+    using std::min, std::get;
+    const auto hmin = position_on_axis
+        <position_on_side<k_left_side  >, position_on_side<k_right_side  >, is_large_horizontal_displacement>
+        (subject, object, displc);
+    const auto vmin = position_on_axis
+        <position_on_side<k_top_side>,  position_on_side<k_bottom_side>, is_large_vertical_displacement>
+        (subject, object, displc);
+    assert(is_real(get<Real>(hmin)) || is_real(get<Real>(vmin)));
+    return min(hmin, vmin, TupleLessThan<Real>{});
+}
+#if 0
 // 0 means it is not a high displacement
 int large_displacement_step_count
     (const Rectangle &, const Rectangle & other, const Vector & displc);
-
+#endif
 std::tuple<Vector, HitSide> find_min_push_displacement_small
     (const Rectangle &, const Rectangle & other, const Vector & displc);
-
+#if 0
 HitSide trim_displacement_small
     (const Rectangle &, const Rectangle & other, Vector & displc);
+#endif
+Tuple<Vector, HitSide> trim_displacement_small
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
 
 template <Direction kt_high_dir, Direction kt_low_dir>
 Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier);
 
+Real find_highest_non_overlap
+    (const Rectangle & subject, const Rectangle & object, const Vector & subject_displc);
+
+Real find_highest_non_overlap
+    (const Rectangle & subject, const Rectangle & object, const Vector & subject_displc)
+{
+    if (overlaps(subject, object)) { return -k_inf; }
+    const auto t = std::get<Real>(find_position_of_possible_overlap(subject, object, subject_displc));
+    if (   std::equal_to<Real>{}(t, 1)
+        && !overlaps(displace(subject, subject_displc), object))
+    { return k_inf; }
+    assert(overlaps(displace(subject, subject_displc*t), object));
+    return t*cul::find_highest_false<Real>(
+        [subject, object, subject_displc, t](Real u)
+        { return overlaps(displace(subject, subject_displc*u*t), object); });
+}
+
+Vector find_push_direction
+    (const Rectangle & last_non_overlapping_subject,
+     const Rectangle & object);
+
+// how long in this (remaining) displacement do we push the object
+Real find_push_duration
+    (const Rectangle & last_non_overlapping_subject, const Vector & subject_displacement,
+     const Rectangle & object, const Vector & object_direction);
+
+template <Dimension kt_dim>
+Real find_portion_overlap
+    (const Rectangle & last_non_overlapping_subject, const Rectangle & object, Real direction);
+
+template <Dimension kt_dim>
+Real find_portion_overlap
+    (const Rectangle & subject, const Rectangle & object, const Real direction)
+{
+    // assumes rectangles are right next to each other
+    // strongly depends on direction
+    if (direction > 0) {
+        return high_of<kt_dim>(object) - low_of<kt_dim>(subject);
+    } else {
+        assert(direction < 0);
+        return high_of<kt_dim>(subject) - low_of<kt_dim>(object);
+    }
+}
+
+template <Dimension kt_dim>
+Real find_push_duration
+    (const Rectangle & subject, const Vector & displc,
+     const Rectangle & object)
+{
+    const auto comp = get_component<kt_dim>(displc);
+    const auto port = find_portion_overlap<kt_dim>(subject, object, comp);
+    return port / magnitude(comp);
+}
+
+/// @returns duration in frames where one full displacement is exactly one frame
+Real find_push_duration
+    (const Rectangle & subject, const Vector & displc,
+     const Rectangle & object , const Vector & object_dir)
+{
+    if (displc.x == 0 || displc.y == 0) return 1;
+    assert((object_dir.x == 0) ^ (object_dir.y == 0));
+    if (object_dir.x != 0) {
+        return find_push_duration<k_vertical>(subject, displc, object);
+    } else {
+        assert(object_dir.y != 0);
+        return find_push_duration<k_horizontal>(subject, displc, object);
+    }
+}
+
+Vector find_push_direction
+    (const Rectangle & last_non_overlapping_subject,
+     const Rectangle & object)
+{
+    using std::make_tuple, std::get, std::min;
+    // I want to displace inside the object... just enough to get an
+    // intersection rectangle to derive the push direction
+    const auto & lno_sub = last_non_overlapping_subject;
+    static const auto mag = [](Real x) { return magnitude(x); };
+    return get<Vector>(min({
+        make_tuple(mag(lno_sub.left       - right_of (object)), Vector{-1,  0}),
+        make_tuple(mag(right_of (lno_sub) - object.left      ), Vector{ 1,  0}),
+        make_tuple(mag(lno_sub.top        - bottom_of(object)), Vector{ 0, -1}),
+        make_tuple(mag(bottom_of(lno_sub) - object.top       ), Vector{ 0,  1})
+    }, TupleLessThan<Real>{}));
+}
+
 std::tuple<Vector, HitSide> find_min_push_displacement
     (const Rectangle & rect, const Rectangle & other, const Vector & displc)
 {
+#   if 0 // old linear method
     using std::make_tuple, std::get;
     int steps_for_large = large_displacement_step_count(rect, other, displc);
     if (steps_for_large) {
@@ -276,6 +475,47 @@ std::tuple<Vector, HitSide> find_min_push_displacement
         return make_tuple(Vector(), HitSide());
     }
     return find_min_push_displacement_small(rect, other, displc);
+#   else
+    // when does the push start? when does it stop?
+    // when do they first overlap?
+    // what direction should the object be pushed?
+    // how far should I push the object?
+    using std::make_tuple, std::get;
+    const auto start = find_highest_non_overlap(rect, other, displc);
+    if (!is_real(start)) return make_tuple(Vector{}, HitSide{});
+    const auto lno_subject = displace(rect, displc*start);
+    assert(!overlaps(lno_subject, other));
+    const auto dir = find_push_direction(lno_subject, other);
+    assert(dir.x*displc.x > 0 || dir.y*displc.y > 0);
+    // we can only push for a maximum duration of start to end of the frame
+    const auto dur = std::min(
+        find_push_duration(lno_subject, displc, other, dir), Real(1) - start);
+    static const auto dir_to_side = [] (const Vector & dir) {
+        if (dir.x > 0) return HitSide{k_left , k_direction_count};
+        if (dir.x < 0) return HitSide{k_right, k_direction_count};
+        if (dir.y > 0) return HitSide{k_direction_count, k_up /* top side */};
+        assert(dir.y < 0);
+        return HitSide{k_direction_count, k_down /* bottom side */};
+    };
+    if (dir.x != 0) {
+        return make_tuple(Vector{displc.x*magnitude(dir.x)*dur, 0}, dir_to_side(dir));
+    } else {
+        assert(dir.y != 0);
+        return make_tuple(Vector{0, displc.y*magnitude(dir.y)*dur}, dir_to_side(dir));
+    }
+#   if 0
+    const auto dispos = find_position_of_possible_overlap(rect, other, displc);
+
+    if (std::equal_to<Real>{}(dispos, 1)) {
+        return find_min_push_displacement_small(rect, other, displc);
+    } else {
+
+
+    }
+    return find_min_push_displacement_small(
+        rect, other, displc*find_position_of_possible_overlap(rect, other, displc));
+#   endif
+#   endif
 }
 
 HitSide trim_displacement_for_barriers
@@ -296,7 +536,7 @@ HitSide trim_displacement_for_barriers
         (bottom_of(rect), rect.top, displacement.y, barriers.y);
     return HitSide(h_dir, v_dir);
 }
-
+#if 0
 class TriangleStrips {
 public:
     using Triple = Tuple<Vector, Vector, Vector>;
@@ -454,7 +694,7 @@ Real find_overlapping_portion
     }
     throw "unimplemented";
 }
-
+#endif
 #if 0
 Tuple<HitSide, Vector> trim_displacement
     (const Rectangle & rect, const Rectangle & other, const Vector & displc)
@@ -463,6 +703,7 @@ Tuple<HitSide, Vector> trim_displacement
 HitSide trim_displacement
     (const Rectangle & rect, const Rectangle & other, Vector & displc)
 {
+#   if 0
     int steps_for_large = large_displacement_step_count(rect, other, displc);
     if (steps_for_large) {
         for (int i = 1; i != steps_for_large; ++i) {
@@ -477,6 +718,11 @@ HitSide trim_displacement
         return HitSide();
     }
     return trim_displacement_small(rect, other, displc);
+#   endif
+    HitSide rv;
+    std::tie(displc, rv) = trim_displacement_small(
+        rect, other, std::get<Real>(find_position_of_possible_overlap(rect, other, displc))*displc);
+    return rv;
 }
 
 bool trespass_occuring
@@ -487,6 +733,7 @@ bool trespass_occuring
     {
         return !overlaps(rect, other) && overlaps(displace(rect, displc), other);
     };
+#   if 0
     int steps_for_large = large_displacement_step_count(rect, other, displc);
     if (steps_for_large) {
         // there's a "fix" here note: that other locations
@@ -498,6 +745,9 @@ bool trespass_occuring
         return false;
     }
     return trespass_occuring_small(rect, other, displc);
+#   endif
+    return trespass_occuring_small(rect, other,
+                                   displc*std::get<Real>(find_position_of_possible_overlap(rect, other, displc)));
 }
 
 Rectangle grow(Rectangle rect, const Size & size_) {
@@ -550,7 +800,7 @@ Rectangle displace(Rectangle rv, Vector r) {
 // ----------------------------- Helpers level 1 ------------------------------
 
 HitSide values_from_displacement(const Vector &);
-
+#if 0
 int large_displacement_step_count
     (const Rectangle & rect, const Rectangle & other, const Vector & displc)
 {
@@ -571,23 +821,24 @@ int large_displacement_step_count
     }
     return 0;
 }
-
+#endif
 std::tuple<Vector, HitSide> find_min_push_displacement_small
     (const Rectangle & rect, const Rectangle & other, const Vector & displc)
 {
+    // this was already "functional programming"
     using std::max, std::min, std::make_tuple;
     static const auto k_no_hit = make_tuple(Vector(), HitSide());
-    auto frect = displace(rect, displc);
+    const auto frect = displace(rect, displc);
     if (overlaps(rect, other) || !overlaps(frect, other)) return k_no_hit;
 
-    auto inner_left   = max(frect.left      , other.left      );
-    auto inner_right  = min(right_of(frect) , right_of(other) );
-    auto inner_top    = max(frect.top       , other.top       );
-    auto inner_bottom = min(bottom_of(frect), bottom_of(other));
+    const auto inner_left   = max(frect.left      , other.left      );
+    const auto inner_right  = min(right_of(frect) , right_of(other) );
+    const auto inner_top    = max(frect.top       , other.top       );
+    const auto inner_bottom = min(bottom_of(frect), bottom_of(other));
     if (inner_left >= inner_right || inner_top >= inner_bottom) return k_no_hit;
 
-    Size overlap_area(inner_right - inner_left, inner_bottom - inner_top);
-    HitSide hit_parts = values_from_displacement(displc);
+    const Size overlap_area(inner_right - inner_left, inner_bottom - inner_top);
+    const HitSide hit_parts = values_from_displacement(displc);
     if ((overlap_area.width > overlap_area.height || displc.x == 0) && displc.y != 0) {
         return make_tuple(Vector (0, normalize(displc.y)*overlap_area.height),
                           HitSide(k_direction_count, hit_parts.vertical));
@@ -595,7 +846,7 @@ std::tuple<Vector, HitSide> find_min_push_displacement_small
     return make_tuple(Vector (normalize(displc.x)*overlap_area.width, 0),
                       HitSide(hit_parts.horizontal, k_direction_count));
 }
-
+#if 0
 HitSide trim_displacement_small
     (const Rectangle & rect, const Rectangle & other, Vector & displc)
 {
@@ -603,7 +854,7 @@ HitSide trim_displacement_small
     if (overlaps(rect, other) || !overlaps(displace(rect, displc), other))
     { return HitSide(); }
 
-    HitSide hit_parts = values_from_displacement(displc);
+    const HitSide hit_parts = values_from_displacement(displc);
 
     if (!overlaps(displace(rect, Vector(displc.x, 0)), other)) {
         auto mk_displc = [displc](Real t) { return Vector(displc.x, displc.y*t); };
@@ -629,7 +880,41 @@ HitSide trim_displacement_small
     displc = displc*t;
     return hit_parts;
 }
+#else
 
+Tuple<Vector, HitSide> trim_displacement_small
+    (const Rectangle & rect, const Rectangle & other, const Vector & displc)
+{
+    using cul::find_highest_false, std::make_tuple;
+    if (overlaps(rect, other) || !overlaps(displace(rect, displc), other))
+    { return make_tuple(displc, HitSide{}); }
+
+    const HitSide hit_parts = values_from_displacement(displc);
+
+    if (!overlaps(displace(rect, Vector(displc.x, 0)), other)) {
+        const auto mk_displc = [displc](Real t) { return Vector(displc.x, displc.y*t); };
+        const auto ndisplc = mk_displc(find_highest_false<Real>([&](Real t) {
+            return overlaps(displace(rect, mk_displc(t)), other);
+        }));
+        return make_tuple(ndisplc, HitSide(k_direction_count, hit_parts.vertical));
+    }
+
+    if (!overlaps(displace(rect, Vector(0, displc.y)), other)) {
+        const auto mk_displc = [displc](Real t) { return Vector(displc.x*t, displc.y); };
+        const auto ndisplc = mk_displc(find_highest_false<Real>([&](Real t) {
+            return overlaps(displace(rect, mk_displc(t)), other);
+        }));
+        return make_tuple(ndisplc, HitSide(hit_parts.horizontal, k_direction_count));
+    }
+
+    // assume the value only changes once
+    const auto t = find_highest_false<Real>([&](Real t) {
+        return overlaps(displace(rect, t*displc), other);
+    });
+    // goes both ways
+    return make_tuple(displc*t, hit_parts);
+}
+#endif
 
 template <Direction kt_high_dir, Direction kt_low_dir>
 Direction trim_dimension(Real high, Real low, Real & displc_i, Real barrier) {

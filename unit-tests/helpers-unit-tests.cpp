@@ -99,6 +99,10 @@ bool are_very_close(Real a, Real b);
 
 static constexpr const Real k_inf = std::numeric_limits<Real>::infinity();
 
+// starting point for working needs to be different (prime number) than the delta
+bool adding_of_double_a_works(Real a, Real b)
+    { return are_very_close(std::fmod(a*2 + b, a), b); }
+
 } // end of <anonymous> namespace
 
 // helpers.hpp
@@ -439,21 +443,22 @@ void do_find_min_push_displacement_tests(TestSuite & suite) {
         unit.start(mark(suite), [&] {
             // huge (make the machine "sweat", this should be a non-linear
             // algorithm)
-            return test(false);
             static constexpr const Real k_gap = 2;
             static constexpr const Real k_small_delta = 3;
-            static auto adding_of_double_a_works = [] (Real a, Real b) {
-                auto s  = a*2 + b;
-                auto fm = std::fmod(a*2 + b, a);
-                return are_very_close(std::fmod(a*2 + b, a), b);
-            };
             Real working = 5; // maybe just need a different prime number
             while (   adding_of_double_a_works(working, k_gap        )
                    && adding_of_double_a_works(working, k_small_delta))
             { working *= 2; }
             auto push = get<Vector>(find_min_push_displacement(a, b,
                 Vector(working + k_small_delta, 0)));
-            return test(are_very_close(push, Vector(working - k_gap, 0)));
+            return test(are_very_close(push, Vector(working + (k_small_delta - k_gap), 0)));
+        });
+        // until out of the way
+        unit.start(mark(suite), [&] {
+            const Vector a_displc{20, -15};
+            const Vector cor_push{(20*8.5) / 15, 0};
+            const auto push = get<Vector>(find_min_push_displacement(a, b, a_displc));
+            return test(are_very_close(push, cor_push));
         });
     });
 
@@ -538,12 +543,11 @@ void do_trim_displacement_tests(TestSuite & suite) {
         });
         unit.start(mark(suite), [&] {
             // huge
+#           if 0
             return test(false);
+#           endif
             static constexpr const Real k_gap = 2;
-            static auto adding_of_double_a_works = [] (Real a, Real b) {
-                return are_very_close(std::fmod(a*2 + b, a), b);
-            };
-            Real working = 2;
+            Real working = 3;
             while (adding_of_double_a_works(working, k_gap))
                 { working *= 2; }
             Vector displacement(working, 0);
@@ -573,13 +577,15 @@ void do_trespass_occuring_tests(TestSuite & suite) {
         });
         unit.start(mark(suite), [&] {
             // huge
+#           if 0
             return test(false);
+#           endif
             // I guess this becomes an arbitrarily choosen value of sorts
             static constexpr const Real k_gap = 2;
             static auto adding_of_double_a_works = [] (Real a, Real b) {
                 return are_very_close(std::fmod(a*2 + b, a), b);
             };
-            Real working = 2;
+            Real working = 3;
             while (adding_of_double_a_works(working, k_gap))
                 { working *= 2; }
             return test(trespass_occuring(a, b, Vector(working, 0)));

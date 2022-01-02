@@ -211,7 +211,7 @@ void do_sight_unit_tests(TestSuite & suite) {
         Vector obj_left{-4, -7}, obj_right{5, -3};
         auto intx = cul::find_intersection(sub_left, sub_right, obj_left, obj_right);
         assert(intx != cul::get_no_solution_sentinel<Vector>());
-        // I need to be careful when I have an accusitive
+        // I need to be careful when I have an accusative
         auto cor_por = magnitude(intx - sub_right) / magnitude(sub_left - sub_right);
         return test(are_very_close(
             find_portion_overlapped(PolVec{sub_left}, PolVec{sub_right},
