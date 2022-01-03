@@ -173,12 +173,9 @@ using EntryMapView      = View<EntryEntityRefMap::iterator>;
 BoardBoundries compute_board_boundries(const FullEntry &);
 BoardBoundries compute_board_boundries
     (const Rectangle &, const Vector & full_displacement, const Size & growth);
-#if 1
+
 Rectangle as_rectangle(const BoardBoundries &);
-#endif
-#if 0
-void update_broad_boundries(FullEntry &);
-#endif
+
 void absorb_nudge(FullEntry &);
 
 template <typename Iter, typename ToReference>
@@ -221,6 +218,7 @@ struct HitSide {
     HitSide(Direction h_, Direction v_):
         horizontal(h_), vertical(v_)
     {}
+
     Direction horizontal = k_direction_count;
     Direction vertical   = k_direction_count;
 };
@@ -234,14 +232,14 @@ inline bool operator != (const HitSide & lhs, const HitSide & rhs) { return !are
 
 // !I need tests!
 /** @returns zero vector if there is no need for push */
-std::tuple<Vector, HitSide> find_min_push_displacement
+Tuple<Vector, HitSide> find_min_push_displacement
     (const Rectangle &, const Rectangle & other, const Vector & displc);
 
-HitSide trim_displacement_for_barriers
-    (const Rectangle &, Vector barriers, Vector & displacement);
+Tuple<Vector, HitSide> trim_displacement_for_barriers
+    (const Rectangle &, Vector barriers, const Vector & displacement);
 
-HitSide trim_displacement
-    (const Rectangle &, const Rectangle & other, Vector & displc);
+Tuple<Vector, HitSide> trim_displacement
+    (const Rectangle &, const Rectangle & other, const Vector & displc);
 
 // much more intense written for growing or shrinking rectangles
 bool trespass_occuring

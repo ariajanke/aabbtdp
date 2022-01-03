@@ -260,7 +260,9 @@ void ColWorkImpl::prestep(FullEntry & entry) {
     // Wall Collision
     Vector barrier = find_barrier_for_displacement
         (entry.displacement, entry.positive_barrier, entry.negative_barrier);
-    if (trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement) != HitSide()) {
+    auto [dis, hitside] = trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement);
+    entry.displacement = dis;
+    if (hitside != HitSide()) {
         m_event_recorder.emplace_event(entry.entity, Entity{}, CollisionEvent::k_rigid);
     }
 }
@@ -271,8 +273,9 @@ void ColWorkImpl::step(FullEntry & entry, FullEntry & other_entry) {
     using namespace tdp::interaction_classes;
     switch (m_col_matrix(entry.collision_layer, other_entry.collision_layer)) {
     case k_as_solid: {
-        auto gv = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
-        if (gv == HitSide()) return;
+        auto [ndisplc, hitside] = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
+        if (hitside == HitSide()) return;
+        entry.displacement = ndisplc;
         m_event_recorder.emplace_event(entry.entity, other_entry.entity, CollisionEvent::k_rigid);
         break;
     }

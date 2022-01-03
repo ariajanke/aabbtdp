@@ -240,65 +240,6 @@ void do_CollisionEvent_tests(TestSuite & suite) {
         }
         return test(true);
     });
-#   if 0
-    suite.start_series("detail::find_min_push_displacement");
-    // test small for push, resultant rectangle must not overlap the new
-    // rectangle
-    // test large push, results are non-overlapping both must move at least
-    // n pixels
-    // test push with large y value
-    set_context(suite, [](TestSuite & suite, Unit & unit) {
-        using namespace tdp;
-        using std::get;
-        Rectangle pusher(0 , 0, 10, 10);
-        Rectangle pushee(11, 0, 10, 10);
-        HitSide expected_hit(k_right, k_direction_count);
-        unit.start(mark(suite), [&] {
-            Vector displacement(2, 0);
-            auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<HitSide>(gv) == expected_hit
-                        && are_very_close(get<Vector>(gv), Vector(1, 0)));
-        });
-        unit.start(mark(suite), [&] {
-            Vector displacement(22, 0);
-            auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<HitSide>(gv) == expected_hit
-                        && are_very_close(get<Vector>(gv), Vector(21, 0)));
-        });
-        unit.start(mark(suite), [&] {
-            Vector displacement(2, 8);
-            auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<HitSide>(gv) == expected_hit
-                        && are_very_close(get<Vector>(gv), Vector(1, 0)));
-        });
-    });
-    // repeat going in the negative y direction
-    set_context(suite, [](TestSuite & suite, Unit & unit) {
-        using namespace tdp;
-        using std::get;
-        Rectangle pusher(0,   0, 10, 10);
-        Rectangle pushee(0, -11, 10, 10);
-        HitSide expected_hit(k_direction_count, k_up);
-        unit.start(mark(suite), [&] {
-            Vector displacement(0, -2);
-            auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<HitSide>(gv) == expected_hit
-                        && are_very_close(get<Vector>(gv), Vector(0, -1)));
-        });
-        unit.start(mark(suite), [&] {
-            Vector displacement(0, -22);
-            auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<HitSide>(gv) == expected_hit
-                        && are_very_close(get<Vector>(gv), Vector(0, -21)));
-        });
-        unit.start(mark(suite), [&] {
-            Vector displacement(8, -2);
-            auto gv = find_min_push_displacement(pusher, pushee, displacement);
-            return test(   get<HitSide>(gv) == expected_hit
-                        && are_very_close(get<Vector>(gv), Vector(0, -1)));
-        });
-    });
-#   endif
 }
 
 template <typename Func>
@@ -461,7 +402,14 @@ void do_find_min_push_displacement_tests(TestSuite & suite) {
             return test(are_very_close(push, cor_push));
         });
     });
-
+#   if 0 // fires assertion!
+    [] {
+        Vector displc{2.5737990837420464, 0};
+        Rectangle other{130.96957313685118,80.722277825726977,10,10};
+        Rectangle rect {120.10942830086175,70.722500269287721,10,10};
+        find_min_push_displacement(rect, other, displc);
+    } ();
+#   endif
     // there's another case that's a bug witnessed with the demo
 }
 
@@ -476,21 +424,24 @@ void do_trim_displacement_for_barriers_tests(TestSuite & suite) {
         Vector displacement{8, -5};
         unit.start(mark(suite), [&] {
             Vector barrier{15, -10};
-            auto gv = trim_displacement_for_barriers(trect, barrier, displacement);
+            HitSide gv;
+            std::tie(displacement, gv) = trim_displacement_for_barriers(trect, barrier, displacement);
             return test(   gv.horizontal == k_right
                         && gv.vertical   == k_direction_count
                         && are_very_close(displacement, Vector{5, -5}));
         });
         unit.start(mark(suite), [&] {
             Vector barrier{15, k_inf};
-            auto gv = trim_displacement_for_barriers(trect, barrier, displacement);
+            HitSide gv;
+            std::tie(displacement, gv) = trim_displacement_for_barriers(trect, barrier, displacement);
             return test(   gv.horizontal == k_right
                         && gv.vertical   == k_direction_count
                         && are_very_close(displacement, Vector{5, -5}));
         });
         unit.start(mark(suite), [&] {
             Vector barrier{15, -3};
-            auto gv = trim_displacement_for_barriers(trect, barrier, displacement);
+            HitSide gv;
+            std::tie(displacement, gv) = trim_displacement_for_barriers(trect, barrier, displacement);
             return test(   gv.horizontal == k_right
                         && gv.vertical   == k_up
                         && are_very_close(displacement, Vector{5, -3}));
@@ -526,32 +477,29 @@ void do_trim_displacement_tests(TestSuite & suite) {
         unit.start(mark(suite), [&] {
             // default
             Vector displacement(1, 0);
-            trim_displacement(a, b, displacement);
+            displacement = std::get<Vector>(trim_displacement(a, b, displacement));
             return test(are_very_close(displacement, Vector{1, 0}));
         });
         unit.start(mark(suite), [&] {
             // small
             Vector displacement(4, 0);
-            trim_displacement(a, b, displacement);
+            displacement = std::get<Vector>(trim_displacement(a, b, displacement));
             return test(are_very_close(displacement, Vector(2, 0)));
         });
         unit.start(mark(suite), [&] {
             // large (over the entire other rectangle)
             Vector displacement(23, 0);
-            trim_displacement(a, b, displacement);
+            displacement = std::get<Vector>(trim_displacement(a, b, displacement));
             return test(are_very_close(displacement, Vector(2, 0)));
         });
         unit.start(mark(suite), [&] {
             // huge
-#           if 0
-            return test(false);
-#           endif
             static constexpr const Real k_gap = 2;
             Real working = 3;
             while (adding_of_double_a_works(working, k_gap))
                 { working *= 2; }
             Vector displacement(working, 0);
-            trim_displacement(a, b, displacement);
+            displacement = std::get<Vector>(trim_displacement(a, b, displacement));
             return test(are_very_close(displacement, Vector(k_gap, 0)));
         });
     });
@@ -577,9 +525,6 @@ void do_trespass_occuring_tests(TestSuite & suite) {
         });
         unit.start(mark(suite), [&] {
             // huge
-#           if 0
-            return test(false);
-#           endif
             // I guess this becomes an arbitrarily choosen value of sorts
             static constexpr const Real k_gap = 2;
             static auto adding_of_double_a_works = [] (Real a, Real b) {

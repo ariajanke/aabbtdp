@@ -61,12 +61,7 @@ bool are_very_close(const Vector & a, const Vector & b)
 
 bool are_very_close(Real a, Real b)
     { return magnitude(a - b) < 0.005; }
-#if 0
-void print_image(const ImageEntry & image) {
-    std::cout << "low theta " << PolarVector{image.anchor_low}.theta
-              << " - high theta " << PolarVector{image.anchor_high}.theta << std::endl;
-}
-#endif
+
 bool has_valid_positions(const ImageEntry & image) {
     if (tdp::completely_overlaps_source(image)) return true;
     return PolarVector{image.anchor_low}.theta < PolarVector{image.anchor_high}.theta;
@@ -76,10 +71,7 @@ bool has_valid_positions(const ImageEntry & image) {
 
 void do_sight_unit_tests(TestSuite & suite) {
     static const auto inst = UnitTestFunctions::make_instance();
-#   if 0 // this keeps changing, which makes me hesitent to make tests for
-    static const auto crosses_anti_anchor_line = inst.crosses_anti_anchor_line;
-    suite.start_series("sight - crosses anti anchor line");
-#   endif
+
     static const auto make_image = inst.make_image;
     suite.start_series("sight - make_image");
     mark(suite).test([] {
@@ -220,15 +212,29 @@ void do_sight_unit_tests(TestSuite & suite) {
     });
     // the last and "butterfly" overlap test
     mark(suite).test([] {
+        // the part of the subject that's visible should be from left to intx
+        // and from some "shadow" point to the right end
         Vector sub_left{-5, -6}, sub_right{2, -3};
         Vector obj_left{-2, -3}, obj_right{5, -6};
-        auto intx = cul::find_intersection(sub_left, sub_right, obj_left, obj_right);
+
+        const auto intx = cul::find_intersection(sub_left, sub_right, obj_left, obj_right);
         assert(intx != cul::get_no_solution_sentinel<Vector>());
-        auto por_part = magnitude(intx - sub_right) / magnitude(sub_left - sub_right);
+
+        const auto obj_right_theta = PolVec{obj_right}.theta; // -0.876
+        const auto sub_right_theta = PolVec{sub_right}.theta; // -0.983
+        const auto intx_theta      = PolVec{intx}.theta;      // -1.571
+        const auto sub_left_theta  = PolVec{sub_left }.theta; // -2.266
+        const auto obj_left_theta  = PolVec{obj_left}.theta;  // -2.159
+
+        const auto vis_sub_left = magnitude(sub_left_theta - obj_left_theta);
+        const auto vis_sub_right = magnitude(intx_theta - sub_right_theta);
+        const auto whole   = magnitude(sub_left_theta - sub_right_theta);
+        auto cor_por = (vis_sub_right + vis_sub_left) / whole;
+        assert(cor_por > 0 && cor_por < 1);
         // Is this test even correct?
         auto por = find_portion_overlapped(PolVec{sub_left}, PolVec{sub_right},
                                            PolVec{obj_left}, PolVec{obj_right});
-        return test(are_very_close(por, por_part));
+        return test(are_very_close(por, cor_por));
     });
     mark(suite).test([] {
         PolVec sublow{3, k_test_arc_pos}, subhigh{3, k_test_arc_pos};

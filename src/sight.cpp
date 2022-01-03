@@ -323,16 +323,7 @@ Real find_portion_overlapped
 }
 
 // ----------------------------------------------------------------------------
-#if 0
-template <typename T>
-cul::Vector2<T> top_right_of(const cul::Rectangle<T> &);
 
-template <typename T>
-cul::Vector2<T> bottom_right_of(const cul::Rectangle<T> &);
-
-template <typename T>
-cul::Vector2<T> bottom_left_of(const cul::Rectangle<T> &);
-#endif
 Real directed_angle_between_(const Vector & a, const Vector & b);
 
 auto bind_lesser_angle_from(Vector r) {
@@ -440,19 +431,7 @@ Real portion_infront(const PolarVector & obj_beg, const PolarVector & obj_last,
 }
 
 // ----------------------------------------------------------------------------
-#if 0
-template <typename T>
-cul::Vector2<T> top_right_of(const cul::Rectangle<T> & rect)
-    { return cul::Vector2<T>(rect.left + rect.width, rect.top); }
 
-template <typename T>
-cul::Vector2<T> bottom_right_of(const cul::Rectangle<T> & rect)
-    { return cul::Vector2<T>(rect.left + rect.width, rect.top + rect.height); }
-
-template <typename T>
-cul::Vector2<T> bottom_left_of(const cul::Rectangle<T> & rect)
-    { return cul::Vector2<T>(rect.left, rect.top + rect.height); }
-#endif
 Real directed_angle_between_(const Vector & a, const Vector & b) {
     auto rv = directed_angle_between(a, b);
     /**/ if (rv < -k_pi) rv += 2*k_pi;
