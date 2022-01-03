@@ -178,7 +178,8 @@ Real find_highest_non_overlap
     (const Rectangle & subject, const Rectangle & object, const Vector & subject_displc);
 
 Vector find_push_direction
-    (const Rectangle & last_non_overlapping_subject, const Rectangle & object);
+    (const Rectangle & last_non_overlapping_subject, const Rectangle & object,
+     const Vector & subject_displacement);
 
 // how long in this (remaining) displacement do we push the object
 Real find_push_duration
@@ -208,7 +209,7 @@ Tuple<Vector, HitSide> find_min_push_displacement
     if (!is_real(start)) return make_tuple(Vector{}, HitSide{});
     const auto lno_subject = displace(rect, displc*start);
     assert(!overlaps(lno_subject, other));
-    const auto dir = find_push_direction(lno_subject, other);
+    const auto dir = find_push_direction(lno_subject, other, displc);
     assert(dir.x*displc.x > 0 || dir.y*displc.y > 0);
     // we can only push for a maximum duration of start to end of the frame
     const auto dur = min(
@@ -363,23 +364,21 @@ Real find_highest_non_overlap
 
 Vector find_push_direction
     (const Rectangle & last_non_overlapping_subject,
-     const Rectangle & object)
+     const Rectangle & object, const Vector & subject_displacement)
 {
     // I want to displace inside the object... just enough to get an
     // intersection rectangle to derive the push direction
     const auto & lno_sub = last_non_overlapping_subject;
     static const auto mag = [](Real x) { return magnitude(x); };
-    const std::array arr = {
-        mag(lno_sub.left       - right_of (object)),
-        mag(right_of (lno_sub) - object.left      ),
-        mag(lno_sub.top        - bottom_of(object)),
-        mag(bottom_of(lno_sub) - object.top       )
-    };
+    static const auto make_avail_if_non_ze = [](Real val)
+        { return [val](Real x) { return val == 0 ? k_inf : x; }; };
+    const auto if_dx_nz = make_avail_if_non_ze(subject_displacement.x);
+    const auto if_dy_nz = make_avail_if_non_ze(subject_displacement.y);
     return get<Vector>(min({
-        make_tuple(mag(lno_sub.left       - right_of (object)), Vector{-1,  0}),
-        make_tuple(mag(right_of (lno_sub) - object.left      ), Vector{ 1,  0}),
-        make_tuple(mag(lno_sub.top        - bottom_of(object)), Vector{ 0, -1}),
-        make_tuple(mag(bottom_of(lno_sub) - object.top       ), Vector{ 0,  1})
+        make_tuple(if_dx_nz(mag(lno_sub.left       - right_of (object))), Vector{-1,  0}),
+        make_tuple(if_dx_nz(mag(right_of (lno_sub) - object.left      )), Vector{ 1,  0}),
+        make_tuple(if_dy_nz(mag(lno_sub.top        - bottom_of(object))), Vector{ 0, -1}),
+        make_tuple(if_dy_nz(mag(bottom_of(lno_sub) - object.top       )), Vector{ 0,  1})
     }, TupleLessThan<Real>{}));
 }
 

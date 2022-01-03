@@ -223,8 +223,8 @@ void do_sight_unit_tests(TestSuite & suite) {
         const auto obj_right_theta = PolVec{obj_right}.theta; // -0.876
         const auto sub_right_theta = PolVec{sub_right}.theta; // -0.983
         const auto intx_theta      = PolVec{intx}.theta;      // -1.571
-        const auto sub_left_theta  = PolVec{sub_left }.theta; // -2.266
         const auto obj_left_theta  = PolVec{obj_left}.theta;  // -2.159
+        const auto sub_left_theta  = PolVec{sub_left }.theta; // -2.266
 
         const auto vis_sub_left = magnitude(sub_left_theta - obj_left_theta);
         const auto vis_sub_right = magnitude(intx_theta - sub_right_theta);

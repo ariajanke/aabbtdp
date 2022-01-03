@@ -12,17 +12,6 @@ There are two main features to this library. Sight and Physics, described separa
 - Create a handler, then set a collision matrix.
 - Reuse and update your entries during the main game loop. :)
 
-```mermaid
-classDiagram
-EventHandler <|-- MyEventHandler
-class MyEventHandler {
- + check_accept_collision(Entity, Entity) bool
- + on_collision(Entity, Entity, bool)
- + on_trespass(Entity,  Entity)
- + finalize_entry(Entity, Rectangle)
-}
-```
-
 ### Getting Started with Sight
 - Prepare and add "entries" to a handler
 - Call run, and get your results
@@ -33,7 +22,7 @@ More information is available in the docs/include sources.
 # Demo
 Also, I've built a demo to show this library's capabilities.
 
-[Here](https://ariajanke.github.io/aabbtp/demo-wasm/bin/spa_out.html)
+[Here](https://ariajanke.github.io/aabbtdp/demo-wasm/bin/spa_out.html)
 
 # Installation
 This was tested on a fresh Ubuntu VM.

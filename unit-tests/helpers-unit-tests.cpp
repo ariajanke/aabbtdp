@@ -402,15 +402,17 @@ void do_find_min_push_displacement_tests(TestSuite & suite) {
             return test(are_very_close(push, cor_push));
         });
     });
-#   if 0 // fires assertion!
-    [] {
+    // observed failure 22-1-2
+    // assertion fails: push direction is not compatible with the subject's
+    // displacement
+    mark(suite).test([] {
         Vector displc{2.5737990837420464, 0};
         Rectangle other{130.96957313685118,80.722277825726977,10,10};
         Rectangle rect {120.10942830086175,70.722500269287721,10,10};
-        find_min_push_displacement(rect, other, displc);
-    } ();
-#   endif
-    // there's another case that's a bug witnessed with the demo
+        auto push = std::get<Vector>(find_min_push_displacement(rect, other, displc));
+        return test(push.x != 0 && push.y == 0);
+    });
+    // I can always add more tests later c:
 }
 
 void do_trim_displacement_for_barriers_tests(TestSuite & suite) {
