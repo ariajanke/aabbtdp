@@ -71,7 +71,7 @@
 
     if (a && b) {
         auto pt = (  center_of(Entity{a}.get<Rectangle>())
-                   + center_of(Entity{b}.get<Rectangle>())) / 2.;
+                   + center_of(Entity{b}.get<Rectangle>())) / Real(2.);
         make_popup(Entity{a}.make_entity(), pt,
                    force_name(Entity{a}) + " hit " + force_name(Entity{b}));
     } else if (a) {

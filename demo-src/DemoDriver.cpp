@@ -416,15 +416,17 @@ void SceneDriver::prepare_scenes() {
     }
     ))
     ;
+#   endif
 #   if 1
     // this is a stupidly complex scene
     // but an important test case still
-    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
+
+    push_new_scene("Cross Blocks", [](Loader & maker) {
         static const Size2 k_size(30, 30);
         static const Vector k_center(-200, -200);
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(k_center, k_size);
-        e.add<DrawRectangle>().set_color(sf::Color(180, 200, 180));
+        e.add<Color>() = "#BCB";
         e.add<Pushable>();
 
         static auto k_inner = { Vector(-1, -0.6), Vector(-1, 0.6),
@@ -437,7 +439,7 @@ void SceneDriver::prepare_scenes() {
             e = maker.make_entity();
             e.add<Rectangle>() = make_rect_from_center(k_center
                 + Vector(r.x*k_size.width, r.y*k_size.height), k_size);
-            e.add<DrawRectangle>().set_color(sf::Color(150, 150, 150));
+            e.add<Color, Layer>() = make_tuple("#AAA", k_block_layer);
             e.add<Pushable>();
         }
 
@@ -445,19 +447,20 @@ void SceneDriver::prepare_scenes() {
             e = maker.make_entity();
             e.add<Rectangle>() = make_rect_from_center(k_center
               + Vector(r.x*k_size.width, r.y*k_size.height), k_size);
-            e.add<DrawRectangle>().set_color(sf::Color(90, 90, 90));
+            e.add<Color, Layer>() = make_tuple("#999", k_block_layer);
             e.add<Pushable>();
         }
         for (auto r : k_outer) {
             e = maker.make_entity();
             e.add<Rectangle>() = make_rect_from_center(k_center
                 + Vector(r.x*k_size.width, r.y*k_size.height), k_size);
-            e.add<DrawRectangle>().set_color(sf::Color(90, 90, 190));
+            e.add<Color, Layer>() = make_tuple("#88C", k_block_layer);
+
             e.add<Velocity>() = Vector(-cul::normalize(r.x), 0)*Real(30.);
         }
-    }));
+    });
 #   endif
-
+#   if 0
     scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
         auto e = maker.make_entity();
         e.add<DrawRectangle>().set_color(sf::Color(100, 100, 200));
@@ -660,9 +663,9 @@ namespace {
 
 Entity make_player_for_any_scene(EntityManager & entity_manager) {
     auto player = entity_manager.make_entity();
-    player.add<Rectangle>() = make_rect_from_center(Vector(), Size2(48, 48));
+    player.add<Rectangle>() = make_rect_from_center(Vector(0, -100), Size2(48, 48));
     player.add<Color>() = "#F56";
-    player.add<Layer>() = layers::k_block;
+    player.add<Layer>() = layers::k_passive;
     player.add<Velocity, Sight>();
     player.add<MapLimits>() = k_field_rectangle;
     return player;

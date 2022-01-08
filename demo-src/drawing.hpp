@@ -198,6 +198,8 @@ public:
             }
             return true;
         };
+
+        int i = 1;
         for (auto & e : view) {
             if (!e.has<Rectangle>()) continue;
             if (draws_plevel(e)) continue;
@@ -205,7 +207,14 @@ public:
                 draw_interface().draw_string_center(
                     e.get<Name>().value, center_of(e.get<Rectangle>()));
             }
+#           if 0
+            const auto & rect = e.get<Rectangle>();
+            draw_interface().draw_string_center(
+                std::to_string(rect.left) + " " + std::to_string(rect.top),
+                center_of(rect) + Vector{0, 16*(i++)});
+#           endif
         }
+
     }
 
 private:
@@ -220,7 +229,7 @@ inline auto make_grid_tally_drawer(tdp::GridPhysicsHandlerImpl & handler) {
         auto offset    = handler_ptr->offset();
         handler_ptr->count_each_cell([&](VecI r, int i) {
             if (i == 0) return;
-            auto pt = offset + convert_to<Vector>(cell_size)*0.5
+            auto pt = offset + convert_to<Vector>(cell_size)*Real(0.5)
                     + Vector{cell_size.width*r.x, cell_size.height*r.y};
             intf.draw_string_center(std::to_string(i), pt);
         });

@@ -95,17 +95,17 @@ void CollisionEvent::send_to(EventHandler & handler) const {
 void EventRecorder::send_events(EventHandler & handler) {
     // there's some reliance on implementation of HashMap knowledge :c
     for (auto itr = m_events.begin(); itr != m_events.end(); ++itr) {
-        auto & age_nfo = get<AgeInfo>(itr->second);
+        auto & age_nfo = itr->second.age;
         if (!age_nfo.has_been_sent) {
             CollisionEvent{get<0>(itr->first), get<1>(itr->first),
-                           get<CollisionType>(itr->second)}
+                           itr->second.type}
             .send_to(handler);
             age_nfo.has_been_sent = true;
         }
         if (age_nfo.frames_since_last_update != 0) {
             m_events.erase(itr);
         } else {
-            age_nfo.frames_since_last_update = 1;
+            ++age_nfo.frames_since_last_update;
         }
     }
 }
@@ -118,22 +118,28 @@ std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
 }
 
 /* private */ void EventRecorder::push_event(const CollisionEvent & col_event) {
+    // 1: no events
+    // 2: a and b hit; emit event
+    // 3: a and b hit; emit nothing
+
+    // 1: no events
+    // 2: a and b hit; emit event
+    // 3: no events
+    // 4: a and b hit; emit event
+
     using std::make_pair;
     auto key = make_tuple(col_event.first(), col_event.second());
     auto itr = m_events.find(key);
-    if (itr != m_events.end()) {
-        // if it's already present, then it's "updated"
-        // if the type has changed, then it's considered a new event
-        // I need a better way of handling event age
-        if (get<CollisionType>(itr->second) == col_event.type()) {
-            // what if it's new this frame...?
-            get<AgeInfo>(itr->second).frames_since_last_update = 0;
-        } else {
-            get<AgeInfo>(itr->second) = AgeInfo{};
-        }
-    } else {
-        (void)m_events.insert(make_pair(key, make_tuple(col_event.type(), AgeInfo{})));
+    if (itr == m_events.end()) {
+        (void)m_events.insert(make_pair(key, Collision{col_event.type()}));
+        return;
     }
+    auto & event = itr->second;
+    if (event.age.frames_since_last_update > 1) {
+        // if it didn't happen last frame, it should be treated as a new event
+        event.age.has_been_sent = false;
+    }
+    event.age.frames_since_last_update = 0;
 }
 
 // -------------------------------- FullEntry ---------------------------------

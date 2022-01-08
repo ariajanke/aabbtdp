@@ -94,6 +94,8 @@ void do_misc_tests(TestSuite &);
 
 void do_sight_unit_tests(TestSuite &);
 
+void do_integration_tests(TestSuite &);
+
 int main() {
     TestSuite suite;
     suite.hide_successes();
@@ -108,7 +110,8 @@ int main() {
         do_trim_displacement_tests,
         do_trespass_occuring_tests,
         do_misc_tests,
-        do_sight_unit_tests
+        do_sight_unit_tests,
+        do_integration_tests
     };
     bool all_successes = true;
     for (auto f : k_test_functions) {

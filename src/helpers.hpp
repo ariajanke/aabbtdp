@@ -115,8 +115,14 @@ private:
     };
 
     using CollisionType = CollisionEvent::Type;
-    using EventKey      = Tuple<Entity, Entity>;
-    using EventValue    = Tuple<CollisionType, AgeInfo>;
+    struct Collision final {
+        Collision() {}
+        explicit Collision(CollisionType type_): type(type_) {}
+        AgeInfo       age;
+        CollisionType type;
+    };
+
+    using EventKey   = Tuple<Entity, Entity>;
 
     struct EventHasher final {
         std::size_t operator () (const EventKey &);
@@ -124,7 +130,7 @@ private:
 
     void push_event(const CollisionEvent & col_event);
 
-    using EventContainer = rigtorp::HashMap<EventKey, EventValue, EventHasher>;
+    using EventContainer = rigtorp::HashMap<EventKey, Collision, EventHasher>;
 
     // thank you Erik Rigtorp for saving me the trouble of trying to implement one
     // myself, and for writing such a fast implementation too!

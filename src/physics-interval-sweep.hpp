@@ -149,6 +149,8 @@ template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
             // second part of the overlap feature
             if (high_j(**itr) > low_j(**jtr) && high_j(**jtr) > low_j(**itr)) {
                 intf.step(**itr, **jtr);
+                // maybe some of these pairs must follow finalization of the
+                // other entity?
                 intf.step(**jtr, **itr);
             }
             assert(*jtr != *itr);

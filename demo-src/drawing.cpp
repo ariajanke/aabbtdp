@@ -35,7 +35,7 @@ void draw_grid_line
 
 void draw_backround(DrawInterface & draw_interface, Vector camera_center, Size2 visible_area) {
     // "out of bounds"
-    Rectangle center_rect{camera_center - convert_to<Vector>(visible_area*0.5), visible_area};
+    Rectangle center_rect{camera_center - convert_to<Vector>(visible_area*Real(0.5)), visible_area};
     draw_interface.draw_rectangle(center_rect, "#777");
     // "walkable" area
     draw_interface.draw_rectangle(
@@ -61,7 +61,7 @@ void draw_grid_line
     Real x_pos = find_start(bounds.left, spacing);
     for (int i = 0; i != hsteps; ++i) {
         draw_intf.draw_rectangle(Rectangle{
-            x_pos - thickness*0.5, bounds.top, thickness, bounds.height
+            x_pos - thickness*Real(0.5), bounds.top, thickness, bounds.height
         }, "#FFF");
 
         x_pos += spacing;
@@ -72,7 +72,7 @@ void draw_grid_line
     Real y_pos = find_start(bounds.top , spacing);
     for (int i = 0; i != vsteps; ++i) {
         draw_intf.draw_rectangle(Rectangle{
-            bounds.left, y_pos - thickness*0.5, bounds.width, thickness
+            bounds.left, y_pos - thickness*Real(0.5), bounds.width, thickness
         }, "#FFF");
         y_pos += spacing;
     }

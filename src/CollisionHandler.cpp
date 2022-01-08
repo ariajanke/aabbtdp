@@ -69,14 +69,31 @@ void CollisionHandler::CollisionWorker::operator () (EventHandler & event_handle
 }
 
 void CollisionHandler::run(EventHandler & event_handler) {
+#   if 0
+    static_assert(sizeof(std::size_t) == sizeof(Real), "");
+    std::vector<FullEntry> entries;
+#   endif
     for (auto itr = m_entries.begin(); itr != m_entries.end();) {
         if (itr->second.entity) {
+#           if 0
+            if (entries.size() < 2) entries.push_back(itr->second);
+#           endif
             ++itr;
         } else {
             itr = m_entries.erase(itr);
         }
     }
+#   if 0
+    const auto a_x = *reinterpret_cast<std::size_t *>(&entries[0].bounds.left);
+    const auto a_y = *reinterpret_cast<std::size_t *>(&entries[0].bounds.top );
+    const auto a_dx = *reinterpret_cast<std::size_t *>(&entries[0].displacement.x);
+    const auto a_dy = *reinterpret_cast<std::size_t *>(&entries[0].displacement.y);
 
+    const auto b_x = *reinterpret_cast<std::size_t *>(&entries[1].bounds.left);
+    const auto b_y = *reinterpret_cast<std::size_t *>(&entries[1].bounds.top );
+    const auto b_dx = *reinterpret_cast<std::size_t *>(&entries[1].displacement.x);
+    const auto b_dy = *reinterpret_cast<std::size_t *>(&entries[1].displacement.y);
+#   endif
     bool was_called = false;
     CollisionWorker cw{was_called, m_event_recorder, m_col_matrix, m_entries};
     prepare_iteration(cw, event_handler);
