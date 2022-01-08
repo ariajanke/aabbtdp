@@ -665,7 +665,7 @@ Entity make_player_for_any_scene(EntityManager & entity_manager) {
     auto player = entity_manager.make_entity();
     player.add<Rectangle>() = make_rect_from_center(Vector(0, -100), Size2(48, 48));
     player.add<Color>() = "#F56";
-    player.add<Layer>() = layers::k_passive;
+    player.add<Layer>() = layers::k_block;
     player.add<Velocity, Sight>();
     player.add<MapLimits>() = k_field_rectangle;
     return player;
