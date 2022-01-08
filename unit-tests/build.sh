@@ -1,5 +1,5 @@
 #!/bin/bash
-sources='sight-unit-tests.cpp helpers-unit-tests.cpp main.cpp '
+sources='sight-unit-tests.cpp helpers-unit-tests.cpp main.cpp integration-tests.cpp '
 sources+=$(find ../src | grep '[.]cpp$')
 includes="-I../lib/cul/inc -I../lib/HashMap/include -I../inc"
 libs='-L'$(pwd)'/../lib/cul'

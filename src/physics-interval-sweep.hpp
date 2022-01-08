@@ -142,23 +142,33 @@ template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
 /* private */ void SweepIJContainer<low_i, high_i, low_j, high_j>::for_each_sequence_
     (SequenceInterface & intf)
 {
-    for_i_intervals([&intf](WsIter itr, WsIter jtr, WsIter jtr_end) {
+    // processing entries before prestep is fine
+    //
+    // I still need a test case!
+    for_i_intervals([&intf](WsIter itr, WsIter beg, WsIter end) {
         intf.prestep(**itr);
-        for (; jtr != jtr_end; ++jtr) {
-            // anymore and I worry we're hitting brute force again
+        auto intersects_j_wise = [itr](const FullEntry & other)
+            { return high_j(**itr) > low_j(other) && high_j(other) > low_j(**itr); };
+        for (auto jtr = beg; jtr != end; ++jtr) {
+            // anymore checks and I worry we're hitting brute force again
             // second part of the overlap feature
-            if (high_j(**itr) > low_j(**jtr) && high_j(**jtr) > low_j(**itr)) {
+            if (intersects_j_wise(**jtr)) {
                 intf.step(**itr, **jtr);
-                // maybe some of these pairs must follow finalization of the
-                // other entity?
+#               if 0
                 intf.step(**jtr, **itr);
+#               endif
             }
             assert(*jtr != *itr);
         }
         intf.poststep(**itr);
+#       if 1
+        // moving pairs to post finalization was easier than I thought
+        for (auto jtr = beg; jtr != end; ++jtr) {
+            if (intersects_j_wise(**jtr)) intf.step(**jtr, **itr);
+        }
+#       endif
     });
 }
-
 
 template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
           Real(*low_j)(const FullEntry &), Real(*high_j)(const FullEntry &)>
