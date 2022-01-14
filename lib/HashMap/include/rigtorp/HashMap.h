@@ -1,3 +1,14 @@
+// Changes (c) 2021 by Aria Janke
+// The lines where this occured are enclosed in
+// "ifndef MACRO_USE_OLD_RIGTORP_HASHMAP" macros.
+//
+// In keeping with the spirit of this container's intended interface, I done my
+// best to follow something that may stand in for the STL's unordered_map.
+// Further these changes are also released under the MIT license.
+//
+// There maybe a drawback to this change performance wise, but this is not
+// messured.
+//
 // © 2017-2020 Erik Rigtorp <erik@rigtorp.se>
 // SPDX-License-Identifier: MIT
 
@@ -164,7 +175,13 @@ public:
     return emplace_impl(std::forward<Args>(args)...);
   }
 
+# ifndef MACRO_USE_OLD_RIGTORP_HASHMAP
+  /// Removes the element pointed to by "it".
+  /// @returns an iterator pointing to the element after the erase element
+  iterator erase(iterator it) { return erase_impl(it); }
+# else
   void erase(iterator it) { erase_impl(it); }
+# endif
 
   size_type erase(const key_type &key) { return erase_impl(key); }
 
@@ -247,14 +264,28 @@ private:
     }
   }
 
+# ifndef MACRO_USE_OLD_RIGTORP_HASHMAP
+  iterator erase_impl(iterator it) {
+# else
   void erase_impl(iterator it) {
+# endif
     size_t bucket = it.idx_;
     for (size_t idx = probe_next(bucket);; idx = probe_next(idx)) {
+#     ifndef MACRO_USE_OLD_RIGTORP_HASHMAP
+      if (key_equal()(buckets_[idx].first, empty_key_) ||
+          idx < bucket) {
+        buckets_[bucket].first = empty_key_;
+        size_--;
+        it.advance_past_empty();
+        return it;
+      }
+#     else
       if (key_equal()(buckets_[idx].first, empty_key_)) {
         buckets_[bucket].first = empty_key_;
         size_--;
         return;
       }
+#     endif
       size_t ideal = key_to_idx(buckets_[idx].first);
       if (diff(bucket, ideal) < diff(idx, ideal)) {
         // swap, bucket is closer to ideal than idx

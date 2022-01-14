@@ -616,6 +616,65 @@ void do_misc_tests(TestSuite & suite) {
             Size(15, 12)
         ));
     });
+    mark(suite).test([] {
+        struct TestStruct final {
+            TestStruct() {}
+            explicit TestStruct(int m): v(m) {}
+            int v = 1;
+        };
+        struct BadHasher final {
+            std::size_t operator ()(void *) const { return 5; }
+        };
+
+        using rigtorp::HashMap, std::make_tuple, std::make_pair;
+        using TestHashMap = HashMap<void *, TestStruct, BadHasher>;
+        TestHashMap hashmap{8, nullptr};
+
+        const auto [k_a_key, k_b_key, k_c_key, k_d_key] = [] {
+            static std::array<uint8_t, 4> k_key_addrs;
+            static auto void_ptr_of = [](int idx) -> void *
+                { return &k_key_addrs[idx]; };
+            return make_tuple(void_ptr_of(0), void_ptr_of(1), void_ptr_of(2), void_ptr_of(3));
+        } ();
+        hashmap.insert(make_pair(k_a_key, TestStruct{1}));
+        hashmap.insert(make_pair(k_b_key, TestStruct{2}));
+        hashmap.insert(make_pair(k_c_key, TestStruct{3}));
+        hashmap.insert(make_pair(k_d_key, TestStruct{4}));
+
+        int found_el_with_three = 0;
+        int found_el_with_four  = 0;
+        for (auto itr = hashmap.begin(); itr != hashmap.end(); ) {
+            assert(itr->first);
+            switch (itr->second.v) {
+            case 2:
+#               ifndef MACRO_USE_OLD_RIGTORP_HASHMAP
+                // this *does* work
+                itr = hashmap.erase(itr);
+#               elif 0
+                // explicit increment
+                // this also doesn't work, as we could skip a valid next
+                // element
+                hashmap.erase(itr);
+                ++itr;
+#               else
+                // old style of re using old iterator
+                // this doesn't work as what if old iterator just goes to
+                // empty key?
+                //
+                // in this test case though wrap around still causes undesired
+                // behavior
+                hashmap.erase(itr);
+#               endif
+                continue; // -> for loop
+            case 3: ++found_el_with_three; break;
+            case 4: ++found_el_with_four ; break;
+            default: break;
+            }
+            ++itr;
+        }
+
+        return test(found_el_with_three == 1 && found_el_with_four == 1);
+    });
 }
 
 namespace {
