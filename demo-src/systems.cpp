@@ -82,7 +82,15 @@
 }
 
 /* private static */ void CollisionSystem::on_trespass
-    (EntityRef, EntityRef) {}
+    (EntityRef aref, EntityRef bref)
+{
+    static auto on_trespass = [](Entity a, Entity b) {
+        if (!a.has<TrackTrespassers>()) return;
+        a.get<TrackTrespassers>().entities.push_back(b);
+    };
+    on_trespass(Entity{aref}, Entity{bref});
+    on_trespass(Entity{bref}, Entity{aref});
+}
 
 /* private static */ void CollisionSystem::finalize_entry
     (EntityRef e, Rectangle new_bounds)

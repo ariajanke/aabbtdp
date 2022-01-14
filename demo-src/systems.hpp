@@ -116,6 +116,48 @@ private:
     static void update(Entity &, Real elapsed_time);
 };
 
+class UpdateTrespassersSystem final : public System {
+public:
+    void update(const ContainerView & view) {
+        for (auto & e : view) {
+            if (!e.has_all<TrackTrespassers, Rectangle>()) continue;
+            update_trespassers(e.get<Rectangle>(), e.get<TrackTrespassers>().entities);
+        }
+    }
+
+private:
+    static void update_trespassers
+        (const Rectangle & bounds, std::vector<EntityRef> & trespassers)
+    {
+        using cul::overlaps;
+        auto transform_trespasser = [bounds](const EntityRef eref)
+            { return overlaps(Entity{eref}.get<Rectangle>(), bounds) ? eref : EntityRef{}; };
+        std::transform(trespassers.begin(), trespassers.end(),
+                       trespassers.begin(), transform_trespasser);
+        auto new_end = std::remove(trespassers.begin(), trespassers.end(), EntityRef{});
+        trespassers.erase(new_end, trespassers.end());
+    }
+};
+
+class UpdateFloatRectangleSystem final : public System, public TimeAware {
+public:
+    void update(const ContainerView & view) final {
+        for (auto & e : view) {
+            if (!e.has_all<TrackTrespassers, FloatRectangles>()) continue;
+            auto & time = e.get<FloatRectangles>().time;
+            time = update(e.get<TrackTrespassers>().entities.size(), time, elapsed_time());
+        }
+    }
+
+private:
+    static Real update(std::size_t trespassers_count, Real old_value, Real et) {
+        using FRect = FloatRectangles;
+        if (trespassers_count == 0) return k_inf;
+        if (old_value == k_inf) return et;
+        return (old_value + et > FRect::k_cycle_max) ? FRect::k_float_duration : old_value + et;
+    }
+};
+
 class SightFacingUpdateSystem final : public System {
 public:
     void update(const ContainerView & view) {

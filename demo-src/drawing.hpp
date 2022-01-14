@@ -82,17 +82,7 @@ protected:
         return *m_intf;
     }
 
-    void do_individual(const Entity & e) const {
-        if (!e.has<Rectangle>()) return;
-        auto & rect = e.get<Rectangle>();
-        if (auto * color = e.ptr<Color>()) {
-            draw_interface().draw_rectangle(rect, color->string);
-        }
-        if (auto * dstring = e.ptr<DisplayString>()) {
-            draw_interface().draw_string_center(dstring->value, center_of(rect));
-        }
-    }
-
+    void do_individual(const Entity & e) const;
 
 private:
     DrawInterface * m_intf = nullptr;
@@ -100,6 +90,16 @@ private:
 
 
 void draw_backround(DrawInterface & draw_interface, Vector camera_center, Size2 visible_area);
+
+// include '#'
+using RGBA9String = std::array<char, 1 + 8 + 1>;
+// end is either non-real rectangle OR end of array
+using DrawableFloatRectangles =
+    std::array<Tuple<Rectangle, RGBA9String>,
+               FloatRectangles::k_max_rectangles>;
+
+DrawableFloatRectangles make_drawable_float_rectangles
+    (const Rectangle & base, const char * base_color, Real float_time);
 
 // Drawing is order important... semantically systems execute whenever in
 // whatever order...

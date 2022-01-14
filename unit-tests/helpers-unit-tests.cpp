@@ -538,6 +538,58 @@ void do_trespass_occuring_tests(TestSuite & suite) {
             return test(trespass_occuring(a, b, Vector(working, 0)));
         });
     });
+    mark(suite).test([] {
+        // confirmed... no overlap... ever!
+        Vector displc{138,-54};
+        Vector origin{193.19999999999999, 163.19999999999999};
+        Rectangle other = displace(Rectangle{291.19999999999999,163.19999999999999,20,20}, -origin);
+        Rectangle rect  = displace(Rectangle{193.19999999999999, 193.19999999999999, 4, 4}, -origin);
+        return test(!trespass_occuring(rect, other, displc));
+    });
+    #   if 0
+    $('body').html('<div id="a"></div><div id="b"></div>');
+    const do_show = (et, rate) => {
+        let time = 0;
+        const to = () => {
+            time += et*rate;
+            if (time > 1) time = 1;
+            update_divs(time);
+            if (time >= 1) return;
+            setTimeout(to, et / 1000);
+        };
+        to();
+    };
+    const update_divs = t => {
+        const displc = {x: 138, y: -54};
+        const other = {x: 291.19999999999999, y: 163.19999999999999, w: 20,h:20};
+        const rect  = {x: 193.19999999999999, y: 193.19999999999999, w: 4, h:4};
+        const do_rect = (tag, rect) => {
+            return tag.css('left', rect.x + 'px').css('top', rect.y + 'px')
+                      .css('width', rect.w + 'px').css('height', rect.w + 'px');
+        };
+        const displace = (rect, displc, t) => {
+            return { x: rect.x + displc.x*t, y: rect.y + displc.y*t,
+                     w: rect.w, h: rect.h };
+        };
+
+        do_rect($('#a'), other).css('background-color', '#F33').css('position', 'absolute');
+        do_rect($('#b'), displace(rect, displc, t))
+            .css('background-color', '#3F3').css('position', 'absolute');
+    };
+        displc	@0x5591297b8bb8	tdp::Vector &
+            x	138	double
+            y	-54	double
+        other	@0x5591297e3c68	tdp::Rectangle &
+            height	20	double
+            left	291.19999999999999	double
+            top	163.19999999999999	double
+            width	20	double
+        rect	@0x5591297b8b88	tdp::Rectangle &
+            height	4	double
+            left	193.19999999999999	double
+            top	193.19999999999999	double
+            width	4	double
+#   endif
 }
 
 void do_misc_tests(TestSuite & suite) {

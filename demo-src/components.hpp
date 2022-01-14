@@ -111,9 +111,24 @@ struct Sight final {
     Real distance = 200;
 };
 
+struct FloatRectangles final {
+    static constexpr const Real   k_float_duration = 1.8;
+    static constexpr const Real   k_spawn_delay    = 0.5;
+    static constexpr const Real   k_cycle_max      = k_float_duration + k_spawn_delay;
+    static constexpr const Vector k_float_velocity = Vector{ .70710678118*40, -.70710678118*40 };
+    static constexpr const int    k_max_rectangles = int( k_cycle_max / k_spawn_delay ) + 1;
+    Real time = k_inf;
+};
+
+struct TrackTrespassers final {
+    // updating occupancy will have to be done synchronously
+    std::vector<EntityRef> entities;
+};
+
 using Entity = ecs::Entity<
     Rectangle, Color, DisplayString, Layer, Name, Lifetime, Sight,
-    Pushable, Bouncy, Growth, MapLimits, Velocity, HudDrawn>;
+    Pushable, Bouncy, Growth, MapLimits, Velocity, HudDrawn, FloatRectangles,
+    TrackTrespassers>;
 
 // --- helpers? --
 

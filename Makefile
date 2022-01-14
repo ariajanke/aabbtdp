@@ -16,7 +16,7 @@ UNIT_TEST_OBJECTS = $(addprefix $(OBJECTS_DIR)/,$(UNIT_TEST_SOURCES:%.cpp=%.o))
 $(OBJECTS_DIR)/%.o: | $(OBJECTS_DIR)/src
 	$(CXX) $(CXXFLAGS) -c $*.cpp -o $@
 
-default: $(OBJECTS) CXXFLAGS+= 
+default: $(OBJECTS)
 	@echo $(SOURCES)
 	ar rvs $(OUTPUT) $(OBJECTS)
 
@@ -33,5 +33,5 @@ libaabbp.a : default
 #	$(CXX) $(CXXFLAGS) -L$(shell pwd) -L$(shell pwd)/lib/cul $(UNIT_TEST_OBJECTS) -laabbp -lcommon -o .unit-tests
 #	./.unit-tests
 
-demo: $(OUTPUT) $(DEMO_OBJECTS) CXXFLAGS+= -DMACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+demo: $(OUTPUT) $(DEMO_OBJECTS)
 	$(CXX) $(CXXFLAGS) -L$(shell pwd) -L$(shell pwd)/lib/cul $(DEMO_OBJECTS) -lsfml-system -lsfml-window -lsfml-graphics -laabbp -lcommon -o .demo

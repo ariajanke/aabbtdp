@@ -310,7 +310,10 @@ public:
 
 
 private:
-    using AlwaysPresentSystems = Tuple<CollisionSystem, LifetimeSystem, SightFacingUpdateSystem>;
+    using AlwaysPresentSystems = Tuple<
+        CollisionSystem, LifetimeSystem, SightFacingUpdateSystem,
+        UpdateTrespassersSystem, UpdateFloatRectangleSystem
+    >;
 
     static int to_key_idx(Key k);
 

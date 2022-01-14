@@ -1,3 +1,4 @@
+
 /****************************************************************************
 
     MIT License
@@ -34,6 +35,7 @@ namespace {
 
 constexpr const Rectangle k_field_rectangle{0, 0, k_field_width, k_field_height};
 constexpr const auto k_block_layer = layers::k_block;
+constexpr const auto k_floor_layer = layers::k_floor_mat;
 using std::make_tuple;
 
 using namespace cul::exceptions_abbr;
@@ -426,7 +428,7 @@ void SceneDriver::prepare_scenes() {
         static const Vector k_center(-200, -200);
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(k_center, k_size);
-        e.add<Color>() = "#BCB";
+        e.add<Color, Layer>() = make_tuple("#BCB", k_block_layer);
         e.add<Pushable>();
 
         static auto k_inner = { Vector(-1, -0.6), Vector(-1, 0.6),
@@ -460,16 +462,14 @@ void SceneDriver::prepare_scenes() {
         }
     });
 #   endif
-#   if 0
-    scenes.push_scene(make_unique_scene([](SceneLoader & maker) {
+    push_new_scene("Floor Mat", [](Loader & maker) {
         auto e = maker.make_entity();
-        e.add<DrawRectangle>().set_color(sf::Color(100, 100, 200));
-        e.add<Rectangle    >() = make_rect_from_center(Vector(-100, -100), Size2(180, 80));
-        e.add<Layer        >() = layers::k_floor_mat;
-        //auto & shad_image = e.add<ShadowImage  >();
-        //shad_image.time_between_spawns = shad_image.time_to_next_spawn = 0.16;
-        e.add<Name         >().value = "FLOOR MAT";
-    }));
+        e.add<Color, Layer, Name>() = make_tuple("#77D", k_floor_layer, "FLOOR MAT");
+        e.add<Rectangle>() = make_rect_from_center(Vector(-100, -100), Size2(180, 80));
+        e.add<FloatRectangles, TrackTrespassers>();
+    });
+
+#   if 0
 
     scenes.push_scene(make_unique_scene([](SceneLoader & loader) {
         auto rng_ptr = std::make_shared<std::default_random_engine>();

@@ -430,10 +430,12 @@ Tuple<Real, Side> find_position_of_possible_overlap
     (const Rectangle & subject, const Rectangle & object, const Vector & displc)
 {
     const auto hmin = position_on_axis
-        <position_on_side<k_left_side  >, position_on_side<k_right_side  >, is_large_horizontal_displacement>
+        <position_on_side<k_left_side>, position_on_side<k_right_side>,
+         is_large_horizontal_displacement>
         (subject, object, displc);
     const auto vmin = position_on_axis
-        <position_on_side<k_top_side>,  position_on_side<k_bottom_side>, is_large_vertical_displacement>
+        <position_on_side<k_top_side>, position_on_side<k_bottom_side>,
+         is_large_vertical_displacement>
         (subject, object, displc);
     assert(is_real(get<Real>(hmin)) || is_real(get<Real>(vmin)));
     return min(hmin, vmin, TupleLessThan<Real>{});
@@ -518,10 +520,10 @@ Tuple<Real, Side> position_on_side
     const auto dist = (get_side<kt_side>(object) - get_side<kt_side>(subject))
                       / get_component<kt_side>(displc);
     // if greater than 1 or less than 0 -> no solution
-    if (dist > 1 || dist < 0) return make_rv(k_inf);
+    if (dist > 1 || dist < 0) return make_rv(1);
     // test overlap for the resultant rectangle
     // if no overlap -> no solution
-    if (!overlaps(displace(subject, displc*dist), object)) return make_rv(k_inf);
+    if (!overlaps(displace(subject, displc*dist), object)) return make_rv(1);
     return make_rv(dist);
 }
 
@@ -606,7 +608,6 @@ Real low_of(const Rectangle & rect) {
     case k_vertical  : return rect.top ;
     }
 }
-
 
 template <Dimension kt_dim>
 Real high_of(const Rectangle & rect) {

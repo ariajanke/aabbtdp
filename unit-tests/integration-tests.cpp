@@ -210,6 +210,8 @@ void do_head_on_collision(TestSuite & suite, HandlerMaker);
 
 void do_multiple_collision_bug(TestSuite & suite, HandlerMaker);
 
+void do_bad_entity_reference(TestSuite & suite, HandlerMaker);
+
 void do_integration_tests(TestSuite & suite) {
     // three primary tests one for each issue
     // first frame trespass
@@ -227,6 +229,7 @@ void do_integration_tests(TestSuite & suite) {
         return set_to_default_collision_matrix(SweepSwitchPhysicsHandler::make_instance());
     });
     do_multiple_collision_bug(suite, make_default_handler);
+    do_bad_entity_reference(suite, make_default_handler);
 }
 
 void do_first_frame_trespass(TestSuite & suite, HandlerMaker make_handler_) {
@@ -373,5 +376,50 @@ void do_multiple_collision_bug(TestSuite & suite, HandlerMaker make_handler) {
         physics_handler->update_entry(c);
         physics_handler->run(event_handler);
         return test(push_happened == 1);
+    });
+}
+
+void do_bad_entity_reference(TestSuite & suite, HandlerMaker make_handler) {
+    // It's not possible to write this test with void pointer...
+    //
+    // It maybe possible to do it with shared_ptr.
+    // 1.) Add the object entity
+    // 2.) Delete the object's shared resource
+    // 3.) Cause an event to be sent with the deleted resource
+    // Deletion was likely to occur while "run" is being called by the event
+    // handler.
+    // It's even more baffling, the first part of the resource is being
+    // deleted. (This doesn't reveal much tbh)
+    mark(suite).test([&] {
+        EntryMakerMaker emm;
+        auto physics_handler = make_handler();
+        const auto & a = emm.add_entry()
+            .set_bounds(Rectangle{ 0, 0, 10, 10 })
+            .set_displacement(Vector{12, 0})
+            .set_layer(k_solid)();
+        const auto & b = emm.add_entry()
+            .set_bounds(Rectangle{ 11, 0, 10, 10 })
+            .set_layer(k_sensor)();
+        const auto & c = emm.add_entry()
+            .set_bounds(Rectangle{ 22, 0, 10, 10 })
+            .set_layer(k_sensor)();
+        bool trespass_b = false, trespass_c = false;
+        auto event_handler = make_trespass_checker(emm,
+            [&a, &b, &c, &trespass_b, &trespass_c]
+            (const Entry & lhs, const Entry & rhs)
+        {
+            auto either_is = [&lhs, &rhs](const Entry & entry)
+                { return lhs.entity == entry.entity || rhs.entity == entry.entity; };
+            if (either_is(a) && either_is(b)) trespass_b = true;
+            if (either_is(a) && either_is(c)) trespass_c = true;
+        });
+        for (auto * entry : { &a, &b, &c })
+            physics_handler->update_entry(*entry);
+        physics_handler->run(event_handler);
+        physics_handler->remove_entry(c.entity);
+        for (auto * entry : { &a, &b })
+            physics_handler->update_entry(*entry);
+        physics_handler->run(event_handler);
+        return test(trespass_b && !trespass_c);
     });
 }
