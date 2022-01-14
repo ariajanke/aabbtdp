@@ -93,8 +93,7 @@ void CollisionEvent::send_to(EventHandler & handler) const {
 // ------------------------------ EventRecorder -------------------------------
 
 void EventRecorder::send_events(EventHandler & handler) {
-    // there's some reliance on implementation of HashMap knowledge :c
-    for (auto itr = m_events.begin(); itr != m_events.end(); ++itr) {
+    for (auto itr = m_events.begin(); itr != m_events.end(); ) {
         auto & age_nfo = itr->second.age;
         if (!age_nfo.has_been_sent) {
             CollisionEvent{get<0>(itr->first), get<1>(itr->first),
@@ -103,10 +102,12 @@ void EventRecorder::send_events(EventHandler & handler) {
             age_nfo.has_been_sent = true;
         }
         if (age_nfo.frames_since_last_update != 0) {
-            m_events.erase(itr);
+            itr = m_events.erase(itr);
+            continue;
         } else {
             ++age_nfo.frames_since_last_update;
         }
+        ++itr;
     }
 }
 
