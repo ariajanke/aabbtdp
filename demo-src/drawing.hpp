@@ -95,11 +95,11 @@ void draw_backround(DrawInterface & draw_interface, Vector camera_center, Size2 
 using RGBA9String = std::array<char, 1 + 8 + 1>;
 // end is either non-real rectangle OR end of array
 using DrawableFloatRectangles =
-    std::array<Tuple<Rectangle, RGBA9String>,
+    std::array<Tuple<Rectangle, ColorString>,
                FloatRectangles::k_max_rectangles>;
 
 DrawableFloatRectangles make_drawable_float_rectangles
-    (const Rectangle & base, const char * base_color, Real float_time);
+    (const Rectangle & base, const ColorString & base_color, Real float_time);
 
 // Drawing is order important... semantically systems execute whenever in
 // whatever order...

@@ -59,7 +59,8 @@ HEADERS += \
     ../demo-src/components.hpp \
     ../demo-src/systems.hpp \
     ../demo-src/DemoDriver.hpp \
-    ../demo-src/drawing.hpp
+    ../demo-src/drawing.hpp \
+    ../demo-src/ColorString.hpp
 
 INCLUDEPATH += \
     ../lib/cul/inc  \

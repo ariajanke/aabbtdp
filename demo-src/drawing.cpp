@@ -32,7 +32,7 @@
 namespace {
 
 using namespace cul::exceptions_abbr;
-using std::tuple;
+using std::tuple, std::make_tuple;
 
 void draw_grid_line
     (DrawInterface & draw_intf, Rectangle bounds, Real thickness, Real spacing);
@@ -50,49 +50,6 @@ void draw_backround(DrawInterface & draw_interface, Vector camera_center, Size2 
     draw_grid_line(draw_interface, center_rect, 3, 100);
 }
 
-const char * verify_ok_color_string(const char * s, const char * caller) {
-    struct F final {
-        static bool verify_length(const char * s) {
-            const auto len = strlen(s);
-            return len == 3 || len == 4 || len == 6 || len == 8;
-        }
-        static bool verify_hex_numbers(const char * s, bool b) {
-            if (*s == 0) return b;
-            return verify_hex_numbers(s + 1,
-                b && (   (*s >= 'A' && *s <= 'F')
-                      || (*s >= 'a' && *s <= 'f')
-                      || (*s >= '0' && *s <= '9')));
-        }
-    };
-    auto make_error = [caller] ()
-        { return InvArg(std::string{caller} + ": requires a valid color string."); };
-    if (*s != '#') throw make_error();
-    assert(strlen(s) != 0);
-    if (!F::verify_length(s + 1) || !F::verify_hex_numbers(s + 1, true))
-        throw make_error();
-    return s;
-}
-
-template <typename T, typename ToCString>
-std::enable_if_t<!std::is_same_v<T, const char *>, T>
-    verify_ok_color_string(T && s, const char * caller, ToCString && f)
-{
-    const char * cstr = f(s);
-    (void)verify_ok_color_string(cstr, caller);
-    return std::move(s);
-}
-
-template <int r0, int r1, int g0, int g1, int b0, int b1>
-auto make_n_with_alpha(const char * s) {
-    using std::array;
-    return [s](char a0, char a1) {
-        return verify_ok_color_string(
-            array{'#', s[r0], s[r1], s[g0], s[g1], s[b0], s[b1], a0, a1, '\0'},
-            "make_n_with_alpha",
-            [](const auto & arr) { return arr.data(); });
-    };
-}
-
 template <typename T>
 cul::Rectangle<T> displace
     (const cul::Rectangle<T> & rect, const cul::Vector2<T> & r)
@@ -105,45 +62,14 @@ struct MakeDrawableFloatRectanglesImpl final {
     static constexpr const auto k_max_rectangles = FloatRectangles::k_max_rectangles;
     static constexpr const auto k_cycle_max      = FloatRectangles::k_cycle_max;
 
-    static RGBA9String force_9char_rbga_string(const char * base_color) {
-        if (*base_color != '#') throw InvArg("");
-        const auto color_part = base_color + 1;
-        auto three_with_alpha = make_n_with_alpha<0, 0, 1, 1, 2, 2>(color_part);
-        auto six_with_alpha   = make_n_with_alpha<0, 1, 2, 3, 4, 5>(color_part);
-        switch (strlen(color_part)) {
-        case 3: return three_with_alpha('F', 'F');
-        case 4: return three_with_alpha(base_color[3], base_color[3]);
-        case 6: return six_with_alpha  ('F', 'F');
-        case 8: return six_with_alpha  (base_color[6], base_color[7]);
-        default: throw InvArg("Invalid color string");
-        }
-    }
-
-    static RGBA9String color_with_alpha(const char * base, const char * alpha) {
-        assert(strlen(base ) == 9);
-        assert(strlen(alpha) == 2);
-        return make_n_with_alpha<0, 1, 2, 3, 4, 5>(base + 1)(alpha[0], alpha[1]);
-    };
-
-    static auto alpha_portion_to_u8str(Real x) {
-        assert(x >= 0 && x <= 1);
-        static auto to_a = [](int i) -> char {
-            const char rv = (i > 9) ? ((i - 10) + 'A') : (i + '0');
-            assert((rv >= 'A' && rv <= 'F') || (rv >= '0' && rv <= '9'));
-            return rv;
-        };
-        return std::array{ to_a(int(x*255) / 16), to_a(int(x*255) % 16), '\0' };
-    };
-
-    static Tuple<Rectangle, RGBA9String> make_float_rectangle
-        (const Rectangle & base, Real age, const char * base_rgba9_color)
+    static Tuple<Rectangle, ColorString> make_float_rectangle
+        (const Rectangle & base, Real age, const ColorString & base_rgba_color)
     {
         using cul::size_of, cul::top_left_of;
         assert(age >= 0 && age <= k_lifetime);
-        const auto alpha     = 1 - age / k_lifetime;
-        const auto alpha_str = alpha_portion_to_u8str(alpha);
-        const auto color     = color_with_alpha(base_rgba9_color, alpha_str.data());
-        const auto nrect     = displace(base, k_float_velocity*age);
+        const auto alpha = 1 - age / k_lifetime;
+        const auto color = base_rgba_color.alpha().portion(alpha);
+        const auto nrect = displace(base, k_float_velocity*age);
         return make_tuple(nrect, color);
     }
 
@@ -153,22 +79,20 @@ struct MakeDrawableFloatRectanglesImpl final {
 
     class Stepper final {
     public:
-        Stepper(int step, int step_count, Real float_time, const char * base_color,
-                const Rectangle & base):
+        Stepper(int step, int step_count, Real float_time,
+                const ColorString & base_color, const Rectangle & base):
             m_step(step),
             m_step_count(step_count),
             m_float_time(float_time),
             m_base_color(base_color),
             m_base(base)
         {
-            assert(strlen(base_color) == 9);
             assert(float_time <= k_cycle_max);
         }
 
         Stepper next() const {
             return Stepper{m_step + 1, m_step_count,
-                m_float_time - k_spawn_delay, m_base_color,
-                m_base};//displace(m_base, k_float_velocity*k_spawn_delay)};
+                m_float_time - k_spawn_delay, m_base_color, m_base};
         }
 
         auto operator () () const {
@@ -194,7 +118,7 @@ struct MakeDrawableFloatRectanglesImpl final {
         const int m_step;
         const int m_step_count;
         const Real m_float_time;
-        const char * const m_base_color;
+        const ColorString & m_base_color;
         const Rectangle m_base;
     };
 
@@ -206,14 +130,14 @@ struct MakeDrawableFloatRectanglesImpl final {
 /* protected */ void DrawSystemWithInterface::do_individual(const Entity & e) const {
     if (!e.has<Rectangle>()) return;
     auto & rect = e.get<Rectangle>();
-    if (auto * color = e.ptr<Color>()) {
-        draw_interface().draw_rectangle(rect, color->string);
+    if (auto * color = e.ptr<ColorString>()) {
+        draw_interface().draw_rectangle(rect, color->c_str());
         auto * frects = e.ptr<FloatRectangles>();
         auto float_time = frects ? frects->time : k_inf;
         if (cul::is_real(float_time)) {
-            for (const auto & [rect, color] : make_drawable_float_rectangles(rect, color->string, frects->time)) {
+            for (const auto & [rect, color] : make_drawable_float_rectangles(rect, *color, frects->time)) {
                 if (!cul::is_real(rect.left)) break;
-                draw_interface().draw_rectangle(rect, color.data());
+                draw_interface().draw_rectangle(rect, color.c_str());
             }
         }
     }
@@ -223,26 +147,25 @@ struct MakeDrawableFloatRectanglesImpl final {
 }
 
 DrawableFloatRectangles make_drawable_float_rectangles
-    (const Rectangle & base, const char * base_color, Real float_time)
+    (const Rectangle & base, const ColorString & base_color, Real float_time)
 {
     using F = MakeDrawableFloatRectanglesImpl;
-    const auto ex_base_color = F::force_9char_rbga_string(base_color);
     const int step_count = int(std::min(float_time, F::k_lifetime) / F::k_spawn_delay) + 1;
     assert(step_count <= F::k_max_rectangles);
     struct G final {
     static void do_step(DrawableFloatRectangles & rv, const F::Stepper & stepper) {
         if (stepper.done()) return;
         auto [step, rect, color] = stepper();
-        verify_ok_color_string(color.data(), "do_step");
         rv[step] = make_tuple(rect, color);
         do_step(rv, stepper.next());
     }
     };
     DrawableFloatRectangles rv;
-    std::fill(rv.begin(), rv.end(), make_tuple(Rectangle{k_inf, k_inf, k_inf, k_inf}, RGBA9String{}));
+    std::fill(rv.begin(), rv.end(), make_tuple(Rectangle{k_inf, k_inf, k_inf, k_inf}, ColorString{}));
+    assert(base_color.length() > 0);
     G::do_step(rv,
         F::do_step(0, step_count, std::fmod(float_time, F::k_cycle_max),
-                   ex_base_color.data(), base));
+                   base_color, base));
     return rv;
 }
 

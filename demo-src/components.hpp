@@ -27,6 +27,7 @@
 #pragma once
 
 #include "defs.hpp"
+#include "ColorString.hpp"
 
 struct Velocity : public Vector {
     Velocity() = default;
@@ -69,13 +70,13 @@ struct Pushable final {};
 struct Bouncy final {};
 
 struct HudDrawn final {};
-
+#if 0
 struct Color final {
     // black by default
     const char * string = "#000000";
     Color & operator = (const char * cstr) { string = cstr; return *this; }
 };
-
+#endif
 struct Lifetime final {
     Lifetime() {}
     Lifetime & operator = (Real v) { value = v; return *this; }
@@ -126,7 +127,7 @@ struct TrackTrespassers final {
 };
 
 using Entity = ecs::Entity<
-    Rectangle, Color, DisplayString, Layer, Name, Lifetime, Sight,
+    Rectangle, ColorString, DisplayString, Layer, Name, Lifetime, Sight,
     Pushable, Bouncy, Growth, MapLimits, Velocity, HudDrawn, FloatRectangles,
     TrackTrespassers>;
 

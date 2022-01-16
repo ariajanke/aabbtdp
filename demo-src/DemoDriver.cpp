@@ -106,10 +106,10 @@ Entity spawn_random_rectangle
     auto y = std::round(RealDistri(rect.top       , rect.height - h)(rng));
     e.add<Rectangle>() = Rectangle(x, y, w, h);
     e.add<Layer>() = k_block_layer;
-    if (auto * color = parent.ptr<Color>()) {
-        e.add<Color>() = *color;
+    if (auto * color = parent.ptr<ColorString>()) {
+        e.add<ColorString>() = *color;
     } else {
-        e.add<Color>() = "#0A0";
+        e.add<ColorString>() = "#0A0";
     }
 
     if (auto * vel = parent.ptr<Velocity>()) {
@@ -258,13 +258,13 @@ void SceneDriver::prepare_scenes() {
     push_new_scene("Fast Projectile", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(100, 100), Size2(80, 4));
-        e.add<Color>() = "#B9B";
+        e.add<ColorString>() = "#B9B";
         e.add<Name>().value = "BLOCK";
         e.add<Layer>() = layers::k_block;
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(150 - 3 / 2, 50), Size2(3, 3));
-        e.add<Color>() = "#8C8";
+        e.add<ColorString>() = "#8C8";
         e.add<MapLimits>() = k_field_rectangle;
         e.add<Name>().value = "PROJ";
         e.add<Velocity>() = Vector(0, 1000);
@@ -279,7 +279,7 @@ void SceneDriver::prepare_scenes() {
             auto e = maker.make_entity();
             e.add<Rectangle>() = Rectangle{Real(i % 5)*64 + 100,
                                            Real(i / 5)*64 + 100, 32, 32};
-            e.add<Color, Layer, Pushable>() = make_tuple("#717", layers::k_block, Pushable{});
+            e.add<ColorString, Layer, Pushable>() = make_tuple("#717", layers::k_block, Pushable{});
             e.add<Name>() = "P" + std::to_string(i);
         }
     });
@@ -290,7 +290,7 @@ void SceneDriver::prepare_scenes() {
             auto e = maker.make_entity();
             e.add<Rectangle>() = Rectangle{Real(i % 10)*10 + 100,
                                            Real(i / 10)*10 + 100, 10, 10};
-            e.add<Color, Layer, Pushable>() = make_tuple("#717", layers::k_block, Pushable{});
+            e.add<ColorString, Layer, Pushable>() = make_tuple("#717", layers::k_block, Pushable{});
             e.add<Name>() = "P" + std::to_string(i);
         }
     });
@@ -303,14 +303,14 @@ void SceneDriver::prepare_scenes() {
 
             e.add<Rectangle>() = Rectangle{Real(i % 10)*50 + 1,
                                            Real(i / 10)*50 + 1, 10, 10};
-            e.add<Color, Layer, Pushable>() = make_tuple("#717", layers::k_block, Pushable{});
+            e.add<ColorString, Layer, Pushable>() = make_tuple("#717", layers::k_block, Pushable{});
             e.add<Name>() = "P" + std::to_string(i);
         }
     });
     push_new_scene("Random Blocks", [](Loader & maker) {
         std::default_random_engine rng { 0x01239ABC };
         auto e = maker.make_entity();
-        e.add<Color>() = "#F00";
+        e.add<ColorString>() = "#F00";
         spawn_random_rectangles(e, maker, Rectangle(100, 100, 450, 150), 5,
                                 Size2(20, 20), Size2(40, 40), rng);
 
@@ -322,42 +322,42 @@ void SceneDriver::prepare_scenes() {
     push_new_scene("Corner Blocks", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), Size2 (80, 20));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#D77", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK A", "#D77", k_block_layer);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(-100, 0), Size2(20, 80));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK B", "#77D", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK B", "#77D", k_block_layer);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(150, -160), Size2(20, 80));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK C", "#7D7", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK C", "#7D7", k_block_layer);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(150, -180), Size2(80, 20));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK D", "#D7D", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK D", "#D7D", k_block_layer);
     });
 
     push_new_scene("Head on Collision", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(500, 400), Size2(30, 30));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#C7C", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK A", "#C7C", k_block_layer);
         e.add<Velocity>() = Vector(-100, -100);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(-500, 400), Size2(30, 30));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK B", "#7CC", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK B", "#7CC", k_block_layer);
         e.add<Velocity>() = Vector(100, -100);
     });
 
     push_new_scene("Head on Collision 2", [](Loader & maker) {
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(-200, -200), Size2(30, 30));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK A", "#7CC", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK A", "#7CC", k_block_layer);
         e.add<Velocity>() = Vector(100, 0.1);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(200, -200), Size2(30, 30));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK B", "#CC7", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK B", "#CC7", k_block_layer);
         e.add<Velocity>() = Vector(-100, -0.1);
     });
 
@@ -366,14 +366,14 @@ void SceneDriver::prepare_scenes() {
         auto e = maker.make_entity();
         e.add<Bouncy>();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 250), Size2(32, 32));
-        e.add<Name, Color, Layer>() = make_tuple("BOUNCY", "#CC7", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BOUNCY", "#CC7", k_block_layer);
         e.add<Velocity>() = cul::rotate_vector(Vector(1, 0)*RealDistri{30, 150}(rng), RealDistri{0, 3.14159265*2}(rng));
         e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
 
         e = maker.make_entity();
         e.add<Pushable>();
         e.add<Rectangle>() = make_rect_from_center(Vector(200, 0), Size2(32, 32));
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK P", "#C7C", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK P", "#C7C", k_block_layer);
         e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
     });
 
@@ -381,20 +381,20 @@ void SceneDriver::prepare_scenes() {
         static const Size2 k_size(30, 30);
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 100), k_size);
-        e.add<Name, Color, Layer>() = make_tuple("PUSH A", "#7D7", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("PUSH A", "#7D7", k_block_layer);
         e.add<Pushable>();
         e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 150), k_size);
-        e.add<Name, Color, Layer>() = make_tuple("PUSH B", "#7D7", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("PUSH B", "#7D7", k_block_layer);
 
         e.add<Pushable>();
         e.add<MapLimits>() = Rectangle(0, 0, k_field_width, k_field_height);
 
         e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(Vector(0, 200), k_size);
-        e.add<Name, Color, Layer>() = make_tuple("BLOCK", "#88D", k_block_layer);
+        e.add<Name, ColorString, Layer>() = make_tuple("BLOCK", "#88D", k_block_layer);
     });
 
 #   if 0
@@ -428,7 +428,7 @@ void SceneDriver::prepare_scenes() {
         static const Vector k_center(-200, -200);
         auto e = maker.make_entity();
         e.add<Rectangle>() = make_rect_from_center(k_center, k_size);
-        e.add<Color, Layer>() = make_tuple("#BCB", k_block_layer);
+        e.add<ColorString, Layer>() = make_tuple("#BCB", k_block_layer);
         e.add<Pushable>();
 
         static auto k_inner = { Vector(-1, -0.6), Vector(-1, 0.6),
@@ -441,7 +441,7 @@ void SceneDriver::prepare_scenes() {
             e = maker.make_entity();
             e.add<Rectangle>() = make_rect_from_center(k_center
                 + Vector(r.x*k_size.width, r.y*k_size.height), k_size);
-            e.add<Color, Layer>() = make_tuple("#AAA", k_block_layer);
+            e.add<ColorString, Layer>() = make_tuple("#AAA", k_block_layer);
             e.add<Pushable>();
         }
 
@@ -449,14 +449,14 @@ void SceneDriver::prepare_scenes() {
             e = maker.make_entity();
             e.add<Rectangle>() = make_rect_from_center(k_center
               + Vector(r.x*k_size.width, r.y*k_size.height), k_size);
-            e.add<Color, Layer>() = make_tuple("#999", k_block_layer);
+            e.add<ColorString, Layer>() = make_tuple("#999", k_block_layer);
             e.add<Pushable>();
         }
         for (auto r : k_outer) {
             e = maker.make_entity();
             e.add<Rectangle>() = make_rect_from_center(k_center
                 + Vector(r.x*k_size.width, r.y*k_size.height), k_size);
-            e.add<Color, Layer>() = make_tuple("#88C", k_block_layer);
+            e.add<ColorString, Layer>() = make_tuple("#88C", k_block_layer);
 
             e.add<Velocity>() = Vector(-cul::normalize(r.x), 0)*Real(30.);
         }
@@ -464,7 +464,7 @@ void SceneDriver::prepare_scenes() {
 #   endif
     push_new_scene("Floor Mat", [](Loader & maker) {
         auto e = maker.make_entity();
-        e.add<Color, Layer, Name>() = make_tuple("#77D", k_floor_layer, "FLOOR MAT");
+        e.add<ColorString, Layer, Name>() = make_tuple("#77D", k_floor_layer, "FLOOR MAT");
         e.add<Rectangle>() = make_rect_from_center(Vector(-100, -100), Size2(180, 80));
         e.add<FloatRectangles, TrackTrespassers>();
     });
@@ -646,7 +646,7 @@ void DemoDriver::load_scene
     std::get<CollisionSystem>(m_always_present_systems).assign_handler(*m_physics_handler);
 
     m_msq = m_ent_manager.make_entity();
-    m_msq.add<Layer, Color, Rectangle>() = make_tuple(layers::k_passive, "#F00", Rectangle{0, 0, 20, 20});
+    m_msq.add<Layer, ColorString, Rectangle>() = make_tuple(layers::k_passive, "#F00", Rectangle{0, 0, 20, 20});
 }
 
 /* private static */ int DemoDriver::to_key_idx(Key k) {
@@ -664,7 +664,7 @@ namespace {
 Entity make_player_for_any_scene(EntityManager & entity_manager) {
     auto player = entity_manager.make_entity();
     player.add<Rectangle>() = make_rect_from_center(Vector(0, -100), Size2(48, 48));
-    player.add<Color>() = "#F56";
+    player.add<ColorString>() = "#F56";
     player.add<Layer>() = layers::k_block;
     player.add<Velocity, Sight>();
     player.add<MapLimits>() = k_field_rectangle;
