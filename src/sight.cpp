@@ -394,40 +394,38 @@ Real portion_infront(const PolarVector & obj_beg, const PolarVector & obj_last,
         (const PolarVector & beg, const PolarVector & last)
     { return last.theta < beg.theta ? last.theta + k_pi*2 : last.theta; };
 
-    static auto portion_infront_impl = []
-        (Real obj_low, Real obj_high, Real sub_low, Real sub_high)
+    static auto verify_with_01 = [](Real r) {
+        assert(r >= 0 && r <= 1);
+        return r;
+    };
+
+    // returns [0 1]
+    // how much does object overlap subject?
+    static auto interval_overlap = []
+        (Real obj_low, Real obj_high, Real sub_low, Real sub_high) -> Real
     {
+        // uh oh... edge cases
+        // subject is a point
+        if (sub_low == sub_high) {
+            // if both a point they must be equal, or no overlap
+            if (obj_low == obj_high) return sub_low == obj_low ? 1 : 0;
+            if (sub_low >= obj_low && sub_low <= obj_high) return 1;
+            return 0;
+        } else if (obj_low == obj_high) {
+            // infinitesimal object cannot obstruct subject at all
+            return 0;
+        }
         assert(obj_low <= obj_high && sub_low <= sub_high);
-        static auto verify_with_01 = [](Real r) {
-            assert(r >= 0 && r <= 1);
-            return r;
-        };
-        static auto handle_div = [](Real denom, Real num) -> Real {
-            // single point image? then it is covered completely
-            // (note we've already determined that we're in the object interval)
-            if (num == 0) return 1;
-            return verify_with_01(denom / num);
-        };
-        bool obj_high_inside = obj_high >= sub_low && obj_high <= sub_high;
-        if (obj_low >= sub_low && obj_low <= sub_high) {
-            if (obj_high_inside) {
-                // obj with sub
-                return handle_div(obj_high - obj_low, sub_high - sub_low);
-            } else {
-                // obj low butts into sub
-                return handle_div(sub_high - obj_low, sub_high - sub_low);
-            }
-        }
-        if (obj_high_inside) {
-            return handle_div(obj_high - sub_low, sub_high - sub_low);
-        }
-        return Real(0);
+        auto high = std::min(obj_high, sub_high);
+        auto low  = std::max(obj_low , sub_low );
+        if (low > high) return 0;
+        return verify_with_01( (high - low) / (sub_high - sub_low) );
     };
 
     // object must be infront of subject, now, how much is infront?
     // total non overlap must be accounted for
-    return portion_infront_impl(obj_beg.theta, get_high_theta(obj_beg, obj_last),
-                                sub_beg.theta, get_high_theta(sub_beg, sub_last));
+    return interval_overlap(obj_beg.theta, get_high_theta(obj_beg, obj_last),
+                            sub_beg.theta, get_high_theta(sub_beg, sub_last));
 }
 
 // ----------------------------------------------------------------------------

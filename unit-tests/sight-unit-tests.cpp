@@ -46,6 +46,7 @@ namespace {
 using cul::ts::TestSuite, cul::ts::test, cul::magnitude;
 using UnitTestFunctions = tdp::SightingUnitTestFunctions;
 using Entry = tdp::Sighting::Entry;
+using Percept = tdp::Sighting::Percept;
 using tdp::Real, tdp::Rectangle, tdp::Vector, tdp::ImageEntry,
       tdp::PolarVector, tdp::to_cartesian,
       tdp::completely_overlaps_source;
@@ -66,6 +67,10 @@ bool has_valid_positions(const ImageEntry & image) {
     if (tdp::completely_overlaps_source(image)) return true;
     return PolarVector{image.anchor_low}.theta < PolarVector{image.anchor_high}.theta;
 }
+
+template <typename El, typename Func>
+bool any_of(const std::vector<El> & vec, Func && f)
+    { return std::any_of(vec.begin(), vec.end(), std::move(f)); }
 
 } // end of <anonymous> namespace
 
@@ -147,6 +152,11 @@ void do_sight_unit_tests(TestSuite & suite) {
         // complete (though barely) overlap
         return test(find_portion_overlapped(PolVec{3, 1.2}, PolVec{3, 1.5},
                                             PolVec{2, 1.2}, PolVec{2, 1.5}) == 1);
+    });
+    // observed failure 22-1-28 1813
+    mark(suite).test([] {
+        return test(find_portion_overlapped(PolVec{Vector{25, -5}}, PolVec{Vector{25, 5}},
+                                            PolVec{Vector{10, -5}}, PolVec{Vector{10, 5}}) == 1);
     });
     constexpr const Real k_pi = cul::k_pi_for_type<Real>;
     constexpr const Real k_test_arc_len = k_pi / 8;
@@ -285,8 +295,30 @@ void do_sight_unit_tests(TestSuite & suite) {
     });
     static const auto images_overlap = inst.images_overlap;
     suite.start_series("sight - images_overlap");
+#   if 0
     mark(suite).test([] {
         return test(false);
     });
+#   endif
+    // I need interface level tests
+    mark(suite).test([] {
+        auto handle = tdp::Sighting::make_instance();
+        std::array a_name = { 'a' };
+        std::array b_name = { 'b' };
+        Entry a, b;
+        a.entity = a_name.data();
+        a.bounds = Rectangle{10, -5, 10, 10};
+        b.entity = b_name.data();
+        b.bounds = Rectangle{25, -5, 10, 10};
+        handle->add_entry(a);
+        handle->add_entry(b);
+        const auto & percepts = handle->run(Vector{});
+        return test(
+               percepts.size() == 2
+            && any_of(percepts, [&a_name](const Percept & p)
+                                { return p.entity == a_name.data() && p.visibility > 0.9; })
+            && any_of(percepts, [&b_name](const Percept & p)
+                                { return p.entity == b_name.data() && p.visibility < 0.1; }));
 
+    });
 }

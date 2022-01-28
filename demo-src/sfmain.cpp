@@ -39,6 +39,8 @@
 #include <common/sf/DrawText.hpp>
 #include <common/sf/DrawRectangle.hpp>
 
+#include <iostream>
+
 #include <cmath>
 #include <cstring>
 
@@ -174,8 +176,10 @@ int main() {
 
     {
     SceneOptions options;
-    driver.load_scene(options, /* first-scene */ 12);
-
+    driver.load_scene(options, /* first-scene */ 10);
+    for (int i = 0; i != int(driver.scene_names().size()); ++i) {
+        std::cout << "Scene " << i << " \"" << driver.scene_names()[i] << "\"" << std::endl;
+    }
     }
 
     sf::RenderWindow window(sf::VideoMode(k_window_width, k_window_height), " ");

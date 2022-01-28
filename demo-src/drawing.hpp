@@ -148,13 +148,25 @@ public:
 private:
     using Entry = tdp::Sighting::Entry;
     static bool within_sights_of(const Entity & e, const Entity & player) {
-        auto r = center_of(e.get<Rectangle>()) - center_of(player.get<Rectangle>());
+        //auto r = center_of(e.get<Rectangle>()) - center_of(player.get<Rectangle>());
         const auto & sight = player.get<Sight>();
-        static constexpr const Real k_too_close = 0.0005;
-        if (   r.x*r.x + r.y*r.y > sight.distance*sight.distance
-            || r.x*r.x + r.y*r.y < k_too_close*k_too_close) return false;
+        const auto source = center_of(player.get<Rectangle>());
+        auto is_point_within = [&sight, source](Vector v) {
+            auto r = v - source;
+            static constexpr const Real k_too_close = 0.0005;
+            if (   r.x*r.x + r.y*r.y > sight.distance*sight.distance
+                || r.x*r.x + r.y*r.y < k_too_close*k_too_close) return false;
 
-        return cul::angle_between(r, sight.facing) <= sight.spread_angle;
+            return cul::angle_between(r, sight.facing) <= sight.spread_angle;
+        };
+        const auto & sub = e.get<Rectangle>();
+        auto extreme_points = {
+            cul::top_left_of(sub),
+            cul::top_right_of(sub),
+            cul::bottom_left_of(sub),
+            cul::bottom_right_of(sub)
+        };
+        return std::any_of(extreme_points.begin(), extreme_points.end(), is_point_within);
     }
 
     static Entry to_sight_entry(const Entity & e) {
