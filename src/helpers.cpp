@@ -118,6 +118,16 @@ std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
             | hash(get<1>(key)) >> k_half) ^ hash(get<0>(key));
 }
 
+bool EventRecorder::trespass_is_occuring
+    (const Entity & lhs, const Entity & rhs) const
+{
+    using std::make_pair;
+    CollisionEvent test_event{lhs, rhs, CollisionEvent::k_trespass};
+    auto itr = m_events.find(make_pair(test_event.first(), test_event.second()));
+    if (itr == m_events.end()) return false;
+    return itr->second.type == CollisionEvent::k_trespass;
+}
+
 /* private */ void EventRecorder::push_event(const CollisionEvent & col_event) {
     // 1: no events
     // 2: a and b hit; emit event

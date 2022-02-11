@@ -103,6 +103,8 @@ public:
         push_event(col_event);
     }
 
+    bool trespass_is_occuring(const Entity & lhs, const Entity & rhs) const;
+
 private:
     struct AgeInfo final {
         AgeInfo() {}
@@ -114,7 +116,7 @@ private:
         int frames_since_last_update = 0;
     };
 
-    using CollisionType = CollisionEvent::Type;
+    using CollisionType = CollisionEvent::Type;    
     struct Collision final {
         Collision() {}
         explicit Collision(CollisionType type_): type(type_) {}
@@ -122,21 +124,23 @@ private:
         CollisionType type;
     };
 
-    using EventKey   = Tuple<Entity, Entity>;
-
+    using EventKey = Tuple<Entity, Entity>;
     struct EventHasher final {
         std::size_t operator () (const EventKey &);
+    };
+    struct KeyEquality final {
+        bool operator () (const EventKey & lhs, const EventKey & rhs) const {
+            using std::get;
+            return get<0>(lhs) == get<0>(rhs) && get<1>(lhs) == get<1>(rhs);
+        }
     };
 
     void push_event(const CollisionEvent & col_event);
 
-    using EventContainer = rigtorp::HashMap<EventKey, Collision, EventHasher>;
+    using EventContainer = rigtorp::HashMap<EventKey, Collision, EventHasher, KeyEquality>;
 
     // thank you Erik Rigtorp for saving me the trouble of trying to implement one
     // myself, and for writing such a fast implementation too!
-    //
-    // There's a problem: I ended up with an iterator with idx == 1 on a
-    // container that only had one element :/
     EventContainer m_events = EventContainer{8, std::make_tuple(Entity{}, Entity{})};
 };
 

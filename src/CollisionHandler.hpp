@@ -101,6 +101,8 @@ public:
 
     void remove_entry(const Entity &) final;
 
+    bool are_overlapping(const Entity &, const Entity &) const final;
+
     void set_collision_matrix_(CollisionMatrix &&) final;
 
     // ---------------- methods used for illustrative purposes ----------------

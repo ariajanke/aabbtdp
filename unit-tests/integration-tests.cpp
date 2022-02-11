@@ -212,6 +212,8 @@ void do_multiple_collision_bug(TestSuite & suite, HandlerMaker);
 
 void do_bad_entity_reference(TestSuite & suite, HandlerMaker);
 
+void do_trespass_recording(TestSuite & suite, HandlerMaker);
+
 void do_integration_tests(TestSuite & suite) {
     // three primary tests one for each issue
     // first frame trespass
@@ -230,6 +232,7 @@ void do_integration_tests(TestSuite & suite) {
     });
     do_multiple_collision_bug(suite, make_default_handler);
     do_bad_entity_reference(suite, make_default_handler);
+    do_trespass_recording(suite, make_default_handler);
 }
 
 void do_first_frame_trespass(TestSuite & suite, HandlerMaker make_handler_) {
@@ -243,8 +246,6 @@ void do_first_frame_trespass(TestSuite & suite, HandlerMaker make_handler_) {
         auto event_handler = make_trespass_checker(emm,
             [&a_hit, &emm, &a](Entry lhs, Entry rhs)
         {
-            auto lname = emm.get_name(lhs.entity);
-            auto rname = emm.get_name(rhs.entity);
             a_hit =    emm.get_name(lhs.entity) == emm.get_name(a.entity)
                     || emm.get_name(rhs.entity) == emm.get_name(a.entity);
         });
@@ -310,15 +311,6 @@ void do_head_on_collision(TestSuite & suite, HandlerMaker make_handler) {
     };
     mark(suite).test([&] {
         EntryMakerMaker emm;
-#       if 0
-        constexpr const Real k_et = 1. / 60.;
-        const auto & a = emm.add_entry().set_bounds(Rectangle{ 283.333333, 100.183333, 30, 30 })
-            .set_displacement(Vector{ 100,  0.1}*k_et)
-            .set_layer(k_solid)();
-        const auto & b = emm.add_entry().set_bounds(Rectangle{ 316.666667,  99.816667, 30, 30 })
-            .set_displacement(Vector{-100, -0.1}*k_et)
-            .set_layer(k_solid)();
-#       endif
         const auto & [a, b] = make_first_frame(emm);
         auto event_handler = make_null_event_handler(emm);
         auto physics_handler = make_handler();
@@ -358,7 +350,7 @@ void do_multiple_collision_bug(TestSuite & suite, HandlerMaker make_handler) {
         int push_happened = 0;
         auto event_handler = make_collision_checker(emm,
             [&push_happened, &a, & b]
-            (const Entry & lhs, const Entry & rhs, bool is_pushing)
+            (const Entry & lhs, const Entry & rhs, bool)
         {
             auto either_is = [&lhs, &rhs](const Entry & entry)
                 { return lhs.entity == entry.entity || rhs.entity == entry.entity; };
@@ -421,5 +413,77 @@ void do_bad_entity_reference(TestSuite & suite, HandlerMaker make_handler) {
             physics_handler->update_entry(*entry);
         physics_handler->run(event_handler);
         return test(trespass_b && !trespass_c);
+    });
+}
+
+void do_trespass_recording(TestSuite & suite, HandlerMaker make_handler) {
+    // pass through trespass
+    mark(suite).test([&] {
+        EntryMakerMaker emm;
+        auto handler = make_handler();
+        const auto & a = emm.add_entry()
+            .set_bounds(Rectangle{0,0, 10, 10})
+            .set_displacement(Vector{12, 0})
+            .set_layer(k_solid)();
+        const auto & b = emm.add_entry()
+            .set_bounds(Rectangle{ 11, 0, 10, 10 })
+            .set_layer(k_sensor)();
+        handler->update_entry(a);
+        handler->update_entry(b);
+        auto event_handler = make_null_event_handler(emm);
+        handler->run(event_handler);
+        return test(handler->are_overlapping(a.entity, b.entity));
+    });
+    // on frame trespass
+    mark(suite).test([&] {
+        EntryMakerMaker emm;
+        auto handler = make_handler();
+        const auto & a = emm.add_entry()
+            .set_bounds(Rectangle{0,0, 10, 10})
+            .set_layer(k_solid)();
+        const auto & b = emm.add_entry()
+            .set_bounds(Rectangle{ 5, 0, 10, 10 })
+            .set_layer(k_sensor)();
+        handler->update_entry(a);
+        handler->update_entry(b);
+        auto event_handler = make_null_event_handler(emm);
+        handler->run(event_handler);
+        return test(handler->are_overlapping(a.entity, b.entity));
+    });
+    // old trespass, this is the essential part of this feature, having future
+    // frames knowing that a trespass is occuring
+    mark(suite).test([&] {
+        EntryMakerMaker emm;
+        auto handler = make_handler();
+        const auto & a = emm.add_entry()
+            .set_bounds(Rectangle{0,0, 10, 10})
+            .set_layer(k_solid)();
+        const auto & b = emm.add_entry()
+            .set_bounds(Rectangle{ 5, 0, 10, 10 })
+            .set_layer(k_sensor)();
+        handler->update_entry(a);
+        handler->update_entry(b);
+        auto event_handler = make_null_event_handler(emm);
+        for (int i = 0; i != 5; ++i)
+            handler->run(event_handler);
+        return test(handler->are_overlapping(a.entity, b.entity));
+    });
+    // not in handler
+    // never trespass
+    mark(suite).test([&] {
+        EntryMakerMaker emm;
+        auto handler = make_handler();
+        const auto & a = emm.add_entry()
+            .set_bounds(Rectangle{0,0, 10, 10})
+            .set_layer(k_solid)();
+        const auto & b = emm.add_entry()
+            .set_bounds(Rectangle{ 5, 0, 10, 10 })
+            .set_layer(k_sensor)();
+        handler->update_entry(a);
+        (void)b; // b left out on purpose
+        auto event_handler = make_null_event_handler(emm);
+        for (int i = 0; i != 5; ++i)
+            handler->run(event_handler);
+        return test(!handler->are_overlapping(a.entity, b.entity));
     });
 }

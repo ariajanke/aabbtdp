@@ -27,7 +27,9 @@
 #pragma once
 
 #include "defs.hpp"
-#include "ColorString.hpp"
+#include <common/ColorString.hpp>
+
+using cul::ColorString;
 
 struct Velocity : public Vector {
     Velocity() = default;
@@ -160,40 +162,3 @@ inline auto make_collision_matrix() {
     assert(rv.width() == layers::k_layer_count && rv.height() == layers::k_layer_count);
     return rv;
 }
-
-#if 0
-template <typename ... Types>
-tdp::Entry to_tdp_entry(ecs::Entity<Types...> entity, tdp::Real elapsed_time) {
-    tdp::Entry entry;
-    entry.entity = entity;
-    entry.bounds = entity.template get<Rectangle>();
-    if (auto * lims = entity.template ptr<MapLimits>()) {
-        const Rectangle & bounds = *lims;
-        entry.negative_barrier.x = bounds.left;
-        entry.negative_barrier.y = bounds.top;
-        entry.positive_barrier.x = bounds.left + bounds.width ;
-        entry.positive_barrier.y = bounds.top  + bounds.height;
-    }
-    if (auto * velcomp = entity.template ptr<Velocity>()) {
-        const auto & vel = static_cast<const Vector &>(* velcomp);
-        entry.displacement = vel*elapsed_time;
-    }
-    using ListOfTypes = cul::TypeList<Types...>;
-    if constexpr (ListOfTypes::template HasType<Pushable>::k_value)
-        entry.pushable = entity.template has<Pushable>();
-    if constexpr (ListOfTypes::template HasType<Growth>::k_value) {
-        if (auto * growth = entity.template ptr<Growth>()) {
-            entry.growth.width  = growth->width *elapsed_time;
-            entry.growth.height = growth->height*elapsed_time;
-        }
-    }
-    if constexpr (ListOfTypes::template HasType<Layer>::k_value) {
-        if (entity.template has<Layer>()) {
-            entry.collision_layer = entity.template get<Layer>();
-        }
-    }
-    if (entry.collision_layer == tdp::Entry::k_no_layer)
-        entry.collision_layer = layers::k_block;
-    return entry;
-}
-#endif

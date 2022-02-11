@@ -240,6 +240,18 @@ public:
     /// to tell off hand if they've expired or not.
     virtual void remove_entry(const Entity &) = 0;
 
+    /// @returns true if either both entities' rectangles are overlapping, or
+    ///          both entities overlapped on the last run call. False is
+    ///          returned otherwise
+    ///
+    /// There's no reason for the client to implement their own tracking for
+    /// overlapping entities/entries. Especially in light of this handler
+    /// meaning to solve issues like this.
+    ///
+    /// @note For entities which do not have entries for this handler, will
+    ///       always return false.
+    virtual bool are_overlapping(const Entity &, const Entity &) const = 0;
+
     /// Runs all physics updates, accepting an event handler as a set of
     /// callbacks.
     ///

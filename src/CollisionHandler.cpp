@@ -142,6 +142,17 @@ void CollisionHandler::update_entry(const Entry & entry) {
 void CollisionHandler::remove_entry(const Entity & entity)
     { (void)m_entries.erase(entity); }
 
+bool CollisionHandler::are_overlapping
+    (const Entity & lhs, const Entity & rhs) const
+{
+    if (m_event_recorder.trespass_is_occuring(lhs, rhs)) return true;
+
+    auto litr = m_entries.find(lhs);
+    auto ritr = m_entries.find(rhs);
+    if (litr == m_entries.end() || ritr == m_entries.end()) return false;
+    return cul::overlaps(litr->second.bounds, ritr->second.bounds);
+}
+
 void CollisionHandler::set_collision_matrix_(CollisionMatrix && matrix) {
     using VecI = CollisionMatrix::Vector;
     using namespace interaction_classes;
