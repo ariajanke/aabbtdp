@@ -249,9 +249,9 @@ auto make_collision_handler(Func && f) {
         Impl(Func && f): m_f(std::move(f)) {}
         bool check_accept_collision(Entity, Entity) const
             { return true; }
-        void on_collision(Entity a, Entity b, bool push_occuring)
+        void on_collision(Entity a, Entity b, bool push_occuring, OccurrenceType) final
             { m_f(a, b, push_occuring); }
-        void on_trespass(Entity, Entity) final {}
+        void on_trespass(Entity, Entity, OccurrenceType) final {}
         void finalize_entry(Entity, Rectangle) final {}
     private:
         Func m_f;

@@ -101,7 +101,8 @@ public:
 
     void remove_entry(const Entity &) final;
 
-    bool are_overlapping(const Entity &, const Entity &) const final;
+    void set_event_occurence_preference(EventOccurrenceType otype) final
+        { m_event_recorder.set_event_occurence_preference(otype); }
 
     void set_collision_matrix_(CollisionMatrix &&) final;
 

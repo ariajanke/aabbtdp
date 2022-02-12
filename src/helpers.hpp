@@ -65,9 +65,9 @@ public:
     bool operator >  (const CollisionEvent & r) const { return compare(r) >  0; }
     bool operator != (const CollisionEvent & r) const { return compare(r) != 0; }
     bool operator == (const CollisionEvent & r) const { return compare(r) == 0; }
-
+#   if 0
     void send_to(EventHandler & handler) const;
-
+#   endif
 private:
     static int compare(const CollisionEvent &, const CollisionEvent &);
 
@@ -78,10 +78,84 @@ private:
     Type m_type     = Type  {};
 };
 
+struct EntityPair final {
+    EntityPair() {}
+
+    EntityPair(const Entity & a_, const Entity & b_):
+        first (max_hash(a_, b_)),
+        second(min_hash(a_, b_))
+    { verify_entity_values("EntityPair"); }
+
+    static Entity max_hash(const Entity & a_, const Entity & b_)
+        { return hash(a_) >  hash(b_) ? a_ : b_; }
+
+    static Entity min_hash(const Entity & a_, const Entity & b_)
+        { return hash(a_) <= hash(b_) ? a_ : b_; }
+
+    static Entity verify_non_null(const Entity & ref_, const char * caller) {
+        using namespace cul::exceptions_abbr;
+        if (!is_null(ref_)) return ref_;
+        throw InvArg(std::string(caller) + ": both entity references must not "
+                     "be null.");
+    }
+
+    void verify_entity_values(const char * caller) const {
+        using namespace cul::exceptions_abbr;
+        if (is_null(first)) {
+            throw InvArg(std::string(caller) + ": both entities must not be null.");
+        } else if (hash(first) == hash(second)) {
+            throw InvArg(std::string(caller) + ": both entities must be unique.");
+        }
+    }
+
+    static std::size_t hash(const Entity & e) {
+#       ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+        return e.hash();
+#       else
+        return std::hash<void *>{}(e);
+#       endif
+    }
+
+    static bool is_null(const Entity & e) {
+#       ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+        return e.has_expired();
+#       else
+        return e == nullptr;
+#       endif
+    }
+
+    std::size_t hash() const noexcept {
+        static constexpr const auto k_shift = sizeof(std::size_t)*8 / 2;
+        const auto sh = hash(second);
+        return hash(first) ^ (sh >> k_shift | sh << k_shift);
+    }
+
+    bool operator == (const EntityPair & rhs) const noexcept { return  are_same(rhs); }
+
+    bool operator != (const EntityPair & rhs) const noexcept { return !are_same(rhs); }
+
+    bool are_same(const EntityPair & rhs) const noexcept
+        { return first == rhs.first && second == rhs.second; }
+
+    bool either_expired() const noexcept
+        { return is_null(first) || is_null(second); }
+
+    Entity first, second;
+};
+
+bool operator & (EventOccurrenceType, EventOccurrenceType) noexcept;
+
+inline bool operator &
+    (EventOccurrenceType lhs, EventOccurrenceType rhs) noexcept
+{
+    using EInt = std::underlying_type_t<EventOccurrenceType>;
+    return static_cast<EInt>(lhs) & static_cast<EInt>(rhs);
+}
+
 // ------------------------------ EventRecorder -------------------------------
 
-/// EventRecorder's task is not just record events but also prevent old and
-/// dupelicate events from reaching the event handler
+/// EventRecorde records events, and emits them to the handler according to
+/// preferences and occurence type (started/continued/ended).
 ///
 /// If an event is missing for one frame, and is then back. That event will be
 /// sent twice, one when it initially occured, and then again when the gap is
@@ -90,6 +164,8 @@ private:
 /// This version contains and sends also trespass events.
 class EventRecorder final {
 public:
+    using OccurrenceType = EventOccurrenceType;
+
     /// Sends all new events to the handler (old events are filtered out)
     ///
     /// This function rotates out old events for new ones. This is also a side
@@ -103,8 +179,11 @@ public:
         push_event(col_event);
     }
 
+    void set_event_occurence_preference(EventOccurrenceType otype)
+        { m_occurence_preference = otype; }
+#   if 0
     bool trespass_is_occuring(const Entity & lhs, const Entity & rhs) const;
-
+#   endif
 private:
     struct AgeInfo final {
         AgeInfo() {}
@@ -123,25 +202,30 @@ private:
         AgeInfo       age;
         CollisionType type;
     };
-
+#   if 0
     using EventKey = Tuple<Entity, Entity>;
+#   endif
     struct EventHasher final {
-        std::size_t operator () (const EventKey &);
+        std::size_t operator () (const EntityPair & pair) const noexcept
+            { return pair.hash(); }
     };
+#   if 0
     struct KeyEquality final {
         bool operator () (const EventKey & lhs, const EventKey & rhs) const {
             using std::get;
             return get<0>(lhs) == get<0>(rhs) && get<1>(lhs) == get<1>(rhs);
         }
     };
-
+#   endif
     void push_event(const CollisionEvent & col_event);
-
-    using EventContainer = rigtorp::HashMap<EventKey, Collision, EventHasher, KeyEquality>;
-
+public:
+    using EventContainer = rigtorp::HashMap<EntityPair, Collision, EventHasher>;
+private:
     // thank you Erik Rigtorp for saving me the trouble of trying to implement one
     // myself, and for writing such a fast implementation too!
-    EventContainer m_events = EventContainer{8, std::make_tuple(Entity{}, Entity{})};
+    EventContainer m_events = EventContainer{8, EntityPair{}};
+
+    OccurrenceType m_occurence_preference = OccurrenceType::on_begin;
 };
 
 // -------------------------------- FullEntry ---------------------------------
@@ -161,9 +245,11 @@ struct BoardBoundries {
 struct FullEntry final : public tdp::Entry {
     // record only useful during a frame
     int priority = k_default_priority;
+#   if 0
     // (I need some way to handle last appearance)
+    // (this maybe out-moded!)
     bool first_appearance = true;
-
+#   endif
     // for swptry2
     Vector nudge;
 

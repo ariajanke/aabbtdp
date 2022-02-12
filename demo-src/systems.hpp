@@ -85,10 +85,10 @@ private:
 
         bool check_accept_collision(EntityRef, EntityRef) const final { return true; }
 
-        void on_collision(EntityRef a, EntityRef b, bool push_occuring) final
+        void on_collision(EntityRef a, EntityRef b, bool push_occuring, OccurrenceType) final
             { CollisionSystem::on_collision(a, b, push_occuring); }
 
-        void on_trespass(EntityRef a, EntityRef b) final
+        void on_trespass(EntityRef a, EntityRef b, OccurrenceType) final
             { CollisionSystem::on_trespass(a, b); }
 
         void finalize_entry(EntityRef a, Rectangle new_bounds) final

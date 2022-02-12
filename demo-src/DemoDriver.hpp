@@ -120,7 +120,7 @@ struct SceneOptions final {
     // k_sight              -> see only entities according to visibility
     // k_sight_with_outline -> see entities with visibility, but with an
     //                         outline on all
-    SightOption sight = k_sight;
+    SightOption sight = k_no_special_sight;
 };
 
 SceneOptions load_options_from_string(const std::string &);

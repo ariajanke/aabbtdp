@@ -108,15 +108,44 @@ struct Entry {
     bool pushable = false;
 };
 
+/// This type indicates when event methods are called in the EventHandler.
+///
+/// Event methods are either on_collision or on_trespass.
+enum class EventOccurrenceType : uint_fast8_t {
+    /// An Event is emitted the first frame when a collision/trespass happens
+    /// @note this is by default the only behavior
+    on_begin    = 1,
+    /// An Event is emitted for every subsequent frame when a collision/trespass
+    /// is occuring
+    on_continue = 1 << 1,
+    /// An Event is emitted the first frame when a collision/trespass is no
+    /// longer occuring
+    on_end      = 1 << 2
+};
+
+/// @returns combined OccurenceType flags
+EventOccurrenceType operator | (EventOccurrenceType, EventOccurrenceType) noexcept;
+
+namespace occurence_types {
+
+/// @copydoc tdp::EventOccurrenceType::on_begin
+constexpr const auto k_on_begin    = EventOccurrenceType::on_begin;
+
+/// @copydoc tdp::EventOccurrenceType::on_continue
+constexpr const auto k_on_continue = EventOccurrenceType::on_continue;
+
+/// @copydoc tdp::EventOccurrenceType::on_end
+constexpr const auto k_on_end      = EventOccurrenceType::on_end;
+
+} // end of occurence_types namespace -> into ::tdp
+
 /// Acts as the interface whose methods are called from the physics handler.
 ///
 /// This class is meant to be inherited by a class/structure defined by the
 /// client.
-///
-/// @warning In general implementors of this class should never call any
-///          methods defined in the TopDownPhysicsHandler class, especially
-///          from the same instance.
 struct EventHandler {
+    using OccurrenceType = EventOccurrenceType;
+
     virtual ~EventHandler() {}
 
     /// Called to check if two entities should interact as solids.
@@ -138,12 +167,28 @@ struct EventHandler {
     /// @param b an entity reference, which is null if "a" is hitting a wall
     /// @param push_occuring true if a push is occuring, this is always false
     ///        if a wall is being hit
-    virtual void on_collision(Entity a, Entity b, bool push_occuring) = 0;
+    /// @param when_ specifies when this method was called.
+    ///              It could be when a collision event began, or if this frame
+    ///              continues/ends it.
+    ///
+    /// @note if then when_to_call is either left with its default
+    ///       implementation or the method returns only one flag, then the
+    ///       "when_" parameter will always be the same value.
+    virtual void on_collision(Entity a, Entity b, bool push_occuring,
+                              OccurrenceType when_) = 0;
 
-    /// Called whenever two entities begin passing over each other's bounds.
+    /// Called whenever two entities passes over each other's bounds.
+    ///
+    /// @note A trespass occurs if at any point in a frame, the two bounds
+    ///       overlaps. A trespass ends when the two bounds do not overlap for
+    ///       the entire frame.
+    ///
     /// @param a an entity reference, guaranteed to not be null
     /// @param b an entity reference, guaranteed to not be null
-    virtual void on_trespass(Entity a, Entity b) = 0;
+    /// @param when_ specifies when this method was called.
+    ///              It could be when a trespass event began, or if this frame
+    ///              continues/ends it.
+    virtual void on_trespass(Entity a, Entity b, OccurrenceType when_) = 0;
 
     /// Called at the end of the physics run, this is intended to update the
     /// entity's components with the new bounds.
@@ -179,7 +224,7 @@ constexpr const auto k_as_trespass = InteractionClass::k_as_trespass;
 constexpr const auto k_as_passive  = InteractionClass::k_as_passive;
 constexpr const auto k_reflect     = InteractionClass::k_reflect;
 
-} // end of interaction_shorthand namespace -> into ::tdp
+} // end of interaction_classes namespace -> into ::tdp
 
 using CollisionMatrix = cul::Grid<InteractionClass>;
 
@@ -223,6 +268,15 @@ public:
     /// @note this return value may not match the set value
     virtual const CollisionMatrix & collision_matrix() const = 0;
 
+    /// Sets when to call event methods in the EventHandler passed to run.
+    ///
+    /// The meaning of the given value follows the definition and documentation
+    /// describing the type.
+    ///
+    /// @see tdp::EventHandler::on_collision(Entity,Entity,bool,EventOccurrenceType)
+    /// @see tdp::EventHandler::on_trespass(Entity,Entity,EventOccurrenceType)
+    virtual void set_event_occurence_preference(EventOccurrenceType) = 0;
+
     /// Updates an entry for some entity (which is set in the given structure).
     ///
     /// Each entity has a unique entry associated with it. This function
@@ -239,18 +293,6 @@ public:
     /// This function was added to allow entity types, where it's not possible
     /// to tell off hand if they've expired or not.
     virtual void remove_entry(const Entity &) = 0;
-
-    /// @returns true if either both entities' rectangles are overlapping, or
-    ///          both entities overlapped on the last run call. False is
-    ///          returned otherwise
-    ///
-    /// There's no reason for the client to implement their own tracking for
-    /// overlapping entities/entries. Especially in light of this handler
-    /// meaning to solve issues like this.
-    ///
-    /// @note For entities which do not have entries for this handler, will
-    ///       always return false.
-    virtual bool are_overlapping(const Entity &, const Entity &) const = 0;
 
     /// Runs all physics updates, accepting an event handler as a set of
     /// callbacks.
@@ -369,6 +411,14 @@ void Physics2DHandler::find_overlaps(const Rectangle & rect, Func && f) {
     };
     Inst inst(std::move(f));
     find_overlaps_(rect, inst);
+}
+
+inline EventOccurrenceType operator |
+    (EventOccurrenceType lhs, EventOccurrenceType rhs) noexcept
+{
+    using EInt = std::underlying_type_t<EventOccurrenceType>;
+    return EventOccurrenceType(  static_cast<EInt>(lhs)
+                               | static_cast<EInt>(rhs));
 }
 
 } // end of tdp namespace

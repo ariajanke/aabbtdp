@@ -36,9 +36,17 @@
 
 namespace {
 
+
 using cul::ts::TestSuite, cul::ts::Unit, cul::Grid, cul::overlaps, cul::ts::test,
       std::make_tuple;
 using namespace tdp;
+
+// cannot include "helpers.hpp"
+Rectangle displace(Rectangle rv, Vector r) {
+    rv.left += r.x;
+    rv.top  += r.y;
+    return rv;
+}
 
 constexpr const int k_solid   = 0;
 constexpr const int k_sensor  = 1;
@@ -131,9 +139,9 @@ auto make_null_event_handler(const EntryMakerMaker & emm) {
 
         bool check_accept_collision(Entity, Entity) const final { return true; }
 
-        void on_collision(Entity, Entity, bool) final {}
+        void on_collision(Entity, Entity, bool, OccurrenceType) final {}
 
-        void on_trespass(Entity, Entity) final {}
+        void on_trespass(Entity, Entity, OccurrenceType) final {}
 
         void finalize_entry(Entity a, Rectangle new_bounds)
             { m_emm.to_entry(a).bounds = new_bounds; }
@@ -145,7 +153,9 @@ auto make_null_event_handler(const EntryMakerMaker & emm) {
 }
 
 template <typename Func>
-auto make_trespass_checker(const EntryMakerMaker & emm, Func && f) {
+auto make_trespass_checker
+    (const EntryMakerMaker & emm, Func && f)
+{
     class Impl final : public EventHandler {
     public:
         Impl(Func && f, const EntryMakerMaker & emm):
@@ -153,12 +163,12 @@ auto make_trespass_checker(const EntryMakerMaker & emm, Func && f) {
 
         bool check_accept_collision(Entity, Entity) const final { return true; }
 
-        void on_collision(Entity, Entity, bool) final {}
+        void on_collision(Entity, Entity, bool, OccurrenceType) final {}
 
-        void on_trespass(Entity a, Entity b) final {
+        void on_trespass(Entity a, Entity b, OccurrenceType otype) final {
             auto ae = m_emm.to_entry(a);
             auto be = m_emm.to_entry(b);
-            m_f(ae, be);
+            m_f(ae, be, otype);
         }
 
         void finalize_entry(Entity a, Rectangle new_bounds)
@@ -180,13 +190,13 @@ auto make_collision_checker(const EntryMakerMaker & emm, Func && f) {
 
         bool check_accept_collision(Entity, Entity) const final { return true; }
 
-        void on_collision(Entity a, Entity b, bool is_pushing) final {
+        void on_collision(Entity a, Entity b, bool is_pushing, OccurrenceType) final {
             auto ae = m_emm.to_entry(a);
             auto be = m_emm.to_entry(b);
             m_f(ae, be, is_pushing);
         }
 
-        void on_trespass(Entity, Entity) final {}
+        void on_trespass(Entity, Entity, OccurrenceType) final {}
 
         void finalize_entry(Entity a, Rectangle new_bounds)
             { m_emm.to_entry(a).bounds = new_bounds; }
@@ -244,7 +254,7 @@ void do_first_frame_trespass(TestSuite & suite, HandlerMaker make_handler_) {
         auto b = emm.add_entry().set_bounds(Rectangle{ 2, 2,  3,  3 }).set_layer(k_solid )();
         bool a_hit = false;
         auto event_handler = make_trespass_checker(emm,
-            [&a_hit, &emm, &a](Entry lhs, Entry rhs)
+            [&a_hit, &emm, &a](Entry lhs, Entry rhs, EventOccurrenceType)
         {
             a_hit =    emm.get_name(lhs.entity) == emm.get_name(a.entity)
                     || emm.get_name(rhs.entity) == emm.get_name(a.entity);
@@ -398,7 +408,7 @@ void do_bad_entity_reference(TestSuite & suite, HandlerMaker make_handler) {
         bool trespass_b = false, trespass_c = false;
         auto event_handler = make_trespass_checker(emm,
             [&a, &b, &c, &trespass_b, &trespass_c]
-            (const Entry & lhs, const Entry & rhs)
+            (const Entry & lhs, const Entry & rhs, EventOccurrenceType)
         {
             auto either_is = [&lhs, &rhs](const Entry & entry)
                 { return lhs.entity == entry.entity || rhs.entity == entry.entity; };
@@ -418,6 +428,22 @@ void do_bad_entity_reference(TestSuite & suite, HandlerMaker make_handler) {
 
 void do_trespass_recording(TestSuite & suite, HandlerMaker make_handler) {
     // pass through trespass
+    using namespace occurence_types;
+    static auto make_otype_counter = []
+        (EntryMakerMaker & emm, int & started, int & continued, int & ended)
+    {
+        return make_trespass_checker(emm,
+            [&started, &continued, &ended](const Entry &, const Entry &, EventOccurrenceType otype)
+        {
+            using namespace occurence_types;
+            switch (otype) {
+            case k_on_begin   : ++started  ; break;
+            case k_on_continue: ++continued; break;
+            case k_on_end     : ++ended    ; break;
+            default: break;
+            }
+        });
+    };
     mark(suite).test([&] {
         EntryMakerMaker emm;
         auto handler = make_handler();
@@ -430,9 +456,14 @@ void do_trespass_recording(TestSuite & suite, HandlerMaker make_handler) {
             .set_layer(k_sensor)();
         handler->update_entry(a);
         handler->update_entry(b);
-        auto event_handler = make_null_event_handler(emm);
+        handler->set_event_occurence_preference(k_on_begin | k_on_continue);
+
+        int started = 0, continued = 0, ended = 0;
+        auto event_handler = make_otype_counter(emm, started, continued, ended);
         handler->run(event_handler);
-        return test(handler->are_overlapping(a.entity, b.entity));
+        handler->run(event_handler);
+        handler->run(event_handler);
+        return test(started == 1 && continued == 1 && ended == 0);
     });
     // on frame trespass
     mark(suite).test([&] {
@@ -446,44 +477,62 @@ void do_trespass_recording(TestSuite & suite, HandlerMaker make_handler) {
             .set_layer(k_sensor)();
         handler->update_entry(a);
         handler->update_entry(b);
-        auto event_handler = make_null_event_handler(emm);
-        handler->run(event_handler);
-        return test(handler->are_overlapping(a.entity, b.entity));
+        handler->set_event_occurence_preference(k_on_begin | k_on_continue);
+        int started = 0, continued = 0, ended = 0;
+        auto event_handler = make_otype_counter(emm, started, continued, ended);
+        for (int i = 0; i != 5; ++i)
+            handler->run(event_handler);
+        return test(started == 1 && continued == 4 && ended == 0);
     });
-    // old trespass, this is the essential part of this feature, having future
-    // frames knowing that a trespass is occuring
+
     mark(suite).test([&] {
         EntryMakerMaker emm;
         auto handler = make_handler();
         const auto & a = emm.add_entry()
             .set_bounds(Rectangle{0,0, 10, 10})
             .set_layer(k_solid)();
-        const auto & b = emm.add_entry()
+        auto & b = emm.add_entry()
             .set_bounds(Rectangle{ 5, 0, 10, 10 })
             .set_layer(k_sensor)();
         handler->update_entry(a);
         handler->update_entry(b);
-        auto event_handler = make_null_event_handler(emm);
-        for (int i = 0; i != 5; ++i)
+        handler->set_event_occurence_preference(k_on_begin | k_on_continue | k_on_end);
+        int started = 0, continued = 0, ended = 0;
+        auto event_handler = make_otype_counter(emm, started, continued, ended);
+        for (int i = 0; i != 4; ++i)
             handler->run(event_handler);
-        return test(handler->are_overlapping(a.entity, b.entity));
+        b.displacement = Vector{6, 0};
+        assert(!overlaps(a.bounds, displace(b.bounds, b.displacement)));
+        // note: b will trespass for the next frame, but not the one after
+        //       this because b's bounds still overlaps at the beginning of the
+        //       frame
+        handler->update_entry(b);
+        for (int i = 0; i != 3; ++i)
+            handler->run(event_handler);
+
+        return test(started == 1 && continued == 4 && ended == 1);
     });
-    // not in handler
-    // never trespass
     mark(suite).test([&] {
         EntryMakerMaker emm;
         auto handler = make_handler();
         const auto & a = emm.add_entry()
             .set_bounds(Rectangle{0,0, 10, 10})
             .set_layer(k_solid)();
-        const auto & b = emm.add_entry()
+        auto & b = emm.add_entry()
             .set_bounds(Rectangle{ 5, 0, 10, 10 })
             .set_layer(k_sensor)();
         handler->update_entry(a);
-        (void)b; // b left out on purpose
-        auto event_handler = make_null_event_handler(emm);
-        for (int i = 0; i != 5; ++i)
+        handler->update_entry(b);
+        handler->set_event_occurence_preference(k_on_begin | k_on_end);
+        int started = 0, continued = 0, ended = 0;
+        auto event_handler = make_otype_counter(emm, started, continued, ended);
+        for (int i = 0; i != 4; ++i)
             handler->run(event_handler);
-        return test(!handler->are_overlapping(a.entity, b.entity));
+        b.displacement = Vector{6, 0};
+        handler->update_entry(b);
+        for (int i = 0; i != 3; ++i)
+            handler->run(event_handler);
+
+        return test(started == 1 && continued == 0 && ended == 1);
     });
 }

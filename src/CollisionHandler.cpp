@@ -69,31 +69,14 @@ void CollisionHandler::CollisionWorker::operator () (EventHandler & event_handle
 }
 
 void CollisionHandler::run(EventHandler & event_handler) {
-#   if 0
-    static_assert(sizeof(std::size_t) == sizeof(Real), "");
-    std::vector<FullEntry> entries;
-#   endif
     for (auto itr = m_entries.begin(); itr != m_entries.end();) {
         if (itr->second.entity) {
-#           if 0
-            if (entries.size() < 2) entries.push_back(itr->second);
-#           endif
             ++itr;
         } else {
             itr = m_entries.erase(itr);
         }
     }
-#   if 0
-    const auto a_x = *reinterpret_cast<std::size_t *>(&entries[0].bounds.left);
-    const auto a_y = *reinterpret_cast<std::size_t *>(&entries[0].bounds.top );
-    const auto a_dx = *reinterpret_cast<std::size_t *>(&entries[0].displacement.x);
-    const auto a_dy = *reinterpret_cast<std::size_t *>(&entries[0].displacement.y);
 
-    const auto b_x = *reinterpret_cast<std::size_t *>(&entries[1].bounds.left);
-    const auto b_y = *reinterpret_cast<std::size_t *>(&entries[1].bounds.top );
-    const auto b_dx = *reinterpret_cast<std::size_t *>(&entries[1].displacement.x);
-    const auto b_dy = *reinterpret_cast<std::size_t *>(&entries[1].displacement.y);
-#   endif
     bool was_called = false;
     CollisionWorker cw{was_called, m_event_recorder, m_col_matrix, m_entries};
     prepare_iteration(cw, event_handler);
@@ -141,7 +124,7 @@ void CollisionHandler::update_entry(const Entry & entry) {
 
 void CollisionHandler::remove_entry(const Entity & entity)
     { (void)m_entries.erase(entity); }
-
+#if 0
 bool CollisionHandler::are_overlapping
     (const Entity & lhs, const Entity & rhs) const
 {
@@ -152,7 +135,7 @@ bool CollisionHandler::are_overlapping
     if (litr == m_entries.end() || ritr == m_entries.end()) return false;
     return cul::overlaps(litr->second.bounds, ritr->second.bounds);
 }
-
+#endif
 void CollisionHandler::set_collision_matrix_(CollisionMatrix && matrix) {
     using VecI = CollisionMatrix::Vector;
     using namespace interaction_classes;
@@ -273,10 +256,11 @@ void do_collision_work
         ColWorkImpl impl(iteration - 1, event_recorder, event_handler, collision_matrix);
         group_method.for_each_sequence(impl);
     }
-
+#   if 0
     for (auto & pair : entries_view) {
         pair.second.first_appearance = false;
     }
+#   endif
 }
 
 // ----------------------------------------------------------------------------
@@ -307,10 +291,18 @@ void ColWorkImpl::step(FullEntry & entry, FullEntry & other_entry) {
         m_event_recorder.emplace_event(entry.entity, other_entry.entity, CollisionEvent::k_rigid);
         break;
     }
-    case k_as_trespass: {
+    case k_as_trespass: {        
+#       if 0
         bool first_appearance_overlap = entry.first_appearance && overlaps(entry.bounds, other_entry.bounds);
+        // trespass_occuring catches first trespasses, and trespasses which
+        // pass through the other entry in one frame
         bool regular_trespass         = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
         if (!first_appearance_overlap && !regular_trespass) return;
+#       else
+        bool presently_overlaps       = overlaps(entry.bounds, other_entry.bounds);
+        bool starts_or_flash_trespass = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
+        if (!starts_or_flash_trespass && !presently_overlaps) return;
+#       endif
         // this is an "uh-oh" moment if we're reusing containers
         m_event_recorder.emplace_event(entry.entity, other_entry.entity, CollisionEvent::k_trespass);
         break;

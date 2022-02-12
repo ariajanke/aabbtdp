@@ -37,9 +37,33 @@ namespace {
 using namespace cul::exceptions_abbr;
 using cul::is_real, cul::magnitude, cul::normalize, std::make_tuple, std::get,
       std::min, std::max;
-using tdp::Rectangle, tdp::Vector, tdp::CollisionEvent, tdp::Real;
+using tdp::Rectangle, tdp::Vector, tdp::CollisionEvent, tdp::Real,
+      tdp::EventHandler;
 
 constexpr const Real k_inf = std::numeric_limits<Real>::infinity();
+
+auto make_conditionally_emit_event_maker
+    (EventHandler & handler, tdp::EventOccurrenceType emit_when)
+{
+    using EventContainer = tdp::EventRecorder::EventContainer;
+    using OccurrenceType = tdp::EventOccurrenceType;    
+    // return a "make_conditionally_emit_event"
+    return [emit_when, &handler] (EventContainer::iterator itr) {
+        // return a "conditionally_emit_event"
+        return [emit_when, itr, &handler] (OccurrenceType occured_when) {
+            if (!(emit_when & occured_when)) return;
+            auto first = itr->first.first, second = itr->first.second;
+            auto type  = itr->second.type;
+            switch (type) {
+            case CollisionEvent::k_rigid: case CollisionEvent::k_push:
+                return handler.on_collision(
+                    first, second, type == CollisionEvent::k_push, occured_when);
+            case CollisionEvent::k_trespass:
+                return handler.on_trespass(first, second, occured_when);
+            };
+        };
+    };
+}
 
 } // end of <anonymous> namespace
 
@@ -65,7 +89,7 @@ CollisionEvent::CollisionEvent(Entity a, Entity b, Type type):
 /* static */ bool CollisionEvent::is_less_than
     (const CollisionEvent & lhs, const CollisionEvent & rhs)
 { return lhs.compare(rhs) < 0; }
-
+#if 0
 void CollisionEvent::send_to(EventHandler & handler) const {
     switch (type()) {
     case k_rigid: case k_push:
@@ -76,12 +100,12 @@ void CollisionEvent::send_to(EventHandler & handler) const {
         break;
     }
 }
-
+#endif
 /* private static */ int CollisionEvent::compare
     (const CollisionEvent & lhs, const CollisionEvent & rhs)
 { return lhs.compare(rhs); }
 
-/* private */ int CollisionEvent::compare(const CollisionEvent & rhs) const {
+/* private */ int CollisionEvent::compare( const CollisionEvent & rhs) const {
     EntityHasher hash;
     if (hash(first ()) < hash(rhs.first ())) return -1;
     if (hash(first ()) > hash(rhs.first ())) return  1;
@@ -92,32 +116,58 @@ void CollisionEvent::send_to(EventHandler & handler) const {
 
 // ------------------------------ EventRecorder -------------------------------
 
+// fundemental to how this library (and EventRecorder) works is how events are
+// handled
+//
+// the recorder constantly receives signals for continued collisions, but not
+// for trespasses
+//
+//
+//
+
 void EventRecorder::send_events(EventHandler & handler) {
+    using namespace occurence_types;
+    auto make_conditionally_emit_event = make_conditionally_emit_event_maker
+        (handler, m_occurence_preference);
     for (auto itr = m_events.begin(); itr != m_events.end(); ) {
         auto & age_nfo = itr->second.age;
+        auto conditionally_emit_event = make_conditionally_emit_event(itr);
+        OccurrenceType otype;
         if (!age_nfo.has_been_sent) {
-            CollisionEvent{get<0>(itr->first), get<1>(itr->first),
-                           itr->second.type}
-            .send_to(handler);
-            age_nfo.has_been_sent = true;
-        }
-        if (age_nfo.frames_since_last_update != 0) {
+
+            otype = k_on_begin;
+#           if 0
+            ++age_nfo.frames_since_last_update;
+            conditionally_emit_event(k_on_begin);
+            ++itr;
+#           endif
+        } else if (age_nfo.frames_since_last_update != 0) {
+            conditionally_emit_event(k_on_end);
             itr = m_events.erase(itr);
             continue;
         } else {
+            otype = k_on_continue;
+#           if 0
             ++age_nfo.frames_since_last_update;
+            conditionally_emit_event(k_on_continue);
+            ++itr;
+#           endif
         }
+        age_nfo.has_been_sent = true;
+        ++age_nfo.frames_since_last_update;
+        conditionally_emit_event(otype);
         ++itr;
     }
 }
-
+#if 0
 std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
     static constexpr const auto k_half = 8*sizeof(size_t) / 2;
     EntityHasher hash;
     return (  hash(get<1>(key)) << k_half
             | hash(get<1>(key)) >> k_half) ^ hash(get<0>(key));
 }
-
+#endif
+#if 0
 bool EventRecorder::trespass_is_occuring
     (const Entity & lhs, const Entity & rhs) const
 {
@@ -127,7 +177,7 @@ bool EventRecorder::trespass_is_occuring
     if (itr == m_events.end()) return false;
     return itr->second.type == CollisionEvent::k_trespass;
 }
-
+#endif
 /* private */ void EventRecorder::push_event(const CollisionEvent & col_event) {
     // 1: no events
     // 2: a and b hit; emit event
@@ -138,8 +188,11 @@ bool EventRecorder::trespass_is_occuring
     // 3: no events
     // 4: a and b hit; emit event
 
+    // both collisions and trespasses appear to have continual emission from
+    // calling code of this function
+
     using std::make_pair;
-    auto key = make_tuple(col_event.first(), col_event.second());
+    auto key = EntityPair{col_event.first(), col_event.second()};
     auto itr = m_events.find(key);
     if (itr == m_events.end()) {
         (void)m_events.insert(make_pair(key, Collision{col_event.type()}));
