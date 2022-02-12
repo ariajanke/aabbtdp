@@ -124,18 +124,7 @@ void CollisionHandler::update_entry(const Entry & entry) {
 
 void CollisionHandler::remove_entry(const Entity & entity)
     { (void)m_entries.erase(entity); }
-#if 0
-bool CollisionHandler::are_overlapping
-    (const Entity & lhs, const Entity & rhs) const
-{
-    if (m_event_recorder.trespass_is_occuring(lhs, rhs)) return true;
 
-    auto litr = m_entries.find(lhs);
-    auto ritr = m_entries.find(rhs);
-    if (litr == m_entries.end() || ritr == m_entries.end()) return false;
-    return cul::overlaps(litr->second.bounds, ritr->second.bounds);
-}
-#endif
 void CollisionHandler::set_collision_matrix_(CollisionMatrix && matrix) {
     using VecI = CollisionMatrix::Vector;
     using namespace interaction_classes;
@@ -243,7 +232,7 @@ void do_collision_work
             other_entry.priority  = iteration + 1;
             other_entry.nudge    += get<Vector>(gv); // shoud I update board boundries here?!
             should_check_more     = true;
-            event_recorder.emplace_event(other_entry.entity, entry.entity, CollisionEvent::k_push);
+            event_recorder.emplace_event(other_entry.entity, entry.entity, EventRecorder::k_push);
         });
     }
 
@@ -256,11 +245,6 @@ void do_collision_work
         ColWorkImpl impl(iteration - 1, event_recorder, event_handler, collision_matrix);
         group_method.for_each_sequence(impl);
     }
-#   if 0
-    for (auto & pair : entries_view) {
-        pair.second.first_appearance = false;
-    }
-#   endif
 }
 
 // ----------------------------------------------------------------------------
@@ -275,7 +259,7 @@ void ColWorkImpl::prestep(FullEntry & entry) {
     auto [dis, hitside] = trim_displacement_for_barriers(entry.bounds, barrier, entry.displacement);
     entry.displacement = dis;
     if (hitside != HitSide()) {
-        m_event_recorder.emplace_event(entry.entity, Entity{}, CollisionEvent::k_rigid);
+        m_event_recorder.emplace_event(entry.entity, Entity{}, EventRecorder::k_rigid);
     }
 }
 
@@ -288,23 +272,15 @@ void ColWorkImpl::step(FullEntry & entry, FullEntry & other_entry) {
         auto [ndisplc, hitside] = trim_displacement(entry.bounds, other_entry.bounds, entry.displacement);
         if (hitside == HitSide()) return;
         entry.displacement = ndisplc;
-        m_event_recorder.emplace_event(entry.entity, other_entry.entity, CollisionEvent::k_rigid);
+        m_event_recorder.emplace_event(entry.entity, other_entry.entity, EventRecorder::k_rigid);
         break;
     }
     case k_as_trespass: {        
-#       if 0
-        bool first_appearance_overlap = entry.first_appearance && overlaps(entry.bounds, other_entry.bounds);
-        // trespass_occuring catches first trespasses, and trespasses which
-        // pass through the other entry in one frame
-        bool regular_trespass         = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
-        if (!first_appearance_overlap && !regular_trespass) return;
-#       else
         bool presently_overlaps       = overlaps(entry.bounds, other_entry.bounds);
         bool starts_or_flash_trespass = trespass_occuring(entry.bounds, other_entry.bounds, entry.displacement);
         if (!starts_or_flash_trespass && !presently_overlaps) return;
-#       endif
         // this is an "uh-oh" moment if we're reusing containers
-        m_event_recorder.emplace_event(entry.entity, other_entry.entity, CollisionEvent::k_trespass);
+        m_event_recorder.emplace_event(entry.entity, other_entry.entity, EventRecorder::k_trespass);
         break;
     }
     default: break;

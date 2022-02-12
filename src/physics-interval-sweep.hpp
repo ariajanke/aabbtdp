@@ -154,19 +154,15 @@ template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
             // second part of the overlap feature
             if (intersects_j_wise(**jtr)) {
                 intf.step(**itr, **jtr);
-#               if 0
-                intf.step(**jtr, **itr);
-#               endif
             }
             assert(*jtr != *itr);
         }
         intf.poststep(**itr);
-#       if 1
+
         // moving pairs to post finalization was easier than I thought
         for (auto jtr = beg; jtr != end; ++jtr) {
             if (intersects_j_wise(**jtr)) intf.step(**jtr, **itr);
         }
-#       endif
     });
 }
 

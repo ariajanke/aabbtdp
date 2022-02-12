@@ -55,7 +55,7 @@ namespace {
 
 using Rng = std::default_random_engine;
 using cul::ts::TestSuite, cul::ts::test, cul::ts::set_context, cul::ts::Unit,
-      tdp::CollisionEvent, tdp::Rectangle, tdp::Vector, tdp::Real, tdp::Size;
+      tdp::Rectangle, tdp::Vector, tdp::Real, tdp::Size;
 
 #define mark MACRO_MARK_POSITION_OF_CUL_TEST_SUITE
 
@@ -82,15 +82,9 @@ private:
     NamesArray m_names;
     NamesArray::iterator m_current = m_names.begin();
 };
-
-std::size_t hash(Entity e)
-    { return std::hash<Entity>{}(e); }
-
-template <typename Iter>
-CollisionEvent random_col_event(Iter ent_beg, Iter ent_end, Rng & rng);
-
+#if 0
 bool are_very_close(const Rectangle & a, const Rectangle & b);
-
+#endif
 bool are_very_close(const Vector & a, const Vector & b);
 
 bool are_very_close(const Size & a, const Size & b);
@@ -104,10 +98,6 @@ bool adding_of_double_a_works(Real a, Real b)
     { return are_very_close(std::fmod(a*2 + b, a), b); }
 
 } // end of <anonymous> namespace
-
-// helpers.hpp
-// - CollisionEvent
-void do_CollisionEvent_tests(TestSuite &);
 
 // - EventRecorder
 void do_EventRecorder_tests(TestSuite &);
@@ -149,99 +139,6 @@ void do_misc_tests(TestSuite &);
 //   - displace
 //   - values_from_displacement
 
-void do_CollisionEvent_tests(TestSuite & suite) {
-    using namespace tdp;
-    suite.start_series("CollisionEvent");
-    mark(suite).test([] {
-        CollisionEvent a, b;
-        return test(   a == b && !CollisionEvent::is_less_than(a, b)
-                    && !CollisionEvent::is_less_than(b, a));
-    });
-    mark(suite).test([] {
-        EntityMaker eman;
-        auto a = eman.make_entity();
-        auto b = eman.make_entity();
-        auto c = eman.make_entity();
-        bool c_ahead_b = hash(c) > hash(b);
-        CollisionEvent a_b(a, b, CollisionEvent::k_push);
-        CollisionEvent a_c(a, c, CollisionEvent::k_push);
-        bool ab_lt_ac = CollisionEvent::is_less_than(a_b, a_c);
-        if (c_ahead_b) {
-            return test(ab_lt_ac);
-        }
-        return test(!ab_lt_ac);
-    });
-    mark(suite).test([] {
-        EntityMaker eman;
-        auto a = eman.make_entity();
-        auto b = eman.make_entity();
-        CollisionEvent a_b(a, b, CollisionEvent::k_push);
-        return test(hash(a_b.first()) > hash(a_b.second()));
-    });
-
-    set_context(suite, [](TestSuite & suite, Unit & unit) {
-        EntityMaker eman;
-        std::array entities = {
-            eman.make_entity(),
-            eman.make_entity(),
-            eman.make_entity()
-        };
-        std::sort(entities.begin(), entities.end(),
-            [](const Entity & a, const Entity & b) { return hash(a) < hash(b); });
-        // order is certain now!
-        auto a = entities[0];
-        auto b = entities[1];
-        auto c = entities[2];
-        CollisionEvent a_b(a, b, CollisionEvent::k_push);
-        CollisionEvent a_c(a, c, CollisionEvent::k_push);
-        CollisionEvent b_c(b, c, CollisionEvent::k_push);
-        unit.start(mark(suite), [&] {
-            bool ab_ac = CollisionEvent::is_less_than(a_b, a_c);
-            bool ac_bc = CollisionEvent::is_less_than(a_c, b_c);
-            return test(ab_ac && ac_bc);
-        });
-        unit.start(mark(suite), [&] {
-            return test(a_b >= a_b && b_c >= a_b);
-        });
-        unit.start(mark(suite), [&] {
-            return test(!(a_b > a_b) && b_c > a_b);
-        });
-        unit.start(mark(suite), [&] {
-            return test(a_b == a_b && !(b_c == a_b));
-        });
-        unit.start(mark(suite), [&] {
-            return test(!(a_b != a_b) && b_c != a_b);
-        });
-        unit.start(mark(suite), [&] {
-            return test(a_b <= a_b && a_c <= b_c);
-        });
-    });
-    // mmm? is this testing weak strict ordering?
-    mark(suite).test([] {
-        Rng rng { 0x912EA01 };
-        EntityMaker eman;
-        std::array entities = {
-            eman.make_entity(), eman.make_entity(), eman.make_entity()
-        };
-        std::vector<CollisionEvent> col;
-        for (int i = 0; i != 1024; ++i) {
-            col.clear();
-            for (int j = 0; j != 4; ++j) {
-                col.emplace_back(random_col_event(entities.begin(), entities.end(), rng));
-            }
-            std::sort(col.begin(), col.end(), CollisionEvent::is_less_than);
-            if (!std::is_sorted(col.begin(), col.end(), CollisionEvent::is_less_than)) {
-                auto idx = std::is_sorted_until(col.begin(), col.end(), CollisionEvent::is_less_than) - col.begin();
-                std::cout << std::boolalpha;
-                std::cout << hash( col[idx - 1].first()) << " " << hash(col[idx - 1].second()) << " " << (col[idx - 1].type() == CollisionEvent::k_push) << std::endl;
-                std::cout << hash( col[idx].first()) << " " << hash(col[idx].second()) << " " << (col[idx].type() == CollisionEvent::k_push) << std::endl;
-                return test(false);
-            }
-        }
-        return test(true);
-    });
-}
-
 template <typename Func>
 auto make_collision_handler(Func && f) {
     class Impl final : public tdp::EventHandler {
@@ -269,7 +166,7 @@ void do_EventRecorder_tests(TestSuite & suite) {
         EventRecorder recorder;
         // base case
         unit.start(mark(suite), [&] {
-            recorder.emplace_event(a, b, CollisionEvent::k_push);
+            recorder.emplace_event(a, b, EventRecorder::k_push);
             bool okay = false;
             auto handler = make_collision_handler([&okay] (Entity a, Entity b, bool) {
                 okay =    EntityMaker::get_name(a) == 'a'
@@ -288,28 +185,28 @@ void do_EventRecorder_tests(TestSuite & suite) {
         });
         // filter dupelicate same frame
         unit.start(mark(suite), [&] {
-            recorder.emplace_event(a, b, CollisionEvent::k_push);
-            recorder.emplace_event(a, b, CollisionEvent::k_push);
+            recorder.emplace_event(a, b, EventRecorder::k_push);
+            recorder.emplace_event(a, b, EventRecorder::k_push);
 
             recorder.send_events(handler);
             return test(how_many_events_with_a == 1);
         });
         // filter dupelicate different consecutive frames
         unit.start(mark(suite), [&] {
-            recorder.emplace_event(a, b, CollisionEvent::k_push);
+            recorder.emplace_event(a, b, EventRecorder::k_push);
             recorder.send_events(handler);
-            recorder.emplace_event(a, b, CollisionEvent::k_push);
+            recorder.emplace_event(a, b, EventRecorder::k_push);
             recorder.send_events(handler);
 
             return test(how_many_events_with_a == 1);
         });
         // old becomes new again
         unit.start(mark(suite), [&] {
-            recorder.emplace_event(a, b, CollisionEvent::k_push);
+            recorder.emplace_event(a, b, EventRecorder::k_push);
             recorder.send_events(handler);
             // one frame *without* submitting the event
             recorder.send_events(handler);
-            recorder.emplace_event(a, b, CollisionEvent::k_push);
+            recorder.emplace_event(a, b, EventRecorder::k_push);
             recorder.send_events(handler);
 
             return test(how_many_events_with_a == 2);
@@ -680,24 +577,7 @@ void do_misc_tests(TestSuite & suite) {
 namespace {
 
 static constexpr const Real k_very_close_error = 0.005;
-
-template <typename Iter>
-CollisionEvent random_col_event(Iter ent_beg, Iter ent_end, Rng & rng) {
-    if (ent_beg == ent_end) return tdp::CollisionEvent();
-
-    using IntDistri = std::uniform_int_distribution<int>;
-    auto sel_a = ent_beg + IntDistri(0, ent_end - ent_beg - 1)(rng);
-    auto sel_b = ent_beg + IntDistri(0, ent_end - ent_beg - 1)(rng);
-    bool is_push = false;
-    if (sel_a != sel_b) {
-        is_push = IntDistri(0, 7)(rng) == 0;
-    }
-    return CollisionEvent(
-        *sel_a,
-        sel_a == sel_b ? Entity{} : *sel_b,
-        is_push ? CollisionEvent::k_push : CollisionEvent::k_rigid);
-}
-
+#if 0
 bool are_very_close(const Rectangle & a, const Rectangle & b) {
     using cul::magnitude;
     //static constexpr const Real k_error = 0.005;
@@ -706,7 +586,7 @@ bool are_very_close(const Rectangle & a, const Rectangle & b) {
            && magnitude(a.width  - b.width ) < k_very_close_error
            && magnitude(a.height - b.height) < k_very_close_error;
 }
-
+#endif
 bool are_very_close(const Vector & a, const Vector & b) {
     return cul::magnitude(a - b) < k_very_close_error;
 }

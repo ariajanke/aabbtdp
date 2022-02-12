@@ -42,41 +42,14 @@ using cul::View;
 template <typename ... Types>
 using Tuple = std::tuple<Types...>;
 
+using EntityHasher =
+#ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+    ecs::EntityHasher;
+#else
+    std::hash<Entity>;
+#endif
+
 // ----------------------------------------------------------------------------
-
-class CollisionEvent final {
-public:
-    enum Type { k_push, k_rigid, k_trespass };
-
-    CollisionEvent() {}
-    CollisionEvent(Entity, Entity, Type);
-
-    Entity first() const { return m_first; }
-    Entity second() const { return m_second; }
-
-    Type type() const { return m_type; }
-
-    // !I need tests!
-    static bool is_less_than(const CollisionEvent &, const CollisionEvent &);
-
-    bool operator <= (const CollisionEvent & r) const { return compare(r) <= 0; }
-    bool operator >= (const CollisionEvent & r) const { return compare(r) >= 0; }
-    bool operator <  (const CollisionEvent & r) const { return compare(r) <  0; }
-    bool operator >  (const CollisionEvent & r) const { return compare(r) >  0; }
-    bool operator != (const CollisionEvent & r) const { return compare(r) != 0; }
-    bool operator == (const CollisionEvent & r) const { return compare(r) == 0; }
-#   if 0
-    void send_to(EventHandler & handler) const;
-#   endif
-private:
-    static int compare(const CollisionEvent &, const CollisionEvent &);
-
-    int compare(const CollisionEvent &) const;
-
-    Entity m_first  = Entity{};
-    Entity m_second = Entity{};
-    Type m_type     = Type  {};
-};
 
 struct EntityPair final {
     EntityPair() {}
@@ -92,43 +65,15 @@ struct EntityPair final {
     static Entity min_hash(const Entity & a_, const Entity & b_)
         { return hash(a_) <= hash(b_) ? a_ : b_; }
 
-    static Entity verify_non_null(const Entity & ref_, const char * caller) {
-        using namespace cul::exceptions_abbr;
-        if (!is_null(ref_)) return ref_;
-        throw InvArg(std::string(caller) + ": both entity references must not "
-                     "be null.");
-    }
+    static Entity verify_non_null(const Entity &, const char * caller);
 
-    void verify_entity_values(const char * caller) const {
-        using namespace cul::exceptions_abbr;
-        if (is_null(first)) {
-            throw InvArg(std::string(caller) + ": both entities must not be null.");
-        } else if (hash(first) == hash(second)) {
-            throw InvArg(std::string(caller) + ": both entities must be unique.");
-        }
-    }
+    void verify_entity_values(const char * caller) const;
 
-    static std::size_t hash(const Entity & e) {
-#       ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
-        return e.hash();
-#       else
-        return std::hash<void *>{}(e);
-#       endif
-    }
+    static std::size_t hash(const Entity &);
 
-    static bool is_null(const Entity & e) {
-#       ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
-        return e.has_expired();
-#       else
-        return e == nullptr;
-#       endif
-    }
+    static bool is_null(const Entity &);
 
-    std::size_t hash() const noexcept {
-        static constexpr const auto k_shift = sizeof(std::size_t)*8 / 2;
-        const auto sh = hash(second);
-        return hash(first) ^ (sh >> k_shift | sh << k_shift);
-    }
+    std::size_t hash() const noexcept;
 
     bool operator == (const EntityPair & rhs) const noexcept { return  are_same(rhs); }
 
@@ -164,6 +109,7 @@ inline bool operator &
 /// This version contains and sends also trespass events.
 class EventRecorder final {
 public:
+    enum CollisionType { k_push, k_rigid, k_trespass };
     using OccurrenceType = EventOccurrenceType;
 
     /// Sends all new events to the handler (old events are filtered out)
@@ -173,18 +119,13 @@ public:
     /// incurs whatever changes the "on_collision" calls entail.
     void send_events(EventHandler & handler);
 
-    template <typename ... Types>
-    void emplace_event(Types ... args) {
-        CollisionEvent col_event(std::forward<Types>(args)...);
-        push_event(col_event);
-    }
+    void emplace_event(Entity a, Entity b, CollisionType col_type);
 
     void set_event_occurence_preference(EventOccurrenceType otype)
         { m_occurence_preference = otype; }
-#   if 0
-    bool trespass_is_occuring(const Entity & lhs, const Entity & rhs) const;
-#   endif
-private:
+
+    // -------------- not relevent, but leaked to enable helpers --------------
+
     struct AgeInfo final {
         AgeInfo() {}
         AgeInfo(bool has_been_sent_, int frames_since_last_update_):
@@ -195,30 +136,18 @@ private:
         int frames_since_last_update = 0;
     };
 
-    using CollisionType = CollisionEvent::Type;    
     struct Collision final {
         Collision() {}
         explicit Collision(CollisionType type_): type(type_) {}
         AgeInfo       age;
         CollisionType type;
     };
-#   if 0
-    using EventKey = Tuple<Entity, Entity>;
-#   endif
+
     struct EventHasher final {
         std::size_t operator () (const EntityPair & pair) const noexcept
             { return pair.hash(); }
     };
-#   if 0
-    struct KeyEquality final {
-        bool operator () (const EventKey & lhs, const EventKey & rhs) const {
-            using std::get;
-            return get<0>(lhs) == get<0>(rhs) && get<1>(lhs) == get<1>(rhs);
-        }
-    };
-#   endif
-    void push_event(const CollisionEvent & col_event);
-public:
+
     using EventContainer = rigtorp::HashMap<EntityPair, Collision, EventHasher>;
 private:
     // thank you Erik Rigtorp for saving me the trouble of trying to implement one
@@ -245,23 +174,12 @@ struct BoardBoundries {
 struct FullEntry final : public tdp::Entry {
     // record only useful during a frame
     int priority = k_default_priority;
-#   if 0
-    // (I need some way to handle last appearance)
-    // (this maybe out-moded!)
-    bool first_appearance = true;
-#   endif
+
     // for swptry2
     Vector nudge;
 
     BoardBoundries board_bounds;
 };
-
-using EntityHasher =
-#ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
-    ecs::EntityHasher;
-#else
-    std::hash<Entity>;
-#endif
 
 using EntryEntityRefMap = std::unordered_map<Entity, FullEntry, EntityHasher>;
 using EntryMapView      = View<EntryEntityRefMap::iterator>;
@@ -279,7 +197,6 @@ void update_broad_boundries(Iter beg, Iter end, ToReference && to_ref) {
     for (auto itr = beg; itr != end; ++itr) {
         FullEntry & ref = to_ref(itr);
         ref.board_bounds = compute_board_boundries(ref);
-        //update_broad_boundries(ref);
     }
 }
 

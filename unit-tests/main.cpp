@@ -77,13 +77,12 @@ namespace {
 
 using Rng = std::default_random_engine;
 using cul::ts::TestSuite, cul::ts::test, cul::ts::set_context, cul::ts::Unit,
-      cul::Grid, tdp::CollisionEvent;
+      cul::Grid;
 
 #define mark MACRO_MARK_POSITION_OF_CUL_TEST_SUITE
 
 } // end of <anonymous> namespace
 
-void do_CollisionEvent_tests(TestSuite &);
 void do_EventRecorder_tests(TestSuite &);
 void do_update_broad_boundries_tests(TestSuite &);
 void do_find_min_push_displacement_tests(TestSuite &);
@@ -102,7 +101,6 @@ int main() {
     // helpers
     // the damn flag resets for every series :/
     auto k_test_functions = {
-        do_CollisionEvent_tests,
         do_EventRecorder_tests,
         do_update_broad_boundries_tests,
         do_find_min_push_displacement_tests,

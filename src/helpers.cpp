@@ -37,7 +37,7 @@ namespace {
 using namespace cul::exceptions_abbr;
 using cul::is_real, cul::magnitude, cul::normalize, std::make_tuple, std::get,
       std::min, std::max;
-using tdp::Rectangle, tdp::Vector, tdp::CollisionEvent, tdp::Real,
+using tdp::Rectangle, tdp::Vector, tdp::EventRecorder, tdp::Real,
       tdp::EventHandler;
 
 constexpr const Real k_inf = std::numeric_limits<Real>::infinity();
@@ -45,8 +45,8 @@ constexpr const Real k_inf = std::numeric_limits<Real>::infinity();
 auto make_conditionally_emit_event_maker
     (EventHandler & handler, tdp::EventOccurrenceType emit_when)
 {
-    using EventContainer = tdp::EventRecorder::EventContainer;
-    using OccurrenceType = tdp::EventOccurrenceType;    
+    using EventContainer = EventRecorder::EventContainer;
+    using OccurrenceType = tdp::EventOccurrenceType;
     // return a "make_conditionally_emit_event"
     return [emit_when, &handler] (EventContainer::iterator itr) {
         // return a "conditionally_emit_event"
@@ -54,11 +54,12 @@ auto make_conditionally_emit_event_maker
             if (!(emit_when & occured_when)) return;
             auto first = itr->first.first, second = itr->first.second;
             auto type  = itr->second.type;
+            using Er = EventRecorder;
             switch (type) {
-            case CollisionEvent::k_rigid: case CollisionEvent::k_push:
+            case Er::k_rigid: case Er::k_push:
                 return handler.on_collision(
-                    first, second, type == CollisionEvent::k_push, occured_when);
-            case CollisionEvent::k_trespass:
+                    first, second, type == Er::k_push, occured_when);
+            case Er::k_trespass:
                 return handler.on_trespass(first, second, occured_when);
             };
         };
@@ -69,49 +70,46 @@ auto make_conditionally_emit_event_maker
 
 namespace tdp {
 
-// ------------------------------ CollisionEvent ------------------------------
+// -------------------------------- EntityPair --------------------------------
 
-CollisionEvent::CollisionEvent(Entity a, Entity b, Type type):
-    m_first(a), m_second(b), m_type(type)
+/* static */ Entity EntityPair::verify_non_null
+    (const Entity & ref_, const char * caller)
 {
-    assert(m_first != m_second);
-    EntityHasher hash;
-    if (hash(m_first) < hash(m_second)) {
-        // highest must come first
-        std::swap(m_first, m_second);
-    }
-    if (type != k_rigid && !bool(second())) {
-        throw InvArg("CollisionEvent::CollisionEvent: push or rigid types must "
-                     "have a both entities be non null.");
+    using namespace cul::exceptions_abbr;
+    if (!is_null(ref_)) return ref_;
+    throw InvArg(std::string(caller) + ": both entity references must not "
+                 "be null.");
+}
+
+void EntityPair::verify_entity_values(const char * caller) const {
+    using namespace cul::exceptions_abbr;
+    if (is_null(first)) {
+        throw InvArg(std::string(caller) + ": both entities must not be null.");
+    } else if (hash(first) == hash(second)) {
+        throw InvArg(std::string(caller) + ": both entities must be unique.");
     }
 }
 
-/* static */ bool CollisionEvent::is_less_than
-    (const CollisionEvent & lhs, const CollisionEvent & rhs)
-{ return lhs.compare(rhs) < 0; }
-#if 0
-void CollisionEvent::send_to(EventHandler & handler) const {
-    switch (type()) {
-    case k_rigid: case k_push:
-        handler.on_collision(first(), second(), type() == k_push);
-        break;
-    case k_trespass:
-        handler.on_trespass(first(), second());
-        break;
-    }
+/* static */ std::size_t EntityPair::hash(const Entity & e) {
+#       ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+    return e.hash();
+#       else
+    return std::hash<void *>{}(e);
+#       endif
 }
-#endif
-/* private static */ int CollisionEvent::compare
-    (const CollisionEvent & lhs, const CollisionEvent & rhs)
-{ return lhs.compare(rhs); }
 
-/* private */ int CollisionEvent::compare( const CollisionEvent & rhs) const {
-    EntityHasher hash;
-    if (hash(first ()) < hash(rhs.first ())) return -1;
-    if (hash(first ()) > hash(rhs.first ())) return  1;
-    if (hash(second()) < hash(rhs.second())) return -1;
-    if (hash(second()) > hash(rhs.second())) return  1;
-    return int(type()) - int(type());
+/* static */ bool EntityPair::is_null(const Entity & e) {
+#       ifdef MACRO_AABBTDP_LIBRARY_BUILD_FOR_PERSONAL_ECS_REFERENCE
+    return e.has_expired();
+#       else
+    return e == nullptr;
+#       endif
+}
+
+std::size_t EntityPair::hash() const noexcept {
+    static constexpr const auto k_shift = sizeof(std::size_t)*8 / 2;
+    const auto sh = hash(second);
+    return hash(first) ^ (sh >> k_shift | sh << k_shift);
 }
 
 // ------------------------------ EventRecorder -------------------------------
@@ -121,10 +119,6 @@ void CollisionEvent::send_to(EventHandler & handler) const {
 //
 // the recorder constantly receives signals for continued collisions, but not
 // for trespasses
-//
-//
-//
-
 void EventRecorder::send_events(EventHandler & handler) {
     using namespace occurence_types;
     auto make_conditionally_emit_event = make_conditionally_emit_event_maker
@@ -134,24 +128,13 @@ void EventRecorder::send_events(EventHandler & handler) {
         auto conditionally_emit_event = make_conditionally_emit_event(itr);
         OccurrenceType otype;
         if (!age_nfo.has_been_sent) {
-
             otype = k_on_begin;
-#           if 0
-            ++age_nfo.frames_since_last_update;
-            conditionally_emit_event(k_on_begin);
-            ++itr;
-#           endif
         } else if (age_nfo.frames_since_last_update != 0) {
             conditionally_emit_event(k_on_end);
             itr = m_events.erase(itr);
             continue;
         } else {
             otype = k_on_continue;
-#           if 0
-            ++age_nfo.frames_since_last_update;
-            conditionally_emit_event(k_on_continue);
-            ++itr;
-#           endif
         }
         age_nfo.has_been_sent = true;
         ++age_nfo.frames_since_last_update;
@@ -159,26 +142,8 @@ void EventRecorder::send_events(EventHandler & handler) {
         ++itr;
     }
 }
-#if 0
-std::size_t EventRecorder::EventHasher::operator () (const EventKey & key) {
-    static constexpr const auto k_half = 8*sizeof(size_t) / 2;
-    EntityHasher hash;
-    return (  hash(get<1>(key)) << k_half
-            | hash(get<1>(key)) >> k_half) ^ hash(get<0>(key));
-}
-#endif
-#if 0
-bool EventRecorder::trespass_is_occuring
-    (const Entity & lhs, const Entity & rhs) const
-{
-    using std::make_pair;
-    CollisionEvent test_event{lhs, rhs, CollisionEvent::k_trespass};
-    auto itr = m_events.find(make_pair(test_event.first(), test_event.second()));
-    if (itr == m_events.end()) return false;
-    return itr->second.type == CollisionEvent::k_trespass;
-}
-#endif
-/* private */ void EventRecorder::push_event(const CollisionEvent & col_event) {
+
+void EventRecorder::emplace_event(Entity a, Entity b, CollisionType col_type) {
     // 1: no events
     // 2: a and b hit; emit event
     // 3: a and b hit; emit nothing
@@ -192,10 +157,10 @@ bool EventRecorder::trespass_is_occuring
     // calling code of this function
 
     using std::make_pair;
-    auto key = EntityPair{col_event.first(), col_event.second()};
+    auto key = EntityPair{a, b};
     auto itr = m_events.find(key);
     if (itr == m_events.end()) {
-        (void)m_events.insert(make_pair(key, Collision{col_event.type()}));
+        (void)m_events.insert(make_pair(key, Collision{col_type}));
         return;
     }
     auto & event = itr->second;

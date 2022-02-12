@@ -33,7 +33,7 @@ jobs:
       - name: Prepare libraries
         run: |
           git clone https://github.com/ariajanke/util-common.git cul
-          cd lib ; rm -rf cul ; rm -rf HashMap
+          cd lib ; rm -rf cul 
           echo 'top level'
           mv ../cul cul 
           echo 'cul' ; ls cul ; echo 'HashMap' ; ls HashMap
