@@ -36,7 +36,8 @@ SOURCES += \
     ../src/physics-grid.cpp \
     ../src/physics-aabb-tree.cpp \
     ../src/CollisionHandler.cpp \
-    ../src/sight.cpp
+    ../src/sight.cpp \
+    ../src/physics-arbitrary-sweep.cpp
 
 HEADERS += \
     \ # Library Interface
@@ -52,7 +53,8 @@ HEADERS += \
     ../src/physics-grid.hpp \
     ../src/physics-aabb-tree.hpp \
     ../src/sight-detail.hpp \
-    ../src/CollisionHandler.hpp
+    ../src/CollisionHandler.hpp \
+    ../src/physics-arbitrary-sweep.hpp
 
 INCLUDEPATH += \
     ../lib/cul/inc  \

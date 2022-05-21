@@ -41,7 +41,12 @@ namespace tdp {
 
 void SweepContainer::for_each_sequence(SequenceInterface & intf) {
     // having to call this is *slightly* redundent...
+
+    // We'll have to put off these updates until we reach the for_each_... call
+    // It's defintely time to refactor this thing
+#   if 0
     update_broad_boundries(m_reorder.begin(), m_reorder.end());
+#   endif
     for_each_sequence_(intf);
 }
 

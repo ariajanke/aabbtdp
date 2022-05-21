@@ -2,7 +2,7 @@
 
     MIT License
 
-    Copyright (c) 2021 Aria Janke
+    Copyright (c) 2022 Aria Janke
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,7 @@
 #include <common/Grid.hpp>
 
 #include <memory>
+#include <limits>
 
 namespace tdp {
 
@@ -305,6 +306,7 @@ public:
     /// @param f a function which must have the following signature:
     ///          void(const Entry &)
     /// @note This function uses double dispatch to acheive it's magic. :)
+    /// @note (dev) I think this method maybe poor design...
     /// @throws if rectangle's width or height is negative or if any field is
     ///         a non-real number
     /// @warning further calls should not be made in f
@@ -373,6 +375,41 @@ public:
     /// @note calling every frame may not be desirable, as this can be a pretty
     ///       heavy operation
     virtual void check_to_switch_axis() = 0;
+};
+
+/// This type axis to use as a parameter for any method.
+enum class UsingAxis {
+    x,
+    y
+};
+
+/// Unlike the previous "SweepSwitchPhysicsHandler", you may set an arbitrary
+/// axis with which AABBs are swept across.
+///
+/// @note that "per" step maybe slightly more exspensive.
+/// This implementation should scale a teensy bit better. It maybe the case
+/// that AABBs are more widely distributed across some axis not parallel to
+/// either the x or y-axis. In fact the AABBs maybe relatively "clumped"
+/// together, where that is not so along another axis.
+class ArbitrarySweepPhysicsHandler : virtual public Physics2DHandler {
+public:    
+
+    /// @returns a new instance of the arbitrary axis handler
+    static std::unique_ptr<SweepSwitchPhysicsHandler> make_instance();
+
+    /// Sets the new angle of the axis
+    /// @param new_axis, any angle in radians between [-pi pi], (other real
+    ///        values will be "wrapped").
+    /// @param off_of, which axis of the AABB to use to compute the new interval
+    /// @throws if new_angle is not a real number
+    virtual void set_axis_angle(Real new_angle, UsingAxis off_of) = 0;
+
+    // figuring out overlaps and the optiminal arrangement for arbitrary axis
+    // requires quite a bit of code I'd like the client not reimplement on
+    // their side
+    //
+    // specifically, computing board bounds/intervals for the AABBs for a
+    // chosen axis rotation and which interval (x or y)
 };
 
 /// This implementation uses an AABB Tree to limit the number of entry

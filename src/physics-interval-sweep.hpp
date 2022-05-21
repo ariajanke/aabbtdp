@@ -66,6 +66,24 @@ protected:
 
     WsIter end_() { return m_reorder.end(); }
 
+    template <typename F>
+    void update_broad_boundries(F && func) {
+#       if 0
+        // f must be...
+        struct Impl final {
+            explicit Impl(F && f_): m_f(std::move(f_)) {}
+
+            BoardBoundries operator () (const FullEntry & fe) const
+                { return m_f(fe); }
+        private:
+            F m_f;
+        };
+        Impl impl{std::move(func)};
+#       endif
+        for (auto itr = m_reorder.begin(); itr != m_reorder.end(); ++itr)
+            { (**itr).board_bounds = func(**itr); }
+    }
+
     virtual void for_each_sequence_(SequenceInterface &) = 0;
 
 private:
@@ -142,6 +160,11 @@ template <Real(*low_i)(const FullEntry &), Real(*high_i)(const FullEntry &),
 /* private */ void SweepIJContainer<low_i, high_i, low_j, high_j>::for_each_sequence_
     (SequenceInterface & intf)
 {
+    // moved from a caller
+    using Fp = BoardBoundries (*)(const FullEntry &);
+    auto fp = Fp(compute_board_boundries);
+    update_broad_boundries(fp);
+
     // processing entries before prestep is fine
     //
     // I still need a test case!
@@ -193,6 +216,7 @@ template <typename Func>
 /* private */ void SweepIJContainer<low_i, high_i, low_j, high_j>::for_i_intervals
     (Func && f)
 {
+    // a nasty side effect?
     sort(begin_(), end_(), order_entries);
     for (auto itr = begin_(); itr != end_(); ++itr) {
         auto itr_end = get_i_wise_end(itr);

@@ -3,6 +3,11 @@ This library efficiently handles collisions and overlaps for 2D AABBs (axis alig
 
 Feel free at anytime to reach out with feedback. I am still learning many basics with the craft. So you'd be doing me a huge favor. :)
 
+# Demo
+Also, I've built a demo to show this library's capabilities.
+
+[Here](https://ariajanke.github.io/aabbtdp/demo-wasm/bin/spa_out.html)
+
 # How to Use It
 There are two main features to this library. Sight and Physics, described separately below.
 
@@ -18,14 +23,6 @@ There are two main features to this library. Sight and Physics, described separa
 - Rinse and repeat throughout your game
 
 More information is available in the docs/include sources.
-
-# Demo
-Also, I've built a demo to show this library's capabilities.
-
-[Here](https://ariajanke.github.io/aabbtdp/demo-wasm/bin/spa_out.html)
-
-# Installation
-This was tested on a fresh Ubuntu VM.
 
 ### Other notes
 This wonderful tool was used to assist the creation of these markdown files: [StackEdit](https://stackedit.io/).

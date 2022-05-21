@@ -185,6 +185,7 @@ using EntryEntityRefMap = std::unordered_map<Entity, FullEntry, EntityHasher>;
 using EntryMapView      = View<EntryEntityRefMap::iterator>;
 
 BoardBoundries compute_board_boundries(const FullEntry &);
+
 BoardBoundries compute_board_boundries
     (const Rectangle &, const Vector & full_displacement, const Size & growth);
 
